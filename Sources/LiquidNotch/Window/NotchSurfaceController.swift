@@ -180,6 +180,7 @@ final class NotchSurfaceController {
 
     /// Stops the Now Playing feed (the adapter's perl process goes with it) and the key tap.
     func stop() {
+        director.prompter.pause()
         bars.shutdown()
         nowPlaying.stop()
         keys.stop()

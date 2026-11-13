@@ -50,6 +50,7 @@ private struct TrayPages: View {
                 case .shelf: ShelfPage(tray: tray)
                 case .shortcuts: ShortcutsPage(tray: tray)
                 case .today: DayPage(tray: tray, director: director)
+                case .prompter: PrompterPage(tray: tray, director: director)
                 }
             }
             .id(tray.page)
@@ -62,7 +63,7 @@ private struct TrayPages: View {
 
 // MARK: - Grid
 
-/// Six tools in a 3×2 grid: 40 pt circles with 11 pt labels, the rows 10 pt apart.
+/// Two rows of tools: 40 pt circles with 11 pt labels, the rows 10 pt apart.
 private struct TrayGrid: View {
     let tray: TrayModel
     let director: IslandDirector
@@ -71,7 +72,7 @@ private struct TrayGrid: View {
         let timer = director.trayTimerLeft
         let running = director.trayRunning
         let rec = director.recordState
-        // 4 × 2 (11-06, sim v58): Ask, Timer, Record, Focus / Pause, Clipboard, Shelf, Shortcuts.
+        // Prompter joins the existing tools; Today opens the calendar page without another navigation layer.
         VStack(spacing: 0) {
         Grid(horizontalSpacing: 0, verticalSpacing: 10) {
             GridRow {
@@ -82,6 +83,7 @@ private struct TrayGrid: View {
                 Tool(symbol: "record.circle", label: rec.map { $0.counting ? "Starting" : clockText($0.seconds) } ?? "Record",
                      tint: rec != nil ? IslandColor.red : nil) { director.recordToggle() }
                 Tool(symbol: "moon", label: tray.focusName ?? tray.focus?.rawValue ?? "Focus", tint: tray.focusName != nil || tray.focus != nil ? IslandColor.indigo : nil) { tray.go(.focus) }
+                Tool(symbol: "text.alignleft", label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
             }
             GridRow {
                 Tool(symbol: running ? "pause" : "play", label: running ? "Pause" : "Play") { director.trayPause() }
@@ -89,9 +91,44 @@ private struct TrayGrid: View {
                 Tool(symbol: "clipboard", label: "Clipboard") { tray.go(.clipboard) }
                 Tool(symbol: "tray", label: "Shelf", badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
                 Tool(symbol: "square.on.square", label: "Shortcuts") { tray.go(.shortcuts) }
+                Tool(symbol: "calendar", label: "Today") { tray.go(.today) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct PrompterPage: View {
+    let tray: TrayModel
+    let director: IslandDirector
+
+    var body: some View {
+        let model = director.prompter
+        Page(tray: tray, title: "Prompter", action: ("Edit scripts", { director.editPrompter() })) {
+            HStack(spacing: 12) {
+                Image(systemName: "text.alignleft")
+                    .font(.system(size: 18)).foregroundStyle(IslandColor.green)
+                    .frame(width: 40, height: 40).background(.white.opacity(0.1), in: Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.canPlay ? model.title : "Your words, by the camera")
+                        .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    Text(model.canPlay ? "\(model.text.split(whereSeparator: \.isWhitespace).count) words · \(Int(model.speed)) pt/s" : "Write a script, then read from the notch.")
+                        .font(.system(size: 11)).foregroundStyle(IslandColor.secondary).lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    if model.canPlay { director.startPrompter() } else { director.editPrompter() }
+                } label: {
+                    Image(systemName: model.canPlay ? "play.fill" : "square.and.pencil")
+                        .font(.system(size: 13, weight: .semibold)).frame(width: 38, height: 38)
+                        .foregroundStyle(.black).background(IslandColor.green, in: Circle())
+                }
+                .buttonStyle(PressScaleStyle())
+                .help(model.canPlay ? "Start prompting" : "Write your first script")
+                .accessibilityLabel(model.canPlay ? "Start prompting" : "Write a script")
+            }
+            .frame(maxHeight: .infinity)
         }
     }
 }

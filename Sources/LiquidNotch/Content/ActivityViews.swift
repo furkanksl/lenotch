@@ -152,6 +152,8 @@ struct ActivityEars: View {
                 TimerRing(left: s.timerLeft, total: s.timerTotal).entrance(side, 0)
             case (.timer, .right):
                 TimerText(left: s.timerLeft, font: IslandType.ear.monospacedDigit()).entrance(side, 0)
+            case (.prompter, _):
+                PrompterEar(model: director.prompter, side: side)
             case (.recording, .left):
                 RecordDot().entrance(side, 0)
                 Text("REC").font(IslandType.caption).tracking(0.44).foregroundStyle(IslandColor.red).entrance(side, 1)
@@ -223,6 +225,7 @@ struct ActivityGlyph: View {
         case .camera: Image(systemName: "video.fill").font(.system(size: 12)).foregroundStyle(IslandColor.green)
         case .charging: Image(systemName: "bolt.fill").font(.system(size: 14)).foregroundStyle(IslandColor.green)
         case .timer: TimerRing(left: s.timerLeft, total: s.timerTotal)
+        case .prompter: Image(systemName: "text.alignleft").font(.system(size: 12, weight: .semibold))
         case .recording: RecordDot()
         case .meeting: CalendarTile(size: 20)
         case .download: DownloadRing(progress: director.transferFor(instance).fraction)
@@ -257,6 +260,7 @@ struct ActivityCard: View {
         case .camera: CameraCard(instance: instance, director: director)
         case .charging: charging
         case .timer: TimerCard(director: director)
+        case .prompter: PrompterCard(director: director)
         case .recording: RecordingCard(instance: instance, director: director)
         case .recordCountdown: RecordCountdownCard(director: director)
         case .recordingSaved: RecordingSavedCard(director: director)

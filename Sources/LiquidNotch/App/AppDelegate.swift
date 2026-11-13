@@ -109,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.tag = minutes
         }
         menu.addItem(withTitle: "Timer", action: nil, keyEquivalent: "").submenu = timer
+        menu.addItem(withTitle: "Prompter…", action: #selector(showPrompter), keyEquivalent: "").target = self
         // Which calendars show (the event, its ball and your day), by account; only once Calendar is allowed.
         if let watcher = MeetingWatcher.shared {
             let choices = watcher.calendarChoices()
@@ -178,6 +179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleDebug() { debugPanel?.toggle() }
 
     @objc private func showSetup() { setup.show() }
+
+    @objc private func showPrompter() { surface?.director.editPrompter() }
 
     @objc private func uninstall() { Uninstaller.confirmAndRun() }
 

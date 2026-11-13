@@ -2,6 +2,7 @@
 /// (`ACT` in `sim/src/acts.js`). Face ID is gone (owner, 11-01); football replaced the NBA Scores sample (11-06).
 public enum ActivityID: String, CaseIterable, Sendable {
     case incoming, call, airpods, focus, charging, battery, timer, recording, meeting, camera, download, messages
+    case prompter
     /// Recording from the notch (11-06): the 3-2-1 before it starts, and the moment it's saved.
     case recordCountdown, recordingSaved
     /// Football (11-06, docs/superpowers/specs/2026-11-06-football-design.md): the reminder before kickoff, the live
@@ -62,7 +63,7 @@ public struct ActivitySpec: Sendable {
     /// short ones like the iPhone's (owner, 11-01: the short cards were cramped where there's more than one row).
     public var padding: Double {
         switch id {
-        case .call, .focus, .recording, .meeting, .download, .messages, .incoming, .camera, .recordCountdown, .recordingSaved,
+        case .call, .focus, .recording, .meeting, .download, .messages, .incoming, .camera, .recordCountdown, .recordingSaved, .prompter,
              .match, .chess, .kickoff, .goal, .fulltime, .agentLimit, .agentBack, .notice, .support: 20
         default: 14
         }
@@ -85,6 +86,7 @@ public struct ActivitySpec: Sendable {
         case .charging: "Charging"
         case .battery: "Low battery"
         case .timer: "Timer"
+        case .prompter: "Prompter"
         case .recording: "Screen recording"
         case .meeting: "Next meeting"
         case .camera: "Camera"
@@ -135,6 +137,9 @@ public struct ActivitySpec: Sendable {
             ActivitySpec(id: .timer, tier: .ongoing, ear: nil,
                          card: CardSize(width: 372, height: 94, radius: 40), transient: nil, opens: false,
                          pulse: nil, colorHex: orange),
+            ActivitySpec(id: .prompter, tier: .live, ear: 76,
+                         card: CardSize(width: 500, height: 332, radius: 40), transient: nil, opens: true,
+                         pulse: nil, colorHex: green),
             ActivitySpec(id: .recording, tier: .live, ear: 64,
                          card: CardSize(width: 372, height: 138, radius: 40), transient: nil, opens: false,
                          pulse: nil, colorHex: red),

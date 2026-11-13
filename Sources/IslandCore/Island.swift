@@ -324,9 +324,12 @@ public struct Island: Equatable, Sendable {
             guard mediaOn else { break }
             mediaOn = false
             mediaHidden = false
-            hovered = false
-            opened = false
-            hud = nil                      // an alert in flight must not reopen the island
+            // Stopping a song must not dismiss a script the user is currently reading.
+            if !(opened && instance(cardOwner)?.id == .prompter) {
+                hovered = false
+                opened = false
+                hud = nil                  // an alert in flight must not reopen the island
+            }
         case .startMedia2(let app):
             if !media2On || media2App != app { media2Hidden = false }
             media2On = true; media2App = app

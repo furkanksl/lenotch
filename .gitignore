@@ -1,5 +1,6 @@
 .build/
 dist/
+/refs/
 .swiftpm/
 *.xcodeproj/
 .DS_Store

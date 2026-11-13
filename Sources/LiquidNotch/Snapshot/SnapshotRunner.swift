@@ -63,7 +63,7 @@ enum SnapshotRunner {
             // The tray with a song is 672 pt wide: its states get a wider crop.
             let big = d.groups.playerFocus || d.island.dayLarge
             let width = (d.groups.tray && d.groups.player) || big ? 720.0 : 560
-            let height = big ? 400.0 : d.groups.agentsCard != nil ? 380 : 220
+            let height = big ? 400.0 : d.groups.agentsCard != nil || d.island.activity?.id == .prompter ? 380 : 220
             if let img = stage.image(t.restingFrame(mode), targets: t, mode: mode, region: Region(width: width, height: height),
                                      content: d) {
                 labelled.append((scenario.name, img))
@@ -222,6 +222,11 @@ enum SnapshotRunner {
         static var all: [Scenario] {
             var list: [Scenario] = [
                 Scenario(name: "media · ears") { $0.startMusic() },
+                Scenario(name: "prompter · ready to read") { d in
+                    d.prompter.updateScript(title: "A clear beginning", text: "Look into the camera. Take a breath.\n\nToday, I want to share a simple idea: the best tools get out of the way.\n\nKeep your eyes here, speak naturally, and let the words follow your pace.")
+                    d.openPrompter()
+                },
+                Scenario(name: "prompter · empty script") { d in d.show(.prompter, opened: true, sample: false) },
                 Scenario(name: "media · hover preview") { d in d.startMusic(); d.pointerMoved(hit: .ears, corridor: false, buttonDown: false) },
                 Scenario(name: "media · player card") { d in d.startMusic(); d.pointerDown(at: .zero, hit: .ears) },
                 Scenario(name: "media · the focused player with lyrics") { d in
@@ -468,7 +473,7 @@ enum SnapshotRunner {
 
         /// A director whose timers never fire and whose clock only moves when told.
         func director() -> IslandDirector {
-            let d = IslandDirector()
+            let d = IslandDirector(prompter: PrompterModel(storageURL: nil))
             SnapshotClock.time = 0
             d.clock = { SnapshotClock.time }
             d.schedule = { _, _ in Scheduled() }

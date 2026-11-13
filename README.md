@@ -41,6 +41,16 @@ swift tools/dev.swift --once
 
 Press **Ctrl-C** to stop the watcher and any build it started. The last launched app stays open. Do not run a separate build or `swift test` while the watcher is running, since both use this checkout's `.build/` directory. Ad-hoc signing can require granting macOS permissions again after a rebuild; the existing `LN_SIGN_IDENTITY` build option can use a stable signing identity.
 
+## Prompter
+
+Open the notch's tools and choose **Prompter**, or right-click the notch and choose **Prompter…**. Write or paste a script in the editor; scripts and display preferences save locally on your Mac.
+
+Start moves the reader below the camera, with an optional three-second countdown. Pause and resume without losing your place, restart from the beginning, or scroll manually. Adjust speed and text size while reading; Mirror flips only the script for a teleprompter reflector. Stop closes the reader. Switching to another activity or hiding the card pauses playback instead of scrolling unseen.
+
+The reader stays open when you click another app, so it can sit beside the camera during a presentation. Click the text to focus its keyboard controls: **Space** pauses/resumes, **R** restarts, **↑/↓** changes speed, and **Esc** stops. Editor typing is unaffected.
+
+This is constant-speed, local prompting. It does not use microphone or Speech permission and does not send scripts to a service. Voice-following and cloud synchronization are not included.
+
 ## Tests
 
 ```sh

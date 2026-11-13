@@ -28,6 +28,12 @@ typealias Schedule = @MainActor (_ seconds: Double, _ body: @escaping @MainActor
 @MainActor @Observable
 final class IslandDirector {
     private(set) var island = Island()
+    let prompter: PrompterModel
+    @ObservationIgnored private let prompterEditor = PrompterEditor()
+
+    init(prompter: PrompterModel? = nil) {
+        self.prompter = prompter ?? PrompterModel()
+    }
 
     // Media: what's really playing (P2), or the samples while the debug panel plays them.
     private(set) var nowPlaying: NowPlaying?
@@ -275,6 +281,10 @@ final class IslandDirector {
 
     private func changed() {
         syncMediaFacts()
+        // Never run the script unseen: alerts, HUDs, a closed card and lock all pause it.
+        if mode != .card || !island.opened || island.instance(island.cardOwner)?.id != .prompter || systemContext.lockScreen || island.context.locked {
+            prompter.pause()
+        }
         if vinylOut && !(island.opened && groups.player) { vinylOut = false }   // it goes back in with the player
         if island.mediaFocus || lockLyrics { loadLyrics() }   // a new song while the lyrics show
         if !island.agents.sessions.isEmpty || !idleLeaves.isEmpty { syncIdleSessions() }
@@ -1579,6 +1589,32 @@ final class IslandDirector {
         kick(35)
     }
 
+    // MARK: - Prompter
+
+    /// Opening the reader never resumes a script behind the user's back.
+    func openPrompter() {
+        guard prompter.canPlay else { editPrompter(); return }
+        prompter.pause()
+        show(.prompter, opened: true, sample: false)
+    }
+
+    func startPrompter() {
+        guard prompter.canPlay else { editPrompter(); return }
+        show(.prompter, opened: true, sample: false)
+        // An incoming call can outrank a user-started session. Wait rather than scrolling offscreen.
+        if mode == .card && island.instance(island.cardOwner)?.id == .prompter { prompter.start() }
+    }
+
+    func editPrompter() {
+        prompter.pause()
+        prompterEditor.show(model: prompter) { [weak self] in self?.startPrompter() }
+    }
+
+    func stopPrompter() {
+        prompter.stop()
+        if let session = island.running.first(where: { $0.id == .prompter }) { end(serial: session.serial) }
+    }
+
     // MARK: - Notifications (11-07; banners only since 11-11: no inbox, they pass and go)
 
     /// Which notification each showing is.
@@ -2372,6 +2408,8 @@ final class IslandDirector {
             send(.close)
             return
         }
+        // Reading stays beside the camera while the user works or presents in another app.
+        if hit == nil && island.opened && island.instance(island.cardOwner)?.id == .prompter { return }
         // A click on the open player's card (not its buttons) opens the lyrics (owner, 11-07: "if I click something then
         // try to open the lyrics, it doesn't … sometimes I click on the music card and it doesn't open"; only the cover
         // and a double-click whose first press opened the player did).
@@ -2395,7 +2433,8 @@ final class IslandDirector {
         let askOpenHere = island.cardOwner == .agents(.ask) && island.askOpen == nil
         // A video watched in the island stays until its × (owner, 11-11: "it should stay even when you click away").
         let watching = island.mediaFocus && island.focusVideo
-        guard island.opened, !pressed, !scrubbing, !askOpenHere, !watching else { return }
+        let prompting = island.instance(island.cardOwner)?.id == .prompter
+        guard island.opened, !pressed, !scrubbing, !askOpenHere, !watching, !prompting else { return }
         hoverOff?.cancel(); hoverOff = nil
         send(.close)
     }
