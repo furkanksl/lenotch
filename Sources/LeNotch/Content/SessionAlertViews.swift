@@ -2,12 +2,12 @@ import AppKit
 import IslandCore
 import SwiftUI
 
-// Football, chess and the agents' usage limit: ears, ball glyphs and cards, ported from the sim (`ACT.kickoff`,
-// `match`, `goal`, `fulltime`, `chess`, `aglimit`, `agback` in sim/src/acts.js and agents.js; styles in acts.css).
+// Chess and the agents' usage limit: ears, ball glyphs and cards, ported from the sim (`ACT.chess`,
+// `aglimit`, `agback` in sim/src/acts.js and agents.js; styles in acts.css).
 
 // MARK: - Ears
 
-struct SportsEars: View {
+struct SessionAlertEars: View {
     let instance: ActivityInstance
     let side: EarSide
     let director: IslandDirector
@@ -17,29 +17,6 @@ struct SportsEars: View {
         let _ = director.now
         HStack(spacing: 7) {
             switch (instance.id, side) {
-            case (.kickoff, .left):
-                CrestPair(match: director.footballFor(instance), size: 20, overlap: 5).entrance(side, 0)
-            case (.kickoff, .right):
-                Text(director.footballFor(instance).untilText(from: director.date())).font(IslandType.ear.monospacedDigit())
-                    .entrance(side, 0)
-            case (.match, .left):
-                let m = director.footballFor(instance)
-                Crest(team: m.home, size: 22).entrance(side, 0)
-                Score(value: m.score[0]).entrance(side, 1)
-            case (.match, .right):
-                let m = director.footballFor(instance)
-                Score(value: m.score[1]).entrance(side, 0)
-                Crest(team: m.away, size: 22).entrance(side, 1)
-            case (.goal, .left):
-                let g = director.footballGoal
-                Crest(team: g.match.team(g.side), size: 22).entrance(side, 0)
-                Text(g.word.uppercased()).font(IslandType.ear).foregroundStyle(IslandColor.green).entrance(side, 1)
-            case (.goal, .right):
-                Text(director.footballGoal.match.scoreText).font(IslandType.ear.monospacedDigit()).entrance(side, 0)
-            case (.fulltime, .left):
-                CrestPair(match: director.footballFinal, size: 20, overlap: 5).entrance(side, 0)
-            case (.fulltime, .right):
-                Text("\(director.footballFinal.sport.finalShort) \(director.footballFinal.scoreText)").font(IslandType.ear.monospacedDigit()).entrance(side, 0)
             case (.chess, .left):
                 let c = director.chessFor(instance)
                 ChessToken(piece: c.now.piece, size: 22).entrance(side, 0)
@@ -68,27 +45,14 @@ struct SportsEars: View {
     }
 }
 
-/// A score in the ears: it flips when it changes (the sim's `bump`).
-private struct Score: View {
-    let value: Int
-    var body: some View {
-        Text("\(value)").font(IslandType.ear.monospacedDigit()).contentTransition(.numericText(value: Double(value)))
-            .animation(.snappy, value: value)
-    }
-}
-
 /// The ball's glyph for these activities.
-struct SportsGlyph: View {
+struct SessionAlertGlyph: View {
     let instance: ActivityInstance
     let director: IslandDirector
 
     var body: some View {
         let _ = director.now
         switch instance.id {
-        case .kickoff: CrestPair(match: director.footballFor(instance), size: 16, overlap: 4)
-        case .match: FootballMini(match: director.footballFor(instance))
-        case .goal: Crest(team: director.footballGoal.match.team(director.footballGoal.side), size: 20)
-        case .fulltime: CrestPair(match: director.footballFinal, size: 16, overlap: 4)
         case .chess: ChessToken(piece: director.chessFor(instance).now.piece, size: 22)
         case .agentLimit, .agentBack:
             let p = director.limitFor(instance).provider
@@ -98,62 +62,9 @@ struct SportsGlyph: View {
     }
 }
 
-/// In a ball: the score, ringed in your team's colour.
-private struct FootballMini: View {
-    let match: FootballMatch
-    var body: some View {
-        Text(match.scoreText)
-            .font(.system(size: 10.5, weight: .bold).monospacedDigit())
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 4)
-            .frame(minWidth: 24, minHeight: 24)
-            .overlay(Capsule().strokeBorder(Color(hex: match.ourTeam.colorHex), lineWidth: 2))
-            .contentTransition(.numericText())
-    }
-}
-
-// MARK: - Crests
-
-/// A crest from ESPN's CDN; a badge in the team's colour with its abbreviation until (or unless) it loads.
-struct Crest: View {
-    let team: FootballTeam
-    let size: Double
-    private var store: CrestStore { .shared }
-
-    var body: some View {
-        ZStack {
-            if let image = store.image(team) {
-                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
-                    .shadow(color: .black.opacity(0.4), radius: 1, y: 1)
-            } else {
-                Circle().fill(Color(hex: team.colorHex))
-                    .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 0.5))
-                Text(team.abbr).font(.system(size: (size * 0.3).rounded(), weight: .bold)).tracking(-0.02 * size * 0.3)
-                    .foregroundStyle(.white)
-            }
-        }
-        .frame(width: size, height: size)
-        .accessibilityLabel(team.name)
-    }
-}
-
-struct CrestPair: View {
-    let match: FootballMatch
-    let size: Double
-    let overlap: Double
-
-    var body: some View {
-        HStack(spacing: -overlap) {
-            Crest(team: match.home, size: size)
-            Crest(team: match.away, size: size)
-        }
-    }
-}
-
 // MARK: - Cards
 
-struct SportsCard: View {
+struct SessionAlertCard: View {
     let instance: ActivityInstance
     let director: IslandDirector
     @Environment(\.presenting) private var presenting
@@ -161,19 +72,6 @@ struct SportsCard: View {
     var body: some View {
         let _ = director.now
         switch instance.id {
-        case .kickoff:
-            let m = director.footballFor(instance)
-            Row(lead: CrestPair(match: m, size: 40, overlap: 10), title: m.sport == .soccer ? "\(m.home.name) × \(m.away.name)" : "\(m.away.name) @ \(m.home.name)",
-                sub: "\(m.competition) · \(m.kickoffText) · \(m.untilText(from: director.date()))")
-        case .match: MatchCard(match: director.footballFor(instance))
-        case .goal:
-            let g = director.footballGoal, t = g.match.team(g.side)
-            Row(lead: Crest(team: t, size: 44), title: "\(g.word), \(t.name)!",
-                sub: "\(g.whenText) · \(g.match.home.name) \(g.match.scoreText) \(g.match.away.name)")
-        case .fulltime:
-            let m = director.footballFinal
-            Row(lead: CrestPair(match: m, size: 40, overlap: 10), title: "\(m.home.name) \(m.scoreText) \(m.away.name)",
-                sub: "\(m.sport.finalWord) · \(m.competition)")
         case .chess: ChessCard(instance: instance, director: director)
         case .agentLimit:
             let l = director.limitFor(instance)
@@ -215,78 +113,6 @@ private struct AlertMark: View {
     var body: some View {
         AgentMark(provider: provider, size: 24)
             .frame(width: 44, height: 44).background(Circle().fill(color.opacity(0.22)))
-    }
-}
-
-/// The live match: both teams, LIVE and the minute, the score, the last event, and a 90-minute bar with a dot per goal.
-private struct MatchCard: View {
-    let match: FootballMatch
-
-    var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 0) {
-                team(match.home)
-                Spacer(minLength: 0)
-                VStack(spacing: 1) {
-                    HStack(spacing: 5) {
-                        LiveDot()
-                        Text("LIVE").tracking(0.44)
-                        Text(match.minuteText).padding(.leading, 4).monospacedDigit()
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(IslandColor.red)
-                    HStack(spacing: 9) {
-                        Text("\(match.score[0])").contentTransition(.numericText(value: Double(match.score[0])))
-                        Text("–").foregroundStyle(.white.opacity(0.35))
-                        Text("\(match.score[1])").contentTransition(.numericText(value: Double(match.score[1])))
-                    }
-                    .font(IslandType.numeral)
-                    .animation(.snappy, value: match.score)
-                    Text(match.stale ? "Score unavailable" : match.last).font(.system(size: 11)).foregroundStyle(IslandColor.dim)
-                        .lineLimit(1)
-                }
-                .rise(1)
-                Spacer(minLength: 0)
-                team(match.away)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.14))
-                    Capsule().fill(.white.opacity(0.7)).frame(width: geo.size.width * match.progress)
-                    ForEach(Array(match.goals.enumerated()), id: \.offset) { _, g in
-                        Circle().fill(Color(hex: match.team(g.side).colorHex))
-                            .overlay(Circle().strokeBorder(.black, lineWidth: 1.5).padding(-1.5))
-                            .frame(width: 8, height: 8)
-                            .offset(x: geo.size.width * min(Double(g.minute) / 90, 1) - 4)
-                    }
-                }
-            }
-            .frame(height: 4)
-            .rise(2)
-        }
-        .frame(maxHeight: .infinity)
-    }
-
-    private func team(_ t: FootballTeam) -> some View {
-        VStack(spacing: 2) {
-            Crest(team: t, size: 34)
-            Text(t.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(width: 88)
-        .rise(0)
-    }
-}
-
-/// The red LIVE dot, blinking like the sim's `urgent`.
-private struct LiveDot: View {
-    @Environment(\.islandMotion) private var motion
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.6)) { ctx in
-            let on = motion.stills || motion.reduce || Int(ctx.date.timeIntervalSinceReferenceDate / 0.6) % 2 == 0
-            Circle().fill(IslandColor.red).frame(width: 6, height: 6).opacity(on ? 1 : 0.35)
-                .animation(.easeInOut(duration: 0.3), value: on)
-        }
     }
 }
 

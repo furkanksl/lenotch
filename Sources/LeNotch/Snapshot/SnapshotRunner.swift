@@ -15,18 +15,6 @@ enum SnapshotRunner {
     static let scale = 2.0
 
     static func run(outputDirectory: String) {
-        // Stills never touch the network (crests are badges unless cached), except README stills (`LN_SNAP_README=1`):
-        // those fetch the sample teams' real crests first, as the app does at runtime.
-        let readme = ProcessInfo.processInfo.environment["LN_SNAP_README"] != nil
-        CrestStore.shared.offline = !readme
-        if readme {
-            let teams = [FootballSamples.palmeiras, FootballSamples.flamengo, FootballSamples.barcelona, FootballSamples.atletico]
-            for t in teams { _ = CrestStore.shared.image(t) }
-            let until = Date().addingTimeInterval(6)
-            while Date() < until, teams.contains(where: { CrestStore.shared.images[$0.key] == nil }) {
-                RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-            }
-        }
         let dir = URL(fileURLWithPath: outputDirectory, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
@@ -340,16 +328,6 @@ enum SnapshotRunner {
                 Scenario(name: "agents · a usage limit") { d in
                     agent(d, "UserPromptSubmit"); agent(d, "StopFailure", extra: #","error":"rate_limit""#)
                 },
-                Scenario(name: "football · the match's ball beside the song") { d in
-                    d.startMusic(); d.show(.match, opened: false); advance(d, .match)
-                },
-                Scenario(name: "football · a goal takes the ears") { d in
-                    d.show(.match, opened: false); SnapshotClock.time += 30; d.tick()
-                },
-                Scenario(name: "football · the goal's card") { d in
-                    d.show(.match, opened: false); SnapshotClock.time += 30; d.tick()
-                    d.openCard(.activity)
-                },
                 Scenario(name: "chess · your move beside the song") { d in d.startMusic(); d.show(.chess, opened: false) },
                 Scenario(name: "ask · the card on the empty notch") { d in askStub(d); d.openAsk() },
                 Scenario(name: "ask · ChatGPT, screen off") { d in askStub(d); d.openAsk(.codex); d.toggleAskShot() },
@@ -362,7 +340,7 @@ enum SnapshotRunner {
                 Scenario(name: "ask · the answer streaming in its chat") { d in
                     askStub(d); d.openAsk(); d.submitAsk("What's the error in this window?")
                     if let id = d.island.agents.sessions.first?.id {
-                        d.askEvent(id, .delta("The build fails because `Football.swift` uses `Logger` without importing os. Add "))
+                        d.askEvent(id, .delta("The build fails because `MediaBridge.swift` uses `Logger` without importing os. Add "))
                     }
                 },
                 Scenario(name: "lock · the island while locked, a song playing") { d in
@@ -380,7 +358,6 @@ enum SnapshotRunner {
                 })
                 list.append(Scenario(name: "\(id.rawValue) · card") { d in
                     d.show(id, opened: true); advance(d, id)
-                    if id == .match { d.openCard(.activity) }   // its goal moments took the ears meanwhile
                 })
             }
             list += [
@@ -441,12 +418,6 @@ enum SnapshotRunner {
 
         /// Gives the clocks something to show.
         @MainActor private static func advance(_ d: IslandDirector, _ id: ActivityID) {
-            if id == .match {
-                // Past half time (1–1, two goals scored), the goal moments gone: the match at 50'.
-                SnapshotClock.time += 60; d.tick(); SnapshotClock.time += 10; d.tick()
-                for g in d.island.running where g.id == .goal { d.end(serial: g.serial) }
-                return
-            }
             guard SampleState.ticks(id) else { return }
             SnapshotClock.time += id == .download ? 4 : 47
             d.tick()

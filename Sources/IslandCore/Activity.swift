@@ -1,13 +1,10 @@
 /// The activities the island can show, with what the simulator says about each one
-/// (`ACT` in `sim/src/acts.js`). Face ID is gone (owner, 11-01); football replaced the NBA Scores sample (11-06).
+/// (`ACT` in `sim/src/acts.js`).
 public enum ActivityID: String, CaseIterable, Sendable {
     case incoming, call, airpods, focus, charging, battery, timer, recording, meeting, camera, download, messages
     case prompter
     /// Recording from the notch (11-06): the 3-2-1 before it starts, and the moment it's saved.
     case recordCountdown, recordingSaved
-    /// Football (11-06, docs/superpowers/specs/2026-11-06-football-design.md): the reminder before kickoff, the live
-    /// match, a goal, the final whistle.
-    case kickoff, match, goal, fulltime
     /// Chess (11-06, docs/superpowers/specs/2026-11-06-chess-design.md): the opponent moved while you were elsewhere.
     case chess
     /// A Claude or Codex usage limit, and its reset (11-06, sim `aglimit` / `agback`).
@@ -64,7 +61,7 @@ public struct ActivitySpec: Sendable {
     public var padding: Double {
         switch id {
         case .call, .focus, .recording, .meeting, .download, .messages, .incoming, .camera, .recordCountdown, .recordingSaved, .prompter,
-             .match, .chess, .kickoff, .goal, .fulltime, .agentLimit, .agentBack, .notice, .support: 20
+             .chess, .agentLimit, .agentBack, .notice, .support: 20
         default: 14
         }
     }
@@ -94,10 +91,6 @@ public struct ActivitySpec: Sendable {
         case .messages: "Messages"
         case .recordCountdown: "Recording starts"
         case .recordingSaved: "Recording saved"
-        case .kickoff: "Kickoff"
-        case .match: "Match"
-        case .goal: "Goal"
-        case .fulltime: "Full time"
         case .chess: "Chess"
         case .agentLimit: "Usage limit"
         case .agentBack: "Limit reset"
@@ -162,20 +155,6 @@ public struct ActivitySpec: Sendable {
                          pulse: nil, colorHex: red),
             ActivitySpec(id: .recordingSaved, tier: .transient, ear: 112,
                          card: CardSize(width: 372, height: 84, radius: 42), transient: 5, opens: false,
-                         pulse: nil, colorHex: green),
-            // Football (sim `kickoff`, `match`, `goal`, `fulltime`): the match is ongoing, the moments transients.
-            ActivitySpec(id: .kickoff, tier: .transient, ear: 100,
-                         card: CardSize(width: 372, height: 84, radius: 42), transient: 5, opens: false,
-                         pulse: nil, colorHex: green),
-            // 124, not the sim's 138: the native card is its content plus the padding (BAL1).
-            ActivitySpec(id: .match, tier: .ongoing, ear: 92,
-                         card: CardSize(width: 372, height: 124, radius: 40), transient: nil, opens: false,
-                         pulse: nil, colorHex: green),
-            ActivitySpec(id: .goal, tier: .transient, ear: 100,
-                         card: CardSize(width: 372, height: 84, radius: 42), transient: 3.5, opens: false,
-                         pulse: nil, colorHex: green),
-            ActivitySpec(id: .fulltime, tier: .transient, ear: 100,
-                         card: CardSize(width: 372, height: 84, radius: 42), transient: 6, opens: false,
                          pulse: nil, colorHex: green),
             // Chess: live while your clock runs (as time-critical as a call).
             ActivitySpec(id: .chess, tier: .live, ear: 100,

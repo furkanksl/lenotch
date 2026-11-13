@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SetupPage: String, CaseIterable, Identifiable {
-    case permissions, appearance, integrations, sports
+    case permissions, appearance, integrations
 
     var id: Self { self }
     var title: String {
@@ -10,7 +10,6 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .permissions: "Permissions"
         case .appearance: "Appearance"
         case .integrations: "Integrations"
-        case .sports: "Sports"
         }
     }
     var symbol: String {
@@ -18,7 +17,6 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .permissions: "checkmark.shield"
         case .appearance: "paintpalette"
         case .integrations: "powerplug"
-        case .sports: "trophy"
         }
     }
     var subtitle: String {
@@ -26,7 +24,6 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .permissions: "Every permission is optional. Allow only what you want to use."
         case .appearance: "A little personality, only where you want it."
         case .integrations: "Bring the things you use into the notch."
-        case .sports: "Follow your teams. Leave the list empty to turn sports off."
         }
     }
 }
@@ -104,7 +101,6 @@ struct SetupView: View {
                                         reviewAccess = true
                                         page = .permissions
                                     }
-                                case .sports: SetupSportsPage()
                                 }
                             }
                         }

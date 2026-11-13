@@ -190,8 +190,8 @@ struct ActivityEars: View {
                 Text(clockText(director.lastRecording.seconds)).font(IslandType.ear.monospacedDigit())
                     .foregroundStyle(IslandColor.secondary).entrance(side, 0)
 
-            case (.kickoff, _), (.match, _), (.goal, _), (.fulltime, _), (.chess, _), (.agentLimit, _), (.agentBack, _):
-                SportsEars(instance: instance, side: side, director: director)
+            case (.chess, _), (.agentLimit, _), (.agentBack, _):
+                SessionAlertEars(instance: instance, side: side, director: director)
             case (.lockScreen, _), (.unlocked, _):
                 LockEars(id: instance.id, side: side, unlocking: director.lockTouched)
             case (.notice, _):
@@ -233,7 +233,7 @@ struct ActivityGlyph: View {
         case .recordCountdown: RecordDot()
         case .recordingSaved: Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(IslandColor.green)
 
-        case .kickoff, .match, .goal, .fulltime, .chess, .agentLimit, .agentBack: SportsGlyph(instance: instance, director: director)
+        case .chess, .agentLimit, .agentBack: SessionAlertGlyph(instance: instance, director: director)
         case .lockScreen, .unlocked: Image(systemName: instance.id == .unlocked ? "lock.open.fill" : "lock.fill").font(.system(size: 12, weight: .semibold))
         case .notice: NoticeIcon(app: director.notice(for: instance).app, size: 20)
         case .support: Image(systemName: "cup.and.saucer.fill").font(.system(size: 11, weight: .semibold))
@@ -268,7 +268,7 @@ struct ActivityCard: View {
         case .download: DownloadCard(instance: instance, director: director)
         case .messages: MessagesCard(director: director)
 
-        case .kickoff, .match, .goal, .fulltime, .chess, .agentLimit, .agentBack: SportsCard(instance: instance, director: director)
+        case .chess, .agentLimit, .agentBack: SessionAlertCard(instance: instance, director: director)
         case .lockScreen, .unlocked: EmptyView()   // ears only
         case .notice: NoticeCard(notice: director.notice(for: instance), director: director)
         case .support: SupportCard(director: director)

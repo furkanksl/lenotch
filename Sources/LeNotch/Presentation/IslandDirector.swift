@@ -266,9 +266,7 @@ final class IslandDirector {
             transientEnds[serial] = schedule(seconds) { [weak self] in
                 guard let self else { return }
                 transientEnds[serial] = nil
-                let id = island.running.first { $0.serial == serial }?.id
                 send(.transientExpired(serial: serial))
-                if id == .kickoff, !island.running.contains(where: { $0.serial == serial }) { kickoffEnded() }
             }
         case .nudge:
             _ = schedule(0.2) { [weak self] in self?.kick(55) }
@@ -785,7 +783,10 @@ final class IslandDirector {
 
     /// Puts an activity on the island. `sample`: the debug panel's sample data rather than live data.
     func show(_ id: ActivityID, opened: Bool? = nil, sample: Bool = true) {
-        if !island.running.contains(where: { $0.id == id }) { samples.reset(id); if sample { resetSportsSample(id) } }
+        if !island.running.contains(where: { $0.id == id }) {
+            samples.reset(id)
+            if sample, id == .chess { chessClock = ChessSample.now(chessStep).myClock }
+        }
         let before = island.running.map(\.serial).max() ?? 0
         // Typing only matters at the moment something would open by itself: read it now.
         let typed = liveContext && typingNow?() == true && !island.context.typing
@@ -1942,27 +1943,13 @@ final class IslandDirector {
         }
     }
 
-    // MARK: - Football, chess, the usage limit (11-06, ported from the sim)
+    // MARK: - Chess, the usage limit (11-06, ported from the sim)
 
-    /// The match on the island, sample or live (ESPN).
-    private(set) var football: FootballMatch?
-    @ObservationIgnored private var footballSample = false
-    @ObservationIgnored private var footballScript: [FootballMatch.Goal] = []
-    @ObservationIgnored private var halfTimeLeft: Double?
-    /// The sample the debug panel's buttons start: "pal" (Palmeiras) or "bar" (Barcelona).
-    private(set) var footballSampleKey = "pal"
-    /// The goal being celebrated, and the final whistle's match.
-    private(set) var footballGoal = FootballGoal(match: FootballSamples.match("pal", now: Date()).match, side: 0, minute: 0)
-    private(set) var footballFinal = FootballSamples.match("pal", now: Date()).match
     /// Chess: the sample game's step and your running clock.
     private(set) var chessStep = 0
     private(set) var chessClock = ChessSample.now(0).myClock
     /// The usage limit's provider and when it resets (from the hook's text, when it says).
     private(set) var limit = LimitInfo(provider: .claude, resets: "18:00")
-
-    func footballFor(_ a: ActivityInstance) -> FootballMatch {
-        football ?? FootballSamples.match(footballSampleKey, now: date()).match
-    }
 
     func chessFor(_ a: ActivityInstance) -> (now: ChessSample.Now, step: Int, mine: Double) {
         (ChessSample.now(chessStep), chessStep, chessClock)
@@ -1970,26 +1957,9 @@ final class IslandDirector {
 
     func limitFor(_ a: ActivityInstance) -> LimitInfo { limit }
 
-    /// A showing from the debug panel starts its sample fresh.
-    private func resetSportsSample(_ id: ActivityID) {
-        switch id {
-        case .kickoff, .match:
-            guard football == nil || footballSample || football?.finished == true else { return }
-            let s = FootballSamples.match(footballSampleKey, now: date())
-            football = s.match; footballScript = s.script; footballSample = true; halfTimeLeft = nil
-            if id == .match { football?.started = true }
-        case .chess:
-            chessClock = ChessSample.now(chessStep).myClock
-        default: break
-        }
-    }
-
-    /// The moments when something arrives (sim `mount`): the goal's jolt, the chess move's, the limit's return.
+    /// The moments when something arrives (sim `mount`): the chess move's jolt, the limit's return.
     private func arrived(_ id: ActivityID, serial: Int) {
         switch id {
-        case .goal:
-            onPulse?(footballGoal.match.team(footballGoal.side).colorHex)
-            kick(85)
         case .chess:
             onPulse?(ActivitySpec[.chess].colorHex)
             _ = schedule(0.16) { [weak self] in if self?.island.running.contains(where: { $0.serial == serial }) == true { self?.kick(70) } }
@@ -2001,101 +1971,6 @@ final class IslandDirector {
             _ = schedule(0.12) { [weak self] in self?.kick(60) }
         default: break
         }
-    }
-
-    /// The reminder left: a beat later, the whistle.
-    private func kickoffEnded() {
-        _ = schedule(0.9) { [weak self] in
-            guard let self, !island.running.contains(where: { $0.id == .match }), let m = football, !m.finished else { return }
-            football?.started = true
-            show(.match, opened: false, sample: footballSample)
-        }
-    }
-
-    /// The sample match's clock (a minute every 1.2 s, half time waits 4 s) and its scripted goals.
-    private func advanceSports(_ dt: Double) {
-        if island.running.contains(where: { $0.id == .chess }) { chessClock = max(0, chessClock - dt) }
-        guard footballSample, var m = football, let a = island.running.first(where: { $0.id == .match }), !m.finished else { return }
-        if let h = halfTimeLeft, h > 0 {
-            halfTimeLeft = max(0, h - dt)
-            if halfTimeLeft == 0 { m.halfTime = false }
-        } else {
-            m.minute = min(90, m.minute + dt / FootballSamples.minute)
-        }
-        if m.minute >= 45 && halfTimeLeft == nil { halfTimeLeft = FootballSamples.halfTimeHold; m.halfTime = true; m.last = "Half time" }
-        var scored: FootballMatch.Goal?
-        for g in footballScript where m.minute >= Double(g.minute) && !m.goals.contains(g) {
-            m.goals.append(g); m.score[g.side] += 1
-            m.last = "Goal · \(m.team(g.side).name) \(g.minute)'"
-            scored = g
-        }
-        football = m
-        if let g = scored { goal(m, g) }
-        if m.minute >= 90 { finish(m, serial: a.serial) }
-    }
-
-    private func goal(_ m: FootballMatch, _ g: FootballMatch.Goal) {
-        footballGoal = FootballGoal(match: m, side: g.side, minute: g.minute)
-        show(.goal, opened: false, sample: footballSample)
-    }
-
-    private func finish(_ m: FootballMatch, serial: Int) {
-        football?.finished = true
-        footballFinal = m
-        end(serial: serial)
-        show(.fulltime, opened: false, sample: footballSample)
-    }
-
-    /// The debug panel's team buttons (sim `footballButton`): a pressed one ends that team's match or its reminder.
-    func footballButton(_ key: String) {
-        let running = island.running.filter { [.kickoff, .match, .goal, .fulltime].contains($0.id) }
-        let same = footballSample && footballSampleKey == key
-        for r in running { end(serial: r.serial) }
-        football = nil
-        if !running.isEmpty && same { return }
-        footballSampleKey = key
-        show(.kickoff, opened: false)
-    }
-
-    func footballRunning(_ key: String) -> Bool {
-        footballSample && footballSampleKey == key && island.running.contains { [.kickoff, .match, .goal, .fulltime].contains($0.id) }
-    }
-
-    /// ESPN: 15 minutes before a followed team's kickoff.
-    func footballReminder(_ m: FootballMatch) {
-        guard !footballSample || football == nil else { return }
-        football = m; footballSample = false
-        show(.kickoff, opened: false, sample: false)
-    }
-
-    /// ESPN: the live match changed (score, clock, status).
-    func footballUpdated(_ m: FootballMatch) {
-        if footballSample && island.running.contains(where: { [.kickoff, .match, .goal, .fulltime].contains($0.id) }) { return }
-        let before = football?.eventID == m.eventID ? football : nil
-        footballSample = false
-        football = m
-        let match = island.running.first { $0.id == .match }
-        if m.finished {
-            if before?.finished != true, let match { finish(m, serial: match.serial) } else { football?.finished = true }
-            return
-        }
-        if m.started && match == nil { show(.match, opened: false, sample: false) }
-        guard let b = before else { return }
-        if m.sport == .soccer {
-            if m.goals.count > b.goals.count, let g = m.goals.last { goal(m, g) }
-        } else if m.sport.scoreWord != nil, let side = Self.scoringSide(before: b.score, after: m.score) {
-            // NFL, MLB, NHL: a score is told by the score itself (NBA has no alert per basket).
-            footballGoal = FootballGoal(match: m, side: side, minute: 0, when: m.minuteText)
-            show(.goal, opened: false, sample: false)
-        }
-    }
-
-    /// Who just scored: the side whose score went up (the bigger rise if both did between two polls); nil if neither.
-    nonisolated static func scoringSide(before: [Int], after: [Int]) -> Int? {
-        guard before.count == 2, after.count == 2 else { return nil }
-        let up = [after[0] - before[0], after[1] - before[1]]
-        guard up.max()! > 0 else { return nil }
-        return up[1] > up[0] ? 1 : 0
     }
 
     /// Open game: the chess tab comes to the front. The live route needs the browser extension; the sample plays your
@@ -2158,7 +2033,6 @@ final class IslandDirector {
         island.context = context
         shownActivity = nil
         contentHeld = false
-        football = nil; footballSample = false
         quickAsk.stopAll(); askSessions = []; for t in idleLeaves.values { t.timer.cancel() }; idleLeaves = [:]
         pressed = false; drag = nil
         forcedMode = nil
@@ -2191,7 +2065,7 @@ final class IslandDirector {
         lastAdvance = t
         now = t
         // Every running activity keeps time, in the ears, a ball or off the island.
-        advanceSports(dt)
+        if island.running.contains(where: { $0.id == .chess }) { chessClock = max(0, chessClock - dt) }
         for a in island.running {
             samples.advance(a.id, dt, random: random)
             if a.id == .timer && samples.timerLeft <= 0 && !samples.timerDone {
@@ -2485,18 +2359,6 @@ enum ActivityAction: Equatable, Sendable {
     case pauseDownload, showInFinder
     case focusSettings
     case send(String), markRead
-}
-
-/// The goal being celebrated: the match after it, the scorer's side and the minute.
-struct FootballGoal: Equatable {
-    var match: FootballMatch
-    var side: Int
-    var minute: Int
-    /// When it came as the sport says it: "67'", "Q3 4:12", "Bot 7th".
-    var when: String = ""
-
-    var word: String { match.sport.scoreWord ?? "Score" }
-    var whenText: String { match.sport == .soccer ? "\(minute)'" : when }
 }
 
 /// A usage limit: whose, and when it resets (when the hook says).

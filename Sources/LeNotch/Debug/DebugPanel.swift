@@ -199,12 +199,6 @@ private struct ActivityControls: View {
                         .tint(running != nil ? .accentColor : nil)
                         .buttonStyle(.bordered)
                 }
-                // Football (sim's strip): a pressed team ends its match or its reminder.
-                ForEach([("pal", "Palmeiras"), ("bar", "Barcelona")], id: \.0) { key, name in
-                    Button(name) { director.footballButton(key) }
-                        .tint(director.footballRunning(key) ? .accentColor : nil)
-                        .buttonStyle(.bordered)
-                }
                 Button("Focus on") { director.showFocusSample(on: true) }.buttonStyle(.bordered)
                 Button("Focus off") { director.showFocusSample(on: false) }.buttonStyle(.bordered)
                 Button("Battery 20%") { director.showLowBatterySample(level: 20) }.buttonStyle(.bordered)

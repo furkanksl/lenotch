@@ -27,7 +27,6 @@ final class NotchSurfaceController {
     private let transfers = TransferWatcher()
     /// macOS's notification list (11-07): every app's notifications come to the notch.
     private let notices = NotificationStore()
-    private let football = FootballWatcher()
     private let calls = CallBannerProbe()
     private let clipboard = ClipboardWatcher()
     let keys = MediaKeyTap()
@@ -221,9 +220,6 @@ final class NotchSurfaceController {
             if action == .pauseDownload { self?.transfers.pauseOrResume() } else { self?.transfers.showInFinder() }
         }
         transfers.start()
-        football.onReminder = { [weak self] m in self?.director.footballReminder(m) }
-        football.onUpdate = { [weak self] m in self?.director.footballUpdated(m) }
-        football.start()
         calls.start()
         notices.onChange = { [weak self] all, arrived in self?.director.noticesChanged(all: all, arrived: arrived) }
         if NotificationStore.enabled { notices.start() }

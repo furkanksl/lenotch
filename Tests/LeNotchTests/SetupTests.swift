@@ -7,10 +7,10 @@ import XCTest
 @MainActor
 final class SetupTests: XCTestCase {
     func testSetupPagesKeepTheirNamesAndStableIdentity() {
-        XCTAssertEqual(SetupPage.allCases, [.permissions, .appearance, .integrations, .sports])
-        XCTAssertEqual(SetupPage.allCases.map(\.title), ["Permissions", "Appearance", "Integrations", "Sports"])
+        XCTAssertEqual(SetupPage.allCases, [.permissions, .appearance, .integrations])
+        XCTAssertEqual(SetupPage.allCases.map(\.title), ["Permissions", "Appearance", "Integrations"])
         XCTAssertEqual(SetupPage.allCases.map(\.id), SetupPage.allCases)
-        XCTAssertEqual(Set(SetupPage.allCases.map(\.symbol)).count, 4)
+        XCTAssertEqual(Set(SetupPage.allCases.map(\.symbol)).count, 3)
         for page in SetupPage.allCases {
             XCTAssertFalse(page.symbol.isEmpty, page.rawValue)
             XCTAssertFalse(page.subtitle.isEmpty, page.rawValue)
@@ -117,8 +117,8 @@ final class SetupTests: XCTestCase {
         XCTAssertLessThan(action.frame.maxY, size.height)
     }
 
-    func testAppearanceAndIntegrationsRenderNavigationPageContentAndDoneInBothSizesAndThemes() async throws {
-        for page in [SetupPage.appearance, .integrations] {
+    func testRemainingPagesRenderWithoutSportsNavigationInBothSizesAndThemes() async throws {
+        for page in [SetupPage.permissions, .appearance, .integrations] {
             for size in [SetupWindowController.minimumContentSize, SetupWindowController.initialContentSize] {
                 for scheme in [ColorScheme.light, .dark] {
                     let view = SetupView(page: page, done: {})
@@ -127,26 +127,34 @@ final class SetupTests: XCTestCase {
                     let (window, host) = makeWindow(view, size: size, scheme: scheme)
                     defer { window.close() }
                     let name = "\(page.rawValue)-\(Int(size.width))-\(scheme == .dark ? "dark" : "light")"
-                    let rendered = try await render(host, name: name)
+                    let rendered = try await render(host, name: name, footerHeight: 62)
                     let text = rendered.text
                     for category in SetupPage.allCases {
+                        let title = normalized(category.title).split(separator: " ")
                         XCTAssertTrue(text.contains {
-                            normalized($0.value) == normalized(category.title) && $0.frame.maxX < 192
+                            // Vision sometimes reads the adjacent SF Symbol as a letter prefix.
+                            normalized($0.value).split(separator: " ").suffix(title.count).elementsEqual(title)
+                                && $0.frame.minX > 12 && $0.frame.maxX < 192
                         }, "Missing \(category.title) navigation in \(name). Read: \(rendered.transcript)")
                     }
+                    XCTAssertFalse(text.contains {
+                        normalized($0.value).split(separator: " ").contains("sports") && $0.frame.minX < 192
+                    }, "Sports must not appear in Setup navigation in \(name). Read: \(rendered.transcript)")
                     XCTAssertTrue(text.contains {
                         normalized($0.value) == normalized(page.title)
                             && $0.frame.minX > 192 && $0.frame.minY > size.height - 80
                     }, "The active page heading is missing or scrolled away in \(name)")
                     let content = normalized(text.filter { $0.frame.minX > 192 }.map(\.value).joined(separator: " "))
-                    let expected = page == .appearance
-                        ? ["Lock-screen artwork", "Album colors on desktop"]
-                        : ["Notifications in the notch", "Agent sessions"]
+                    let expected: [String] = switch page {
+                    case .permissions: ["Everyday essentials", "Accessibility", "Calendar", "Bluetooth"]
+                    case .appearance: ["Lock-screen artwork", "Album colors on desktop"]
+                    case .integrations: ["Notifications in the notch", "Agent sessions"]
+                    }
                     for title in expected {
                         XCTAssertTrue(content.contains(normalized(title)), "\(title) is clipped in \(name). Read: \(content)")
                     }
-                    let done = try XCTUnwrap(text.first { normalized($0.value) == "done" },
-                                             "Done is not visible in \(name). Read: \(rendered.transcript)")
+                    let done = try XCTUnwrap(rendered.footerText.first { normalized($0.value) == "done" },
+                                             "Done is not visible in \(name). Footer: \(rendered.footerText.map(\.value))")
                     XCTAssertGreaterThan(done.frame.minX, size.width - 130, name)
                     XCTAssertLessThan(done.frame.maxX, size.width - 20, name)
                     XCTAssertGreaterThan(done.frame.minY, 0, name)
@@ -182,6 +190,7 @@ final class SetupTests: XCTestCase {
 
     private struct RenderedView {
         let text: [RenderedText]
+        let footerText: [RenderedText]
         var transcript: String { text.map(\.value).joined(separator: " | ") }
     }
 
@@ -190,11 +199,13 @@ final class SetupTests: XCTestCase {
             .filter { !$0.isEmpty }.joined(separator: " ")
     }
 
-    private func render<V: View>(_ host: NSHostingView<V>, name: String) async throws -> RenderedView {
+    private func render<V: View>(_ host: NSHostingView<V>, name: String,
+                                footerHeight: CGFloat? = nil) async throws -> RenderedView {
         for _ in 0..<4 {
             await Task.yield()
             host.layoutSubtreeIfNeeded()
         }
+        host.displayIfNeeded()
         // A never-ordered NSHostingView doesn't expose SwiftUI's virtual AX children. Capture
         // its native AppKit rendering instead: OCR proves the actual text is visible, and its
         // pixel bounds check clipping and overlap without activating a window or clicking it.
@@ -207,20 +218,35 @@ final class SetupTests: XCTestCase {
             let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
             try png.write(to: folder.appendingPathComponent("\(name).png"))
         }
+        let size = host.bounds.size
+        let text = try recognize(image, in: NSRect(origin: .zero, size: size))
+        var footerText: [RenderedText] = []
+        if let footerHeight {
+            // Whole-window OCR can miss a small button amid a dense permissions page. Recognize
+            // the actual footer pixels separately, preserving their coordinates for clipping checks.
+            let scale = CGFloat(image.height) / size.height
+            let pixelHeight = ceil(footerHeight * scale)
+            let footer = try XCTUnwrap(image.cropping(to: CGRect(
+                x: 0, y: CGFloat(image.height) - pixelHeight, width: CGFloat(image.width), height: pixelHeight)))
+            footerText = try recognize(footer, in: NSRect(x: 0, y: 0, width: size.width, height: pixelHeight / scale))
+        }
+        XCTAssertFalse(text.isEmpty, "\(name) native capture contains no readable text")
+        return RenderedView(text: text, footerText: footerText)
+    }
+
+    private func recognize(_ image: CGImage, in bounds: NSRect) throws -> [RenderedText] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["en-US"]
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(cgImage: image).perform([request])
-        let size = host.bounds.size
-        let text = (request.results ?? []).compactMap { observation -> RenderedText? in
+        return (request.results ?? []).compactMap { observation -> RenderedText? in
             guard let candidate = observation.topCandidates(1).first else { return nil }
             let box = observation.boundingBox
             return RenderedText(value: candidate.string,
-                                frame: NSRect(x: box.minX * size.width, y: box.minY * size.height,
-                                              width: box.width * size.width, height: box.height * size.height))
+                                frame: NSRect(x: bounds.minX + box.minX * bounds.width,
+                                              y: bounds.minY + box.minY * bounds.height,
+                                              width: box.width * bounds.width, height: box.height * bounds.height))
         }
-        XCTAssertFalse(text.isEmpty, "\(name) native capture contains no readable text")
-        return RenderedView(text: text)
     }
 }

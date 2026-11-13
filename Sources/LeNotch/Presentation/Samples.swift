@@ -83,7 +83,7 @@ struct SampleState: Sendable {
     /// Activities whose content changes with time (they need the ticker).
     static func ticks(_ id: ActivityID) -> Bool {
         switch id {
-        case .call, .timer, .recording, .meeting, .download, .camera, .recordCountdown, .match, .chess: true
+        case .call, .timer, .recording, .meeting, .download, .camera, .recordCountdown, .chess: true
         default: false
         }
     }

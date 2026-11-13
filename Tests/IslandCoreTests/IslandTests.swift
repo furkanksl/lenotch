@@ -4,6 +4,12 @@ import IslandCore
 /// The simulator's arbitration probes (`MEDIA1`, `CTX1`, the reducer side of `ACTS`, `PT7`, `REPLY1`),
 /// replayed as event traces on the pure model.
 final class IslandTests: XCTestCase {
+    func testRemovedScoreActivitiesCannotBeSelected() {
+        for name in ["kickoff", "match", "goal", "fulltime"] {
+            XCTAssertNil(ActivityID(rawValue: name), "removed score events must not be available to the activity menu or dev commands")
+        }
+    }
+
     private func island(media: Bool = true) -> Island {
         var i = Island()
         if media { i.apply(.startMedia) }
