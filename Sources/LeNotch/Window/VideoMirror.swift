@@ -17,13 +17,17 @@ final class VideoMirror {
     private(set) var state: State = .idle
     /// The video's shape once found (width over height), for the view's fit.
     private(set) var aspect = 16.0 / 9
-    /// Frames land here (the view hosts this layer).
-    @ObservationIgnored let layer: CALayer = {
+    /// Each window owns a display layer. They share immutable images from one capture stream, so a late update from
+    /// the disappearing notch host cannot reparent the floating window's video into a hidden view.
+    @ObservationIgnored let layer: CALayer = VideoMirror.makeLayer()
+    @ObservationIgnored let pipLayer: CALayer = VideoMirror.makeLayer()
+
+    private static func makeLayer() -> CALayer {
         let l = CALayer()
         l.contentsGravity = .resizeAspect
         l.backgroundColor = NSColor.black.cgColor
         return l
-    }()
+    }
 
     @ObservationIgnored private var stream: SCStream?
     @ObservationIgnored private var output: Output?
@@ -47,6 +51,7 @@ final class VideoMirror {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.contents = nil
+        pipLayer.contents = nil
         CATransaction.commit()
         state = .idle
     }
@@ -141,12 +146,21 @@ final class VideoMirror {
 
     private func show(_ image: CGImage, session: UUID) {
         guard isCurrent(session), state == .showing || state == .finding else { return }
-        Self.present(image, on: layer)
+        display(image)
         if state != .showing {
             state = .showing
             aspect = Double(image.width) / Double(max(image.height, 1))
             Self.log.notice("video: displaying the first captured frame")
         }
+    }
+
+    /// Deliver the same decoded image to both presentation targets without moving layers between native windows.
+    func display(_ image: CGImage) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.contents = image
+        pipLayer.contents = image
+        CATransaction.commit()
     }
 
     /// Also used by the native renderer regression tests with synthetic video frames (no screen access needed).

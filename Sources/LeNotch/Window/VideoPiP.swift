@@ -7,7 +7,7 @@ import SwiftUI
 /// focus from the app you're in.
 @MainActor
 final class VideoPiP {
-    private var panel: NSPanel?
+    private(set) var panel: NSPanel?
     var onClose: (() -> Void)?
     var onBackToIsland: (() -> Void)?
 
@@ -61,7 +61,7 @@ private struct PiPContent: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            VideoLayerHost(layer: layer)
+            VideoLayerHost(layer: layer, allowsWindowDragging: true)
             HStack(spacing: 8) {
                 button("xmark", "Close", close)
                 Spacer()

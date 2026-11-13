@@ -618,7 +618,7 @@ final class IslandDirector {
         guard island.mediaFocus, island.focusVideo else { return }
         pipParty = island.cardOwner
         pipOpen = true
-        pip.show(layer: videoMirror.layer, aspect: videoMirror.aspect)
+        pip.show(layer: videoMirror.pipLayer, aspect: videoMirror.aspect)
         send(.close)
     }
 
