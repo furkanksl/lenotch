@@ -26,7 +26,7 @@ let package = Package(
         .executableTarget(
             name: "Lenotch",
             dependencies: ["IslandCore", "NowPlaying", .product(name: "Sparkle", package: "Sparkle")],
-            path: "Sources/LiquidNotch",
+            path: "Sources/LeNotch",
             // The shader is compiled at runtime from source (see LiquidRenderer),
             // so SwiftPM must not try to build it.
             exclude: ["Render/LiquidShape.metal"],
@@ -49,7 +49,7 @@ let package = Package(
         .testTarget(
             name: "LenotchTests",
             dependencies: ["Lenotch", "IslandCore"],
-            path: "Tests/LiquidNotchTests",
+            path: "Tests/LeNotchTests",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

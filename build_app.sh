@@ -22,7 +22,7 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 # Public release builds move themselves into Applications on first launch (ApplicationInstaller); your own don't.
 [[ -n "${LN_ADHOC:-}" ]] && /usr/libexec/PlistBuddy -c "Add :LNMovesToApplications bool true" "$APP/Contents/Info.plist"
 # Compiled at launch by LiquidRenderer (no Metal Toolchain needed to build).
-cp Sources/LiquidNotch/Render/LiquidShape.metal "$APP/Contents/Resources/"
+cp Sources/LeNotch/Render/LiquidShape.metal "$APP/Contents/Resources/"
 # The AirPods buds for the AirPods activity: the 3D model (AirPods 4 by Falah3D, CC BY 4.0) and the studio
 # light (Poly Haven, CC0) for BudsStage, and the 2D cutout that stands in until the model has loaded.
 cp Resources/airpods-4.usdz Resources/studio.hdr Resources/airpods-buds.png "$APP/Contents/Resources/"
