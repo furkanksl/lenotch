@@ -41,6 +41,8 @@ swift tools/dev.swift --once
 
 Press **Ctrl-C** to stop the watcher and any build it started. The last launched app stays open. Do not run a separate build or `swift test` while the watcher is running, since both use this checkout's `.build/` directory. Ad-hoc signing can require granting macOS permissions again after a rebuild; the existing `LN_SIGN_IDENTITY` build option can use a stable signing identity.
 
+For Setup-window work, use `swift tools/dev.swift --setup` to reopen Setup after each rebuild. Setup has separate Permissions, Appearance, Integrations, and Sports pages and follows your Mac’s light or dark appearance.
+
 ## Prompter
 
 Open the notch's tools and choose **Prompter**, or right-click the notch and choose **Prompter…**. Write or paste a script in the editor; scripts and display preferences save locally on your Mac.

@@ -45,6 +45,7 @@ final class DevRunner {
     private let stagedApp: URL
     private let backup: URL
     private let debugPanel: Bool
+    private let setupWindow: Bool
     private let once: Bool
     private var lockFD: Int32 = -1
     private var timer: DispatchSourceTimer?
@@ -62,9 +63,10 @@ final class DevRunner {
     private var killDeadline = Date.distantFuture
     private var sentKill = false
 
-    init(root: URL, debugPanel: Bool, once: Bool) throws {
+    init(root: URL, debugPanel: Bool, setupWindow: Bool, once: Bool) throws {
         self.root = root
         self.debugPanel = debugPanel
+        self.setupWindow = setupWindow
         self.once = once
         app = root.appendingPathComponent("dist/LeNotch.app")
         stagingDirectory = root.appendingPathComponent("dist/.dev-\(UUID().uuidString)")
@@ -265,9 +267,9 @@ final class DevRunner {
     private func launch(recovering: Bool) {
         phase = .launching
         let configuration = NSWorkspace.OpenConfiguration()
-        configuration.arguments = debugPanel ? ["--debug"] : []
+        configuration.arguments = (debugPanel ? ["--debug"] : []) + (setupWindow ? ["--setup"] : [])
         configuration.createsNewApplicationInstance = true
-        configuration.activates = debugPanel
+        configuration.activates = debugPanel || setupWindow
         NSWorkspace.shared.openApplication(at: app, configuration: configuration) { [weak self] running, error in
             DispatchQueue.main.async {
                 guard let self, self.stopSignal == nil else { return }
@@ -380,10 +382,11 @@ func spawn(_ executable: String, arguments: [String], environment: [String: Stri
 let arguments = Array(CommandLine.arguments.dropFirst())
 if arguments.contains("--help") || arguments.contains("-h") {
     print("""
-    Usage: swift tools/dev.swift [--debug] [--once]
+    Usage: swift tools/dev.swift [--debug] [--setup] [--once]
 
     Builds a debug LeNotch.app, then watches and rebuilds after saves.
     --debug  Open the existing debug panel on each launch.
+    --setup  Open Setup on each launch while working on settings.
     --once   Build and relaunch once without watching.
 
     No true SwiftUI hot reload: successful saves incrementally rebuild and restart
@@ -392,7 +395,7 @@ if arguments.contains("--help") || arguments.contains("-h") {
     """)
     exit(0)
 }
-if let invalid = arguments.first(where: { !["--debug", "--once"].contains($0) }) {
+if let invalid = arguments.first(where: { !["--debug", "--setup", "--once"].contains($0) }) {
     log("Unknown option: \(invalid). Use --help for usage.")
     exit(2)
 }
@@ -401,7 +404,8 @@ MainActor.assumeIsolated {
     do {
         let root = URL(fileURLWithPath: #filePath).resolvingSymlinksInPath()
             .deletingLastPathComponent().deletingLastPathComponent()
-        let runner = try DevRunner(root: root, debugPanel: arguments.contains("--debug"), once: arguments.contains("--once"))
+        let runner = try DevRunner(root: root, debugPanel: arguments.contains("--debug"),
+                                   setupWindow: arguments.contains("--setup"), once: arguments.contains("--once"))
         runner.start()
         withExtendedLifetime(runner) { RunLoop.main.run() }
     } catch {
