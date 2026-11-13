@@ -11,10 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let tuning = TuningStore()
 
     private let args = CommandLine.arguments
-    private var recordKey: HotKey?
     private var askKey: HotKey?
     private let agentSocket = AgentSocket()
-    private var wakeObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -36,12 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // No menu bar icon (owner, 11-06): the menu opens on a right-click on the island.
         surface?.contextMenu = { [unowned self] hit in makeMenu(hit) }
-        // Recording from the notch (11-06): ScreenCaptureKit, ⌃⌥⌘R anywhere (⌘⇧5 is macOS's own); a missing
-        // permission opens Setup at its row instead of prompting on first use.
         if let d = surface?.director {
-            d.recorder = ScreenRecorder()
             d.onNeedsSetup = { [unowned self] in setup.show() }
-            recordKey = HotKey(keyCode: kVK_ANSI_R, modifiers: controlKey | optionKey | cmdKey) { d.recordToggle() }
             // Quick ask (phase 3): ⌥Space (the key tap, `MediaKeyTap.onAskKey`), and ⌃⌥⌘A as a backup that needs no permission.
             askKey = HotKey(keyCode: kVK_ANSI_A, modifiers: controlKey | optionKey | cmdKey) { d.toggleAsk() }
             // Claude and Codex (phase 2): their hooks write here once Setup's "Watch Claude and Codex" adds them.
@@ -53,15 +47,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if HookInstaller.needsUpgrade() { try? HookInstaller.install() }
             agentSocket.start()
         }
-        // The one-time support card (11-11): each launch counts; it's looked for a few seconds after launch and after
-        // waking, and shows only when due and the island is idle. `-forceSupportPrompt` shows it regardless (testing).
-        Support.recordLaunch()
-        let forceSupport = args.contains("-forceSupportPrompt")
-        lookForSupportCard(after: 8, force: forceSupport)
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil,
-                                                                         queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.lookForSupportCard(after: 5, force: forceSupport) }
-        }
         if args.contains("--debug") { debugPanel?.toggle() }
         if (setup.needed && !args.contains("--no-setup")) || args.contains("--setup") { setup.show() }
         if args.contains("--spike") {
@@ -69,13 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .seconds(2))
                 Spikes.run()
             }
-        }
-    }
-
-    private func lookForSupportCard(after seconds: Double, force: Bool) {
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
-            self?.surface?.director.maybeShowSupportCard(force: force)
         }
     }
 
@@ -149,7 +127,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotchMenu.shared.add(to: menu)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Setup…", action: #selector(showSetup), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Support the original author", action: #selector(support), keyEquivalent: "").target = self
         // The debug panel (samples, chess, tuning) is for development: ⌥ held while the menu opens, or `--debug` (v1).
         if NSEvent.modifierFlags.contains(.option) || CommandLine.arguments.contains("--debug") {
             menu.addItem(withTitle: "Debug Panel", action: #selector(toggleDebug), keyEquivalent: "d").target = self
@@ -183,8 +160,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showPrompter() { surface?.director.editPrompter() }
 
     @objc private func uninstall() { Uninstaller.confirmAndRun() }
-
-    @objc private func support() { Support.open() }
 
     @objc private func setBars(_ sender: NSMenuItem) {
         if let raw = sender.representedObject as? String, let mode = AudioBars.Mode(rawValue: raw) { surface?.bars.mode = mode }

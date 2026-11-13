@@ -1,10 +1,8 @@
 /// The activities the island can show, with what the simulator says about each one
 /// (`ACT` in `sim/src/acts.js`).
 public enum ActivityID: String, CaseIterable, Sendable {
-    case incoming, call, airpods, focus, charging, battery, timer, recording, meeting, camera, download, messages
+    case incoming, call, airpods, focus, charging, battery, timer, meeting, camera, download, messages
     case prompter
-    /// Recording from the notch (11-06): the 3-2-1 before it starts, and the moment it's saved.
-    case recordCountdown, recordingSaved
     /// Chess (11-06, docs/superpowers/specs/2026-11-06-chess-design.md): the opponent moved while you were elsewhere.
     case chess
     /// A Claude or Codex usage limit, and its reset (11-06, sim `aglimit` / `agback`).
@@ -15,8 +13,6 @@ public enum ActivityID: String, CaseIterable, Sendable {
     /// Any app's notification (11-07, docs/superpowers/specs/2026-11-07-notifications-design.md): in the ears for a few
     /// seconds, its card opens on hover; the director holds which one (`IslandDirector.notice(for:)`).
     case notice
-    /// The one-time support card (11-11): a week and five launches in, once, ever.
-    case support
 
     /// Shows only in the ears: a press opens nothing.
     public var earsOnly: Bool { self == .lockScreen || self == .unlocked }
@@ -60,8 +56,8 @@ public struct ActivitySpec: Sendable {
     /// short ones like the iPhone's (owner, 11-01: the short cards were cramped where there's more than one row).
     public var padding: Double {
         switch id {
-        case .call, .focus, .recording, .meeting, .download, .messages, .incoming, .camera, .recordCountdown, .recordingSaved, .prompter,
-             .chess, .agentLimit, .agentBack, .notice, .support: 20
+        case .call, .focus, .meeting, .download, .messages, .incoming, .camera, .prompter,
+             .chess, .agentLimit, .agentBack, .notice: 20
         default: 14
         }
     }
@@ -84,20 +80,16 @@ public struct ActivitySpec: Sendable {
         case .battery: "Low battery"
         case .timer: "Timer"
         case .prompter: "Prompter"
-        case .recording: "Screen recording"
         case .meeting: "Next meeting"
         case .camera: "Camera"
         case .download: "Download"
         case .messages: "Messages"
-        case .recordCountdown: "Recording starts"
-        case .recordingSaved: "Recording saved"
         case .chess: "Chess"
         case .agentLimit: "Usage limit"
         case .agentBack: "Limit reset"
         case .lockScreen: "Locked"
         case .unlocked: "Unlocked"
         case .notice: "Notification"
-        case .support: "Support"
         }
     }
     /// Worth a ball when it isn't in the ears (11-06: downloads never are; they stay in the list and the menu).
@@ -133,9 +125,6 @@ public struct ActivitySpec: Sendable {
             ActivitySpec(id: .prompter, tier: .live, ear: 76,
                          card: CardSize(width: 500, height: 332, radius: 40), transient: nil, opens: true,
                          pulse: nil, colorHex: green),
-            ActivitySpec(id: .recording, tier: .live, ear: 64,
-                         card: CardSize(width: 372, height: 138, radius: 40), transient: nil, opens: false,
-                         pulse: nil, colorHex: red),
             ActivitySpec(id: .meeting, tier: .ongoing, ear: 80,
                          card: CardSize(width: 372, height: 126, radius: 40), transient: nil, opens: false,
                          pulse: nil, colorHex: "#0A84FF"),
@@ -148,13 +137,6 @@ public struct ActivitySpec: Sendable {
                          pulse: nil, colorHex: "#64D2FF"),
             ActivitySpec(id: .messages, tier: .transient, ear: 96,
                          card: CardSize(width: 372, height: 146, radius: 40), transient: 6, opens: false,
-                         pulse: nil, colorHex: green),
-            // Recording from the notch (11-06 design): the director ends the 3-2-1 itself and starts the recording.
-            ActivitySpec(id: .recordCountdown, tier: .transient, ear: 112,
-                         card: CardSize(width: 372, height: 84, radius: 42), transient: nil, opens: false,
-                         pulse: nil, colorHex: red),
-            ActivitySpec(id: .recordingSaved, tier: .transient, ear: 112,
-                         card: CardSize(width: 372, height: 84, radius: 42), transient: 5, opens: false,
                          pulse: nil, colorHex: green),
             // Chess: live while your clock runs (as time-critical as a call).
             ActivitySpec(id: .chess, tier: .live, ear: 100,
@@ -173,10 +155,6 @@ public struct ActivitySpec: Sendable {
             ActivitySpec(id: .notice, tier: .transient, ear: 96,
                          card: CardSize(width: 372, height: 146, radius: 40), transient: 6, opens: true,
                          pulse: nil, colorHex: "#0A84FF"),
-            // Opens by itself; the director closes it after 15 s unless the pointer rests on it (`showSupportCard`).
-            ActivitySpec(id: .support, tier: .transient, ear: 96,
-                         card: CardSize(width: 372, height: 139, radius: 40), transient: 15, opens: true,
-                         pulse: nil, colorHex: "#FFFFFF"),
             ActivitySpec(id: .agentBack, tier: .transient, ear: 112,
                          card: CardSize(width: 372, height: 84, radius: 42), transient: 4, opens: false,
                          pulse: nil, colorHex: green),

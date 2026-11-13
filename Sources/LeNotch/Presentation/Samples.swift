@@ -34,8 +34,6 @@ struct SampleState: Sendable {
     var timerLeft = 60.0
     var timerPaused = false
     var timerDone = false
-    var recordSeconds = 0.0
-    var recordPaused = false
     var meetingLeft = 300.0
     var download = 0.04
     var downloadSpeed = 42.0
@@ -56,7 +54,6 @@ struct SampleState: Sendable {
         case .call: callSeconds = 0; muted = false; speaker = false
         case .timer: timerLeft = timerTotal; timerPaused = false; timerDone = false
         case .camera: cameraSeconds = 0
-        case .recording: recordSeconds = 0; recordPaused = false
         case .meeting: meetingLeft = 300
         case .download: download = 0.04; downloadPaused = false; downloadDone = false
         default: break
@@ -69,7 +66,6 @@ struct SampleState: Sendable {
         case .call: callSeconds += dt
         case .camera: cameraSeconds += dt
         case .timer: if !timerPaused { timerLeft = max(0, timerLeft - dt) }
-        case .recording: if !recordPaused { recordSeconds += dt }
         case .meeting: meetingLeft = max(0, meetingLeft - dt)
         case .download:
             // MB/s, a little jittery; 6× real time so it finishes in a demo.
@@ -83,7 +79,7 @@ struct SampleState: Sendable {
     /// Activities whose content changes with time (they need the ticker).
     static func ticks(_ id: ActivityID) -> Bool {
         switch id {
-        case .call, .timer, .recording, .meeting, .download, .camera, .recordCountdown, .chess: true
+        case .call, .timer, .meeting, .download, .camera, .chess: true
         default: false
         }
     }

@@ -21,9 +21,9 @@ enum SetupPage: String, CaseIterable, Identifiable {
     }
     var subtitle: String {
         switch self {
-        case .permissions: "Every permission is optional. Allow only what you want to use."
-        case .appearance: "A little personality, only where you want it."
-        case .integrations: "Bring the things you use into the notch."
+        case .permissions: "Give LeNotch access to the features you use. Everything here is optional."
+        case .appearance: "Choose how album artwork and colors appear on your Mac."
+        case .integrations: "Notifications and coding agents, connected to your notch."
         }
     }
 }
@@ -31,8 +31,8 @@ enum SetupPage: String, CaseIterable, Identifiable {
 /// A normal, resizable native window. Setup follows the Mac's appearance instead of the dark-only notch surface.
 @MainActor
 final class SetupWindowController {
-    static let initialContentSize = NSSize(width: 960, height: 714)
-    static let minimumContentSize = NSSize(width: 800, height: 590)
+    static let initialContentSize = NSSize(width: 900, height: 740)
+    static let minimumContentSize = NSSize(width: 760, height: 600)
     private static let doneKey = "setup.v3.done"
     private var window: NSWindow?
 
@@ -44,6 +44,7 @@ final class SetupWindowController {
                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
                              backing: .buffered, defer: false)
             w.title = "LeNotch — Setup"
+            w.titleVisibility = .hidden
             w.titlebarAppearsTransparent = true
             w.toolbarStyle = .unifiedCompact
             w.backgroundColor = .windowBackgroundColor
@@ -77,106 +78,96 @@ struct SetupView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            SetupTheme.line.frame(width: 1)
-            VStack(spacing: 0) {
-                ScrollViewReader { scroll in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(page.title).font(.system(size: 22, weight: .semibold))
-                                    .tracking(-0.5).accessibilityAddTraits(.isHeader)
-                                Text(page.subtitle).font(.system(size: 12)).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id("page-top")
-                            Group {
-                                switch page {
-                                case .permissions: SetupPermissionsPage()
-                                case .appearance: SetupAppearancePage()
-                                case .integrations:
-                                    SetupIntegrationsPage {
-                                        reviewAccess = true
-                                        page = .permissions
-                                    }
+        VStack(spacing: 0) {
+            navigation
+            ScrollViewReader { scroll in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(page.title).font(.system(size: 25, weight: .semibold))
+                                .tracking(-0.65).accessibilityAddTraits(.isHeader)
+                            Text(page.subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .id("page-top")
+                        Group {
+                            switch page {
+                            case .permissions: SetupPermissionsPage()
+                            case .appearance: SetupAppearancePage()
+                            case .integrations:
+                                SetupIntegrationsPage {
+                                    reviewAccess = true
+                                    page = .permissions
                                 }
                             }
                         }
-                        .padding(.horizontal, 30).padding(.top, 24).padding(.bottom, 18)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
-                    .onChange(of: page) {
-                        scroll.scrollTo("page-top", anchor: .top)
-                    }
-                    .task(id: page) {
-                        // The destination is inserted with its page; wait for that layout before scrolling to it.
-                        guard reviewAccess, page == .permissions else { return }
-                        await Task.yield()
-                        guard !Task.isCancelled else { return }
-                        scroll.scrollTo("full-disk-access", anchor: .bottom)
-                        reviewAccess = false
-                    }
+                    .frame(maxWidth: 760, alignment: .topLeading)
+                    .padding(.horizontal, 32).padding(.top, 28).padding(.bottom, 32)
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
-                footer
+                .onChange(of: page) { scroll.scrollTo("page-top", anchor: .top) }
+                .task(id: page) {
+                    // The destination is inserted with its page; wait for that layout before scrolling to it.
+                    guard reviewAccess, page == .permissions else { return }
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    scroll.scrollTo("full-disk-access", anchor: .bottom)
+                    reviewAccess = false
+                }
             }
-            .background(SetupTheme.pane)
+            footer
         }
+        .background(SetupTheme.canvas)
         .frame(minWidth: SetupWindowController.minimumContentSize.width,
                minHeight: SetupWindowController.minimumContentSize.height)
         .tint(.accentColor)
     }
 
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
+    private var navigation: some View {
+        HStack(spacing: 20) {
             HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("LeNotch").font(.system(size: 15, weight: .semibold)).tracking(-0.3)
-                    Text("Your notch, your way.").font(.system(size: 10)).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("LeNotch").font(.system(size: 14, weight: .semibold)).tracking(-0.25)
+                    Text("Setup").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 4).padding(.top, 25).padding(.bottom, 29)
-            VStack(spacing: 4) {
-                ForEach(SetupPage.allCases) { item in
+            Spacer(minLength: 16)
+            HStack(spacing: 3) {
+                ForEach(Array(SetupPage.allCases.enumerated()), id: \.element) { index, item in
                     SetupNavigationButton(page: item, selected: page == item) {
                         reviewAccess = false
                         page = item
                     }
+                    .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
                 }
             }
+            .padding(4)
+            .background(SetupTheme.badge, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Setup categories")
-            Spacer(minLength: 30)
-            VStack(alignment: .leading, spacing: 12) {
-                Text("A little more from\nthe space you already have.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(3)
-                Text("macOS setup").font(.system(size: 10)).foregroundStyle(.secondary).padding(.top, 4)
-            }
-            .padding(.horizontal, 10).padding(.bottom, 22)
         }
-        .padding(.horizontal, 12)
-        .frame(width: 192)
-        .background(SetupTheme.sidebar)
+        .padding(.horizontal, 32)
+        .frame(height: 72)
+        .overlay(alignment: .bottom) { SetupTheme.line.frame(height: 1).padding(.horizontal, 32) }
     }
 
     private var footer: some View {
         HStack(spacing: 14) {
-            SetupInlineNote(symbol: page == .permissions ? "arrow.triangle.2.circlepath" : "info.circle",
+            SetupInlineNote(symbol: page == .permissions ? "arrow.clockwise" : "checkmark",
                             text: page == .permissions
-                                ? "Access is rechecked when you return from System Settings."
-                                : "All features are optional. Preferences save automatically.")
+                                ? "Access updates when you return from System Settings."
+                                : "Preferences save automatically on this Mac.")
             Spacer(minLength: 10)
             Button("Done", action: done)
-                .buttonStyle(.borderedProminent).controlSize(.regular)
-                .frame(minWidth: 72)
+                .buttonStyle(SetupActionStyle(primary: true))
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("setup-done")
         }
-        .padding(.horizontal, 30)
-        .frame(height: 62)
-        .background(SetupTheme.sidebar)
-        .overlay(alignment: .top) { SetupTheme.line.frame(height: 1) }
+        .padding(.horizontal, 32)
+        .frame(height: 64)
+        .overlay(alignment: .top) { SetupTheme.line.frame(height: 1).padding(.horizontal, 32) }
     }
 }
 
@@ -188,17 +179,17 @@ private struct SetupNavigationButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: page.symbol).font(.system(size: 14))
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                    .frame(width: 18)
+            HStack(spacing: 7) {
+                Image(systemName: page.symbol).font(.system(size: 12))
+                    .frame(width: 15)
                 Text(page.title).font(.system(size: 12, weight: selected ? .semibold : .regular))
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10).frame(height: 36)
-            .contentShape(RoundedRectangle(cornerRadius: 7))
-            .background(Color.primary.opacity(selected ? 0.09 : hovered ? 0.045 : 0),
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .foregroundStyle(selected ? .primary : .secondary)
+            .padding(.horizontal, 13).frame(height: 32)
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .background(selected ? SetupTheme.surface : Color.primary.opacity(hovered ? 0.035 : 0),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? SetupTheme.line : .clear))
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }

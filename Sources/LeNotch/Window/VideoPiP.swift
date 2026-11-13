@@ -18,7 +18,7 @@ final class VideoPiP {
         panel = p
         let host = NSHostingView(rootView: PiPContent(layer: layer, close: { [weak self] in self?.onClose?() },
                                                       back: { [weak self] in self?.onBackToIsland?() }))
-        host.frame = p.contentView?.bounds ?? .zero
+        host.frame = NSRect(origin: .zero, size: p.contentLayoutRect.size)
         host.autoresizingMask = [.width, .height]
         p.contentView = host
         p.contentAspectRatio = NSSize(width: aspect, height: 1)
@@ -30,7 +30,10 @@ final class VideoPiP {
         p.orderFrontRegardless()
     }
 
-    func hide() { panel?.orderOut(nil) }
+    func hide() {
+        panel?.orderOut(nil)
+        panel?.contentView = nil
+    }
 
     private func makePanel() -> NSPanel {
         let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 448, height: 252),
@@ -58,7 +61,7 @@ private struct PiPContent: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            PiPLayerView(layer: layer)
+            VideoLayerHost(layer: layer)
             HStack(spacing: 8) {
                 button("xmark", "Close", close)
                 Spacer()
@@ -81,20 +84,4 @@ private struct PiPContent: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
-}
-
-/// The mirror's layer, moved into the window (a layer has one parent: the island's view lets go of it first).
-private struct PiPLayerView: NSViewRepresentable {
-    let layer: CALayer
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        v.wantsLayer = true
-        v.layer = CALayer()
-        layer.removeFromSuperlayer()
-        v.layer?.addSublayer(layer)
-        layer.frame = v.bounds
-        layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        return v
-    }
-    func updateNSView(_ v: NSView, context: Context) { layer.frame = v.bounds }
 }

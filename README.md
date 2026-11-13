@@ -43,6 +43,10 @@ Press **Ctrl-C** to stop the watcher and any build it started. The last launched
 
 For Setup-window work, use `swift tools/dev.swift --setup` to reopen Setup after each rebuild. Setup has separate Permissions, Appearance, and Integrations pages and follows your Mac’s light or dark appearance.
 
+## Video in the notch
+
+To watch a video in the notch, allow **Screen Recording** in Setup → Permissions → Music & media. This is macOS’s name for screen-capture access: LeNotch mirrors the video window without recording or saving a video file. The screen-recorder tool and its shortcut are not included.
+
 ## Prompter
 
 Open the notch's tools and choose **Prompter**, or right-click the notch and choose **Prompter…**. Write or paste a script in the editor; scripts and display preferences save locally on your Mac.

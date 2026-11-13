@@ -216,8 +216,8 @@ final class AgentChatTests: XCTestCase {
         d.pointerMoved(hit: nil, corridor: false, buttonDown: false)
         s.advance(2)
 
-        // In its ball (a recording holds the ears): the same, and a press grows it into the chat.
-        d.show(.recording, opened: false)
+        // In its ball (a prompter holds the ears): the same, and a press grows it into the chat.
+        d.show(.prompter, opened: false)
         d.agentHook(line("claude", "PermissionRequest", "c1", Agents.app(.claude), ask), reply: { answers.append($0) })
         XCTAssertEqual(d.island.arrangement.ears, .activity)
         guard let place = d.island.balls(d.mode).firstIndex(of: .agents(.claude)) else { return XCTFail("no ball") }

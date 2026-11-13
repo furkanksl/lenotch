@@ -234,28 +234,23 @@ enum SnapshotRunner {
                     d.startMusic(); d.show(.call, opened: false); d.pointerDown(at: .zero, hit: .bubble(0))
                 },
                 Scenario(name: "media + timer · AirPods borrow the ears") { d in d.startMusic(); d.show(.timer); d.show(.airpods) },
-                // Many things at once (11-06): two balls and the +N ball; its list; a call while recording.
-                Scenario(name: "many · call, recording, song, timer, camera") { d in
-                    d.startMusic(); d.show(.recording); d.show(.call, opened: false); d.show(.timer); d.show(.camera)
+                // Many things at once (11-06): two balls and the +N ball, and its list.
+                Scenario(name: "many · call, song, timer, camera") { d in
+                    d.startMusic(); d.show(.call, opened: false); d.show(.timer); d.show(.camera)
                 },
                 Scenario(name: "many · the +N list") { d in
-                    d.startMusic(); d.show(.recording); d.show(.call, opened: false); d.show(.timer); d.show(.camera)
+                    d.startMusic(); d.show(.call, opened: false); d.show(.timer); d.show(.camera)
                     d.show(.download); d.hide(.media)
                     d.pointerDown(at: .zero, hit: .bubble(2))
                 },
                 Scenario(name: "rest · the empty notch") { _ in },
                 Scenario(name: "rest · hovered, a press opens the tray") { d in d.pointerMoved(hit: .ears, corridor: false, buttonDown: false) },
-                Scenario(name: "record · 3-2-1") { d in d.recordToggle() },
-                Scenario(name: "record · saved") { d in
-                    d.show(.recording, opened: false); d.perform(.stopRecording)
-                },
-                Scenario(name: "record · tray with Record") { d in d.openTray() },
+                Scenario(name: "tray · tools") { d in d.openTray() },
                 Scenario(name: "many · paused song and a download get no ball") { d in
                     d.startMusic(); d.togglePlaying(); d.show(.call, opened: false); d.show(.download)
                 },
                 // Notifications (banners only, 11-11): it arrives as its card, then waits in the ears; the shapes macOS
                 // sends (a title alone, a body alone, time-sensitive).
-                Scenario(name: "support · its one card") { d in d.show(.support, opened: true, sample: false) },
                 Scenario(name: "notices · Mail arrives as its card") { d in d.notifySample() },
                 Scenario(name: "notices · then in the ears") { d in d.notifySample(); d.clickOutside() },
                 Scenario(name: "notices · time sensitive") { d in d.notifySample(); d.clickOutside(); d.notifySample() },
@@ -301,13 +296,13 @@ enum SnapshotRunner {
                     d.pointerMoved(hit: .ears, corridor: false, buttonDown: false)
                 },
                 Scenario(name: "agents · hovering its ball while it asks a question") { d in
-                    d.show(.recording, opened: false); agent(d, "UserPromptSubmit"); agent(d, "PreToolUse", tool: "AskUserQuestion")
+                    d.show(.call, opened: false); agent(d, "UserPromptSubmit"); agent(d, "PreToolUse", tool: "AskUserQuestion")
                     let place = d.island.balls(d.mode).firstIndex(of: .agents(.claude)) ?? 0
                     d.pointerMoved(hit: .bubble(place), corridor: false, buttonDown: false)
                 },
                 // A song's ball peeks like the notch's hover, with the transport (owner, 11-06).
                 Scenario(name: "agents · a song's ball peek, with its controls") { d in
-                    d.startMusic(); d.show(.recording, opened: false)
+                    d.startMusic(); d.show(.call, opened: false)
                     let place = d.island.balls(d.mode).firstIndex(of: .media) ?? 0
                     d.pointerMoved(hit: .bubble(place), corridor: false, buttonDown: false)
                 },
@@ -330,7 +325,7 @@ enum SnapshotRunner {
                 },
                 Scenario(name: "chess · your move beside the song") { d in d.startMusic(); d.show(.chess, opened: false) },
                 Scenario(name: "ask · the card on the empty notch") { d in askStub(d); d.openAsk() },
-                Scenario(name: "ask · ChatGPT, screen off") { d in askStub(d); d.openAsk(.codex); d.toggleAskShot() },
+                Scenario(name: "ask · ChatGPT") { d in askStub(d); d.openAsk(.codex) },
                 Scenario(name: "ask · many conversations: the chips scroll") { d in
                     askStub(d)
                     for q in ["Which opening is this?", "What does the error say?", "Summarise this page", "Translate the title", "Is this safe to run?"] {
@@ -633,9 +628,7 @@ extension ShapeTargets {
 
 /// Quick ask in stills: no processes, no screen capture.
 @MainActor private func askStub(_ d: IslandDirector) {
-    d.askSend = { _, _, _, _ in }
-    d.screenAllowed = { true }
-    d.captureScreen = { nil }
+    d.askSend = { _, _, _ in }
 }
 
 /// A hook call as the socket would hand it over, for the agents' stills (an approval is held, unanswered).

@@ -1,6 +1,5 @@
 import AppKit
 import IslandCore
-@preconcurrency import ScreenCaptureKit
 import SwiftUI
 import XCTest
 @testable import Lenotch
@@ -20,7 +19,7 @@ final class PolishTests: XCTestCase {
     func testBAL2TheMoreListFitsItsCard() {
         let d = IslandDirector()
         d.schedule = ManualScheduler().schedule
-        d.startMusic(); d.show(.recording); d.show(.call, opened: false); d.show(.timer); d.show(.camera)
+        d.startMusic(); d.show(.prompter, opened: false); d.show(.call, opened: false); d.show(.timer); d.show(.camera)
         d.show(.download); d.hide(.media)
         XCTAssertFalse(d.island.arrangement.hidden.isEmpty)
         let card = d.island.moreCard
@@ -71,17 +70,6 @@ final class PolishTests: XCTestCase {
         }
         XCTAssertEqual(near.resting(.card).mainHalfWidth, base.resting(.card).mainHalfWidth)
         XCTAssertEqual(near.resting(.peek).mainHalfWidth, base.resting(.peek).mainHalfWidth)
-    }
-
-    // REC2: recording captures in the encoder's own format with a short queue, at full size and 60 fps.
-    func testREC2RecordingCapturesLight() {
-        let c = ScreenRecorder.configuration(width: 3420, height: 2224)
-        XCTAssertEqual(c.pixelFormat, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
-        XCTAssertEqual(c.queueDepth, 4)
-        XCTAssertEqual(c.width, 3420)
-        XCTAssertEqual(c.height, 2224)
-        XCTAssertEqual(c.minimumFrameInterval, CMTime(value: 1, timescale: 60))
-        XCTAssertFalse(c.capturesAudio)
     }
 
     // MOM1: the moments pass through the sim's keyframe stops (`zap`, `boltFlash`): hidden while the content's reveal

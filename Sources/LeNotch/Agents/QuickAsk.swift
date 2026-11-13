@@ -1,8 +1,6 @@
-import AppKit
 import Foundation
 import IslandCore
 import os
-@preconcurrency import ScreenCaptureKit
 
 /// Quick ask (agents phase 3, docs/superpowers/specs/2026-11-06-quick-ask-native-design.md): questions the notch asks on
 /// the owner's own plans (no API keys). Claude: one long-lived `claude -p` per session over stream-json, stopped after 15
@@ -24,8 +22,7 @@ final class QuickAsk {
     }
 
     nonisolated static let systemPrompt = """
-        You answer quick questions asked from the Mac's notch (LeNotch). When a screenshot of the screen comes with \
-        the question, it was taken the moment the question was asked: use it. Be brief and direct: one to four short \
+        You answer quick text questions asked from the Mac's notch (LeNotch). Be brief and direct: one to four short \
         sentences unless more is asked for, plain text, light Markdown at most. No preamble.
         """
 
@@ -40,19 +37,19 @@ final class QuickAsk {
     private var claude: [String: ClaudeProcess] = [:]
     private var codex: [String: CodexRun] = [:]
 
-    /// Asks `text` in session `id` (a new one, or a follow-up), with the screen's frame when given.
-    func ask(_ id: String, provider: AgentProvider, text: String, image: Data?) {
+    /// Asks `text` in session `id` (a new one, or a follow-up).
+    func ask(_ id: String, provider: AgentProvider, text: String) {
         try? FileManager.default.createDirectory(at: Self.workspace, withIntermediateDirectories: true)
         let emit: (Event) -> Void = { [weak self] e in self?.onEvent?(id, e) }
         switch provider {
         case .claude, .ask:
             let p = claude[id] ?? ClaudeProcess(emit: emit)
             claude[id] = p
-            p.ask(text, image: image)
+            p.ask(text)
         case .codex:
             let c = codex[id] ?? CodexRun(emit: emit)
             codex[id] = c
-            c.ask(text, image: image)
+            c.ask(text)
         }
     }
 
@@ -85,17 +82,13 @@ private final class ClaudeProcess {
 
     init(emit: @escaping (QuickAsk.Event) -> Void) { self.emit = emit }
 
-    func ask(_ text: String, image: Data?) {
+    func ask(_ text: String) {
         if proc?.isRunning != true { start() }
         guard proc?.isRunning == true else { return }
         idle?.invalidate()
         outstanding += 1
         sawText = false
-        var content: [[String: Any]] = []
-        if let image {
-            content.append(["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": image.base64EncodedString()]])
-        }
-        content.append(["type": "text", "text": text])
+        let content: [[String: Any]] = [["type": "text", "text": text]]
         write(["type": "user", "message": ["role": "user", "content": content]])
     }
 
@@ -240,7 +233,7 @@ private final class CodexRun {
 
     init(emit: @escaping (QuickAsk.Event) -> Void) { self.emit = emit }
 
-    func ask(_ text: String, image: Data?) {
+    func ask(_ text: String) {
         guard let exe = AgentReply.codex else {
             emit(.done(error: "Can't find Codex on this Mac (it comes with the ChatGPT app)."))
             return
@@ -252,11 +245,6 @@ private final class CodexRun {
         var args = ["exec"]
         if let thread { args += ["resume", thread] }
         args += ["--json", "--skip-git-repo-check", "-s", "read-only"]
-        if let image {
-            let url = QuickAsk.workspace.appendingPathComponent("screen-\(gen).jpg")
-            try? image.write(to: url, options: .atomic)
-            args += ["-i", url.path]
-        }
         args.append("-")   // the prompt on stdin
         let p = Process()
         p.executableURL = URL(fileURLWithPath: exe)
@@ -352,33 +340,5 @@ enum QuickAskParsing {
         var sent = false, thread: String?
         let events = lines.flatMap { CodexRun.parse(Data($0.utf8), sent: &sent, thread: &thread) }
         return (events, thread)
-    }
-}
-
-// MARK: - The screen, one frame
-
-/// The screen at the moment the ask card opened: one frame of the main display, LeNotch's own windows left out,
-/// 1600 px wide at most, as JPEG for the question. Never continuous, and never shown (owner, 11-07).
-struct ScreenFrame: Sendable {
-    let jpeg: Data
-
-    static var allowed: Bool { CGPreflightScreenCaptureAccess() }
-
-    static func capture() async -> ScreenFrame? {
-        guard allowed,
-              let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
-              let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) ?? content.displays.first
-        else { return nil }
-        let ours = content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
-        let filter = SCContentFilter(display: display, excludingApplications: ours, exceptingWindows: [])
-        let config = SCStreamConfiguration()
-        let scale = min(1600 / Double(display.width), 1) * Double(filter.pointPixelScale)
-        config.width = Int(Double(display.width) * scale)
-        config.height = Int(Double(display.height) * scale)
-        config.showsCursor = false
-        guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) else { return nil }
-        let rep = NSBitmapImageRep(cgImage: image)
-        guard let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { return nil }
-        return ScreenFrame(jpeg: jpeg)
     }
 }

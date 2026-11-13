@@ -5,7 +5,6 @@ import Observation
 import OSLog
 import QuartzCore
 
-private let directorLog = Logger(subsystem: "com.lenotch.app", category: "director")
 /// Lyrics timing (instrumentation, 11-07): every player report, every line change, every check of the clock.
 let lyricsLog = Logger(subsystem: "com.lenotch.app", category: "lyrics")
 /// Every press on the island and what it did (owner, 11-07: "sometimes your click does nothing or does the wrong thing").
@@ -126,6 +125,8 @@ final class IslandDirector {
     @ObservationIgnored var date: () -> Date = { Date() }
     /// Typed just now (read when something would open by itself).
     @ObservationIgnored var typingNow: (() -> Bool)?
+    /// Opens Setup when a feature needs access that has not been granted.
+    @ObservationIgnored var onNeedsSetup: (() -> Void)?
 
     /// A transient's end, per showing (one can wait in a ball while an alert holds the ears).
     @ObservationIgnored private var transientEnds: [Int: Scheduled] = [:]
@@ -659,6 +660,13 @@ final class IslandDirector {
         loadLyrics()
     }
 
+    func retryVideo() {
+        let np = secondInFocus ? nowPlaying2 : nowPlaying
+        guard let np, let app = np.bundleID, focusedIsVideo else { return }
+        videoMirror.start(app: app, title: np.title)
+        if videoMirror.state == .needsPermission { onNeedsSetup?() }
+    }
+
     /// Looks the song's lyrics up once per song while the focused view shows.
     private func loadLyrics() {
         let m = media, key = LyricsSource.key(title: m.title, artist: m.artist)
@@ -818,96 +826,6 @@ final class IslandDirector {
         transientEnds[serial]?.cancel(); transientEnds[serial] = nil
         if island.activity?.serial == serial { leaving?.cancel(); leaving = nil }
         send(.end(serial: serial))
-    }
-
-    // MARK: - Recording from the notch (11-06, docs/superpowers/specs/2026-11-06-screen-recording-design.md)
-
-    /// What records the screen (ScreenCaptureKit in the app, a fake in tests; nil: the debug panel's sample only).
-    @ObservationIgnored var recorder: ScreenRecording?
-    /// Recording needs a permission that isn't there: Setup opens at that row (never a prompt on first use).
-    @ObservationIgnored var onNeedsSetup: (() -> Void)?
-    @ObservationIgnored private var countdownEnd: Scheduled?
-    @ObservationIgnored private var countdownStart = 0.0
-    @ObservationIgnored private var recordingURL: URL?
-    /// The last recording saved: for its Saved moment.
-    private(set) var lastRecording: (url: URL?, name: String, seconds: Double) = (nil, "Screen Recording.mov", 0)
-
-    /// The 3-2-1's number.
-    var recordCountdown: Int { max(1, Int((3 - (now - countdownStart)).rounded(.up))) }
-
-    /// The tray's Record tool: nil, counting down, or recording for this long.
-    var recordState: (counting: Bool, seconds: Double)? {
-        if island.running.contains(where: { $0.id == .recordCountdown }) { return (true, 0) }
-        if island.running.contains(where: { $0.id == .recording && !isSample($0) }) { return (false, samples.recordSeconds) }
-        return nil
-    }
-
-    /// The tool and the shortcut: start (after a 3-2-1), cancel the 3-2-1, or stop and save.
-    func recordToggle() {
-        if let c = island.running.first(where: { $0.id == .recordCountdown }) {
-            countdownEnd?.cancel(); countdownEnd = nil
-            end(serial: c.serial)
-            return
-        }
-        if let r = island.running.first(where: { $0.id == .recording && !isSample($0) }) { stopRecording(r); return }
-        if let recorder, !recorder.canRecord { onNeedsSetup?(); return }
-        if island.opened { send(.close) }
-        countdownStart = clock()
-        show(.recordCountdown, opened: false, sample: false)
-        countdownEnd = schedule(3) { [weak self] in
-            guard let self, let c = island.running.first(where: { $0.id == .recordCountdown }) else { return }
-            countdownEnd = nil
-            end(serial: c.serial)
-            startRecording()
-        }
-    }
-
-    private func startRecording() {
-        let url = Self.recordingURL(at: date())
-        recordingURL = url
-        show(.recording, opened: false, sample: recorder == nil)
-        guard let recorder else { return }
-        Task { [weak self] in
-            do { try await recorder.start(to: url) } catch {
-                directorLog.error("recording didn't start: \(String(describing: error), privacy: .public)")
-                guard let self, let r = island.running.first(where: { $0.id == .recording }) else { return }
-                end(serial: r.serial)
-            }
-        }
-    }
-
-    /// Stop: the file is finished on the Desktop, lands on the Shelf, and the Saved moment shows. The sample only
-    /// pretends.
-    func stopRecording(_ a: ActivityInstance) {
-        let seconds = samples.recordSeconds
-        let name = (recordingURL ?? Self.recordingURL(at: date())).lastPathComponent
-        end(serial: a.serial)
-        guard let recorder, !isSample(a) else {
-            lastRecording = (nil, name, seconds)
-            show(.recordingSaved, opened: false)
-            return
-        }
-        Task { [weak self] in
-            do {
-                let url = try await recorder.stop()
-                guard let self else { return }
-                tray.addFiles([url])
-                lastRecording = (url, url.lastPathComponent, seconds)
-                show(.recordingSaved, opened: false, sample: false)
-            } catch {
-                directorLog.error("recording didn't save: \(String(describing: error), privacy: .public)")
-            }
-        }
-    }
-
-    /// `~/Desktop/Screen Recording 2026-11-06 at 17.42.31.mov`, like macOS's own.
-    static func recordingURL(at date: Date) -> URL {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop")
-        return desktop.appendingPathComponent("Screen Recording \(f.string(from: date)).mov")
     }
 
     /// One right-click model (11-06): the island's part of the menu, for what's under the pointer. The app's own
@@ -1167,7 +1085,7 @@ final class IslandDirector {
         switch replyRoute(s) {
         case .codexQueue: "Reply · sent to Codex"
         case .paste(let app): "Reply · opens \(Self.appName(app)) to paste"
-        case .ask: askShotOn && askShotAllowed ? "Ask anything · it sees your screen" : "Ask a follow-up"
+        case .ask: "Ask a follow-up"
         }
     }
 
@@ -1271,14 +1189,9 @@ final class IslandDirector {
             if let a = target, !isSample(a), let url = meeting?.joinURL { NSWorkspace.shared.open(url) }
             endTarget()
         case .decline, .endCall, .cancelTimer, .markRead: endTarget()
-        case .stopRecording: if let t = target { stopRecording(t) }
-        case .revealRecording:
-            if let url = lastRecording.url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-            endTarget()
         case .mute: samples.muted.toggle(); kick(25)
         case .speaker: samples.speaker.toggle(); kick(25)
         case .pauseTimer: samples.timerPaused.toggle(); kick(25)
-        case .pauseRecording: samples.recordPaused.toggle(); kick(25)
         case .pauseDownload:
             if let a = target, !isSample(a) { transferControl?(.pauseDownload) } else { samples.downloadPaused.toggle() }
             kick(25)
@@ -1381,46 +1294,6 @@ final class IslandDirector {
     func podsConnected(_ p: PodsInfo) {
         pods = p
         show(.airpods, sample: false)
-    }
-
-    // MARK: The support card (11-11)
-
-    @ObservationIgnored private var supportRetry: Scheduled?
-    @ObservationIgnored private var supportClose: Scheduled?
-
-    /// The one-time support card, once it's due (`Support.isDue`; `-forceSupportPrompt` skips the wait and the flag),
-    /// only at an idle moment: nothing open, no activity or HUD, the tray and Ask closed, not locked, in fullscreen, in
-    /// a menu or presenting. Busy: it tries again in 20 s. Marked shown as it shows, whatever happens to it.
-    func maybeShowSupportCard(force: Bool = false) {
-        supportRetry?.cancel(); supportRetry = nil
-        guard force || Support.isDue(), !island.running.contains(where: { $0.id == .support }) else { return }
-        let c = island.context
-        let busy = island.opened || island.activity != nil || island.hud != nil || island.trayOpen || island.askOpen != nil
-            || c.locked || c.lockScreen || c.fullscreen || c.menuOpen || c.presenting
-        guard !busy else {
-            supportRetry = schedule(20) { [weak self] in self?.maybeShowSupportCard(force: force) }
-            return
-        }
-        if !force { UserDefaults.standard.set(true, forKey: Support.shownKey) }
-        show(.support, opened: true, sample: false)
-        closeSupportCard(after: 15)
-    }
-
-    /// It leaves after 15 s, unless the pointer rests on its open card (then it looks again every 3 s).
-    private func closeSupportCard(after seconds: Double) {
-        supportClose?.cancel()
-        supportClose = schedule(seconds) { [weak self] in
-            guard let self, let a = island.running.first(where: { $0.id == .support }) else { return }
-            if island.opened && island.hovered { closeSupportCard(after: 3); return }
-            end(serial: a.serial)
-        }
-    }
-
-    /// Its buttons: Buy me a coffee opens the link; either closes it.
-    func supportCard(coffee: Bool) {
-        if coffee { Support.open() }
-        supportClose?.cancel(); supportClose = nil
-        if let a = island.running.first(where: { $0.id == .support }) { end(serial: a.serial) }
     }
 
     func podsUpdated(_ p: PodsInfo) { pods = p }
@@ -1714,19 +1587,12 @@ final class IslandDirector {
     /// Who answers a new conversation (the ask card's switch). The conversation itself is `AgentProvider.ask`: its own
     /// ball, apart from the sessions the notch watches (owner, 11-07).
     private(set) var askProvider: AgentProvider = .claude
-    /// The screen goes with each message (owner, 11-07: "he can continuously check your screen"): a fresh frame is taken
-    /// when you send, never shown, never kept.
-    private(set) var askShotOn = true
-    /// Screen Recording is allowed (else the chip is off and says so; nothing prompts).
-    private(set) var askShotAllowed = false
     /// The field asked for the keyboard (the panel becomes key without activating the app).
     @ObservationIgnored var onWantsKey: (() -> Void)?
     /// Bumps when the Ask chat's field should take the keyboard (opening it from its ball, the shortcut).
     private(set) var askFocusTick = 0
-    @ObservationIgnored var captureScreen: () async -> ScreenFrame? = { await ScreenFrame.capture() }
     /// Sends a question to its session's process (tests record it instead of starting claude or codex).
-    @ObservationIgnored var askSend: ((String, AgentProvider, String, Data?) -> Void)?
-    @ObservationIgnored var screenAllowed: () -> Bool = { ScreenFrame.allowed }
+    @ObservationIgnored var askSend: ((String, AgentProvider, String) -> Void)?
     /// The notch's own sessions, and who answers each (they leave like any other idle session: `syncIdleSessions`).
     @ObservationIgnored private(set) var askSessions: Set<String> = []
     @ObservationIgnored private(set) var askBackend: [String: AgentProvider] = [:]
@@ -1759,7 +1625,6 @@ final class IslandDirector {
     /// `new`), the ask card starts one.
     func openAsk(_ backend: AgentProvider? = nil, new: Bool = false) {
         if let backend, backend != .ask { askProvider = backend }
-        askShotAllowed = screenAllowed()
         hoverOff?.cancel(); hoverOff = nil
         if !new, let recent = recentAsk, !island.context.menuOpen, !island.context.fullscreen {
             agentSelected[.ask] = recent.id
@@ -1769,7 +1634,6 @@ final class IslandDirector {
             focusAsk()
             return
         }
-        askShotOn = true
         send(.openAsk(askProvider))
         guard island.askOpen != nil else { return }
         onWantsKey?()
@@ -1784,12 +1648,6 @@ final class IslandDirector {
         guard askProvider != p, p != .ask else { return }
         askProvider = p
         if island.askOpen != nil { send(.openAsk(p)) }
-    }
-
-    /// The Screen chip (the ask card's and the Ask chat's): whether a fresh frame goes with each message.
-    func toggleAskShot() {
-        guard askShotAllowed else { onNeedsSetup?(); return }
-        askShotOn.toggle()
     }
 
     /// The video's × (it stays open until you close it).
@@ -1820,7 +1678,7 @@ final class IslandDirector {
         kick(30)
     }
 
-    /// A follow-up from the chat's reply field goes to the same conversation, with a fresh look at the screen.
+    /// A follow-up from the chat's reply field goes to the same conversation.
     private func askFollowUp(_ s: AgentSession, _ text: String) {
         agentChats[s.id, default: []].append(.you(text))
         askLastUsed[s.id] = date()
@@ -1828,22 +1686,9 @@ final class IslandDirector {
         sendAsk(s.id, askBackend[s.id] ?? .claude, text)
     }
 
-    /// Sends the message, with the screen as it is right now when the chip is on.
+    /// Ask only sends the text the user typed, never a screen capture.
     private func sendAsk(_ id: String, _ backend: AgentProvider, _ text: String) {
-        let deliver: (Data?) -> Void = { [weak self] image in
-            guard let self else { return }
-            if image != nil, agentChats[id]?.contains(where: { if case .tools("Looked at your screen", _) = $0 { true } else { false } }) == false {
-                agentChats[id, default: []].append(.tools("Looked at your screen", ["A fresh screenshot goes with each message"]))
-            }
-            if let askSend { askSend(id, backend, text, image) } else { quickAsk.ask(id, provider: backend, text: text, image: image) }
-        }
-        guard askShotOn, askShotAllowed else { deliver(nil); return }
-        let capture = captureScreen
-        Task { [weak self] in
-            let frame = await capture()
-            guard self != nil else { return }
-            deliver(frame?.jpeg)
-        }
+        if let askSend { askSend(id, backend, text) } else { quickAsk.ask(id, provider: backend, text: text) }
     }
 
     /// The session's title: the question's first words.
@@ -2354,7 +2199,6 @@ enum ActivityAction: Equatable, Sendable {
     case accept, decline
     case endCall, mute, speaker, video, share, info
     case pauseTimer, cancelTimer
-    case pauseRecording, stopRecording, revealRecording
     case join
     case pauseDownload, showInFinder
     case focusSettings
@@ -2402,16 +2246,6 @@ final class Artwork: Equatable, @unchecked Sendable {
     }
 
     static func == (a: Artwork, b: Artwork) -> Bool { a === b || (a.key == b.key && a.data == b.data) }
-}
-
-/// What records the screen (`ScreenRecorder` in the app; a fake in tests).
-@MainActor
-protocol ScreenRecording: AnyObject {
-    /// The Screen Recording permission is there.
-    var canRecord: Bool { get }
-    func start(to url: URL) async throws
-    /// Finishes the file and returns where it is.
-    func stop() async throws -> URL
 }
 
 /// The island's part of the right-click menu.

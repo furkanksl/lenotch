@@ -175,7 +175,7 @@ private struct ActivityControls: View {
 
     private static let names: [(ActivityID, String)] = [
         (.incoming, "Incoming call"), (.airpods, "AirPods"), (.charging, "Plug in charger"),
-        (.timer, "Timer"), (.recording, "Screen recording"), (.meeting, "Next meeting"),
+        (.timer, "Timer"), (.meeting, "Next meeting"),
         (.camera, "Camera on"), (.download, "Download"), (.messages, "Messages"),
         (.chess, "Chess"), (.agentLimit, "Usage limit"), (.agentBack, "Limit reset"),
         (.lockScreen, "Locked"), (.unlocked, "Unlock moment"),

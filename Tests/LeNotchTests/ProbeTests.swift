@@ -424,50 +424,6 @@ final class ProbeTests: XCTestCase {
         XCTAssertEqual(ball.dropX, ball.mainHalfWidth + tuning.dropGap + tuning.dropRadius)
     }
 
-    // REC1 (11-06): Record counts 3-2-1, then records; pressed again it stops, the file lands on the Shelf and the Saved
-    // moment shows; pressed during the countdown it cancels; without the permission it opens Setup instead.
-    func testREC1RecordFromTheNotch() async {
-        let (d, s) = director()
-        let fake = FakeRecorder()
-        d.recorder = fake
-        d.recordToggle()
-        XCTAssertEqual(d.island.activity?.id, .recordCountdown)
-        XCTAssertNil(fake.url)
-        d.recordToggle()                                  // cancel
-        XCTAssertTrue(d.island.running.isEmpty)
-        s.advance(4)
-        XCTAssertNil(fake.url)
-        d.recordToggle()
-        s.advance(3)
-        XCTAssertEqual(d.island.activity?.id, .recording)
-        for _ in 0..<20 where fake.url == nil { await Task.yield() }
-        XCTAssertEqual(fake.url?.lastPathComponent.hasPrefix("Screen Recording "), true)
-        XCTAssertEqual(d.recordState?.counting, false)
-        d.recordToggle()                                  // stop
-        for _ in 0..<40 where d.island.activity?.id != .recordingSaved { await Task.yield() }
-        XCTAssertEqual(d.island.activity?.id, .recordingSaved)
-        XCTAssertEqual(d.tray.files.first, fake.url)
-        XCTAssertEqual(d.lastRecording.url, fake.url)
-        XCTAssertNil(d.recordState)
-
-        let (d2, _) = director()
-        let locked = FakeRecorder()
-        locked.canRecord = false
-        d2.recorder = locked
-        var setup = false
-        d2.onNeedsSetup = { setup = true }
-        d2.recordToggle()
-        XCTAssertTrue(setup)
-        XCTAssertTrue(d2.island.running.isEmpty)
-    }
-
-    func testRecordingFileName() {
-        var c = DateComponents()
-        (c.year, c.month, c.day, c.hour, c.minute, c.second) = (2026, 11, 6, 17, 42, 31)
-        let date = Calendar.current.date(from: c)!
-        XCTAssertEqual(IslandDirector.recordingURL(at: date).lastPathComponent, "Screen Recording 2026-11-06 at 17.42.31.mov")
-    }
-
     // MENU1 (11-06): the island's part of the right-click menu: Hide what's under the pointer, then what's off the
     // island, then what's hidden with Show.
     func testMENU1RightClickModel() {
@@ -487,16 +443,16 @@ final class ProbeTests: XCTestCase {
         XCTAssertEqual(d.menuEntries(at: nil), [], "the empty notch: only the app's items")
     }
 
-    // BUB1 (11-06): a call while recording keeps the recording; two balls and the +N ball are drawn where the island
+    // BUB1: a call while prompting keeps the prompter; two balls and the +N ball are drawn where the island
     // puts them, the hit test finds each, and the +N ball opens its list.
     func testBUB1BallsAndTheirCards() {
         let (d, _) = director()
         d.startMusic()
-        d.show(.recording)
+        d.show(.prompter, opened: false)
         d.show(.incoming, opened: false)
         d.perform(.accept)
         XCTAssertEqual(d.island.activity?.id, .call)
-        XCTAssertEqual(d.island.background.map(\.id), [.recording])
+        XCTAssertEqual(d.island.background.map(\.id), [.prompter])
         d.show(.timer)
         d.show(.camera)
         XCTAssertEqual(d.mode, .duo)
@@ -794,13 +750,4 @@ final class ProbeTests: XCTestCase {
             XCTAssertFalse(g.player || g.peek || g.activityEars || g.hud, "\(id)")
         }
     }
-}
-
-/// Records nothing; says where it would have.
-@MainActor
-final class FakeRecorder: ScreenRecording {
-    var canRecord = true
-    var url: URL?
-    func start(to url: URL) async throws { self.url = url }
-    func stop() async throws -> URL { url ?? URL(fileURLWithPath: "/tmp/none.mov") }
 }

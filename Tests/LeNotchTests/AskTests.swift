@@ -6,28 +6,25 @@ import XCTest
 /// follow-ups and the 10-minute stay (ASK4), the notch's own hooks ignored (ASK5), the parsers (ASK6), the barrel roll.
 @MainActor
 final class AskTests: XCTestCase {
-    private func director(screen: Bool = false) -> (IslandDirector, ManualScheduler, [(String, AgentProvider, String, Data?)]) {
+    private func director() -> (IslandDirector, ManualScheduler, [(String, AgentProvider, String)]) {
         let d = IslandDirector(), s = ManualScheduler()
         d.schedule = s.schedule
         d.frontmostApp = { "" }
-        d.screenAllowed = { screen }
-        d.captureScreen = { nil }
-        var sent: [(String, AgentProvider, String, Data?)] = []
-        d.askSend = { sent.append(($0, $1, $2, $3)) }
+        var sent: [(String, AgentProvider, String)] = []
+        d.askSend = { sent.append(($0, $1, $2)) }
         sentBox = { sent }
         return (d, s, sent)
     }
-    private var sentBox: () -> [(String, AgentProvider, String, Data?)] = { [] }
+    private var sentBox: () -> [(String, AgentProvider, String)] = { [] }
 
-    // ASK1: the ask card opens on the empty notch at 420 × 148, asks the chosen provider, and closes like a card.
+    // ASK1: the text-only ask card opens at 420 × 112, asks the chosen provider, and closes like a card.
     func testASK1TheAskCard() {
         let (d, _, _) = director()
         d.openAsk()
         XCTAssertEqual(d.mode, .card)
         XCTAssertEqual(d.island.askOpen, .claude)
         XCTAssertEqual(d.groups.agentsAsk, .claude)
-        XCTAssertEqual(d.island.cardSize(player: CardSize(width: 372, height: 168, radius: 40)), Island.askCard)
-        XCTAssertFalse(d.askShotAllowed, "no permission: the chip is off, nothing prompts")
+        XCTAssertEqual(d.island.cardSize(player: CardSize(width: 372, height: 168, radius: 40)), CardSize(width: 420, height: 112, radius: 34))
         d.setAskProvider(.codex)
         XCTAssertEqual(d.island.askOpen, .codex)
         d.closeAsk()
@@ -35,7 +32,7 @@ final class AskTests: XCTestCase {
         XCTAssertEqual(d.mode, .idle)
     }
 
-    // ASK2: Return makes a session (project Ask) and its chat card; the question goes to the provider, with the frame.
+    // ASK2: Return makes a session (project Ask) and its chat card; the question goes to the chosen provider.
     func testASK2AQuestionBecomesASession() {
         let (d, _, _) = director()
         d.openAsk(.claude)
@@ -237,23 +234,64 @@ final class AskTests: XCTestCase {
         XCTAssertNotNil(d.island.askOpen, "the + starts a new one")
     }
 
-    // ASK9: with Screen on, a fresh frame goes with every message, the first and each follow-up.
-    func testASK9FreshScreenEachMessage() async {
-        let (d, _, _) = director(screen: true)
-        var captures = 0
-        d.captureScreen = { captures += 1; return ScreenFrame(jpeg: Data([UInt8(captures)])) }
-        d.openAsk(); d.submitAsk("what's on screen?")
-        for _ in 0..<50 where sentBox().count < 1 { await Task.yield() }
-        let id = d.island.agents.sessions[0].id
-        d.askEvent(id, .done(error: nil))
-        d.replyAgent(d.island.agents.sessions[0], "and now?")
-        for _ in 0..<50 where sentBox().count < 2 { await Task.yield() }
-        XCTAssertEqual(sentBox().map { $0.3 }, [Data([1]), Data([2])])
-        XCTAssertEqual(d.agentChats[id]?.filter { if case .tools("Looked at your screen", _) = $0 { true } else { false } }.count, 1)
-        d.toggleAskShot()
-        d.replyAgent(d.island.agents.sessions[0], "private one")
-        for _ in 0..<50 where sentBox().count < 3 { await Task.yield() }
-        XCTAssertNil(sentBox().last?.3 ?? nil, "off: nothing of the screen goes")
+    // ASK9: initial questions and follow-ups send text immediately, with no attachment steps or setup prompts.
+    func testASK9TextOnlyQuestionsAndFollowUps() throws {
+        for backend in [AgentProvider.claude, .codex] {
+            let (d, _, _) = director()
+            var setupRequests = 0
+            d.onNeedsSetup = { setupRequests += 1 }
+            let question = "Explain this Swift error:\nvalue of type 'Int' has no member 'count'."
+            let followUp = "Show the correction.\nKeep the example short."
+            let answer = "Use count on the collection instead of its element."
+
+            d.openAsk(backend)
+            XCTAssertEqual(setupRequests, 0, "opening Ask never requests permissions")
+            XCTAssertTrue(sentBox().isEmpty)
+            d.submitAsk(" \n\(question)\n ")
+
+            let session = try XCTUnwrap(d.island.agents.sessions.first)
+            XCTAssertEqual(sentBox().count, 1, "the question sends before submitAsk returns")
+            XCTAssertEqual(sentBox().first?.0, session.id)
+            XCTAssertEqual(sentBox().first?.1, backend)
+            XCTAssertEqual(sentBox().first?.2, question)
+            XCTAssertEqual(d.agentChats[session.id], [.you(question)], "no attachment or tool messages are inserted")
+            XCTAssertEqual(setupRequests, 0, "submitting text never opens Setup")
+
+            d.askEvent(session.id, .delta(answer))
+            d.askEvent(session.id, .done(error: nil))
+            d.closeAsk()
+            d.openAsk()
+            XCTAssertEqual(setupRequests, 0, "reopening the conversation never requests permissions")
+            XCTAssertEqual(d.replyPlaceholder(session), "Ask a follow-up")
+            d.replyAgent(session, " \n\(followUp)\n ")
+
+            XCTAssertEqual(sentBox().count, 2, "the follow-up also sends synchronously")
+            XCTAssertEqual(sentBox().last?.0, session.id)
+            XCTAssertEqual(sentBox().last?.1, backend, "the original backend handles the follow-up")
+            XCTAssertEqual(sentBox().last?.2, followUp)
+            XCTAssertEqual(d.agentChats[session.id], [.you(question), .agent(answer), .you(followUp)])
+            XCTAssertEqual(setupRequests, 0, "follow-ups never open Setup")
+            XCTAssertEqual(d.island.agents.sessions.count, 1)
+        }
+    }
+
+    func testASK9EmptyTextDoesNotSend() throws {
+        let (d, _, _) = director()
+        var setupRequests = 0
+        d.onNeedsSetup = { setupRequests += 1 }
+        d.openAsk(.claude)
+        d.submitAsk(" \n\t ")
+        XCTAssertTrue(sentBox().isEmpty)
+        XCTAssertTrue(d.island.agents.sessions.isEmpty)
+        XCTAssertEqual(d.island.askOpen, .claude)
+
+        d.submitAsk("A text-only question")
+        let session = try XCTUnwrap(d.island.agents.sessions.first)
+        d.askEvent(session.id, .done(error: nil))
+        d.replyAgent(session, " \n\t ")
+        XCTAssertEqual(sentBox().count, 1, "an empty follow-up does not start another turn")
+        XCTAssertEqual(d.agentChats[session.id], [.you("A text-only question")])
+        XCTAssertEqual(setupRequests, 0)
     }
 
     // KEY1: ⌥Space alone opens Ask; with ⌘, ⌃ or ⇧ it's someone else's.

@@ -154,11 +154,6 @@ struct ActivityEars: View {
                 TimerText(left: s.timerLeft, font: IslandType.ear.monospacedDigit()).entrance(side, 0)
             case (.prompter, _):
                 PrompterEar(model: director.prompter, side: side)
-            case (.recording, .left):
-                RecordDot().entrance(side, 0)
-                Text("REC").font(IslandType.caption).tracking(0.44).foregroundStyle(IslandColor.red).entrance(side, 1)
-            case (.recording, .right):
-                Text(clockText(s.recordSeconds)).font(IslandType.ear.monospacedDigit()).entrance(side, 0)
             case (.meeting, .left):
                 CalendarTile(size: 22).entrance(side, 0)
             case (.meeting, .right):
@@ -176,28 +171,12 @@ struct ActivityEars: View {
             case (.messages, .right):
                 Text(presenting ? "Message" : "Marina").font(IslandType.ear).entrance(side, 0)
                 Avatar(initials: "MC", colors: ("#FF9F6B", "#E0567A"), size: 22).entrance(side, 1)
-            case (.recordCountdown, .left):
-                RecordDot().entrance(side, 0)
-                Text("Recording").font(IslandType.ear).entrance(side, 1)
-            case (.recordCountdown, .right):
-                Text("\(director.recordCountdown)").font(IslandType.ear.monospacedDigit()).foregroundStyle(IslandColor.red)
-                    .contentTransition(.numericText(countsDown: true)).entrance(side, 0)
-            case (.recordingSaved, .left):
-                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(IslandColor.green)
-                    .entrance(side, 0)
-                Text("Saved").font(IslandType.ear).entrance(side, 1)
-            case (.recordingSaved, .right):
-                Text(clockText(director.lastRecording.seconds)).font(IslandType.ear.monospacedDigit())
-                    .foregroundStyle(IslandColor.secondary).entrance(side, 0)
-
             case (.chess, _), (.agentLimit, _), (.agentBack, _):
                 SessionAlertEars(instance: instance, side: side, director: director)
             case (.lockScreen, _), (.unlocked, _):
                 LockEars(id: instance.id, side: side, unlocking: director.lockTouched)
             case (.notice, _):
                 NoticeEar(notice: director.notice(for: instance), side: side)
-            case (.support, _):
-                SupportEar(side: side)
             }
         }
         .foregroundStyle(.white)
@@ -226,17 +205,12 @@ struct ActivityGlyph: View {
         case .charging: Image(systemName: "bolt.fill").font(.system(size: 14)).foregroundStyle(IslandColor.green)
         case .timer: TimerRing(left: s.timerLeft, total: s.timerTotal)
         case .prompter: Image(systemName: "text.alignleft").font(.system(size: 12, weight: .semibold))
-        case .recording: RecordDot()
         case .meeting: CalendarTile(size: 20)
         case .download: DownloadRing(progress: director.transferFor(instance).fraction)
         case .messages: MessagesIcon(size: 20)
-        case .recordCountdown: RecordDot()
-        case .recordingSaved: Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(IslandColor.green)
-
         case .chess, .agentLimit, .agentBack: SessionAlertGlyph(instance: instance, director: director)
         case .lockScreen, .unlocked: Image(systemName: instance.id == .unlocked ? "lock.open.fill" : "lock.fill").font(.system(size: 12, weight: .semibold))
         case .notice: NoticeIcon(app: director.notice(for: instance).app, size: 20)
-        case .support: Image(systemName: "cup.and.saucer.fill").font(.system(size: 11, weight: .semibold))
         }
     }
 }
@@ -261,9 +235,6 @@ struct ActivityCard: View {
         case .charging: charging
         case .timer: TimerCard(director: director)
         case .prompter: PrompterCard(director: director)
-        case .recording: RecordingCard(instance: instance, director: director)
-        case .recordCountdown: RecordCountdownCard(director: director)
-        case .recordingSaved: RecordingSavedCard(director: director)
         case .meeting: MeetingCard(instance: instance, director: director)
         case .download: DownloadCard(instance: instance, director: director)
         case .messages: MessagesCard(director: director)
@@ -271,7 +242,6 @@ struct ActivityCard: View {
         case .chess, .agentLimit, .agentBack: SessionAlertCard(instance: instance, director: director)
         case .lockScreen, .unlocked: EmptyView()   // ears only
         case .notice: NoticeCard(notice: director.notice(for: instance), director: director)
-        case .support: SupportCard(director: director)
         }
     }
 
@@ -467,45 +437,6 @@ private struct TimerCard: View {
             }
             .rise(0)
             Bar(progress: s.timerLeft / max(s.timerTotal, 1), color: IslandColor.orange, height: 3).rise(1)
-        }
-        .frame(maxHeight: .infinity)
-    }
-}
-
-private struct RecordingCard: View {
-    let instance: ActivityInstance
-    let director: IslandDirector
-
-    var body: some View {
-        let _ = director.now
-        let s = director.samples
-        let real = !director.isSample(instance)
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                Image(systemName: "record.circle").font(.system(size: 21)).foregroundStyle(IslandColor.red)
-                    .frame(width: 40, height: 40).background(Circle().fill(IslandColor.red.opacity(0.18)))
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Recording screen").font(IslandType.title).lineLimit(1)
-                    Text(real ? "The whole screen · saving to the Desktop" : "Built-in Retina Display · Microphone on")
-                        .font(IslandType.secondary).foregroundStyle(IslandColor.secondary).lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .rise(0)
-            HStack(spacing: 14) {
-                Text(clockText(s.recordSeconds)).font(IslandType.numeral).numeralBox().frame(minWidth: 76, alignment: .leading)
-                Waveform(count: 16, color: IslandColor.red, barWidth: 2.2, height: 22, live: !s.recordPaused)
-                    .frame(maxWidth: .infinity)
-                HStack(spacing: 14) {
-                    // A real recording can't pause (ScreenCaptureKit writes one file): only the sample can.
-                    if !real {
-                        RoundButton(symbol: s.recordPaused ? "play.fill" : "pause.fill", style: .gray,
-                                    label: s.recordPaused ? "Resume" : "Pause") { director.perform(.pauseRecording) }
-                    }
-                    RoundButton(symbol: "stop.fill", style: .red, label: "Stop") { director.perform(.stopRecording) }
-                }
-            }
-            .rise(1)
         }
         .frame(maxHeight: .infinity)
     }
@@ -849,19 +780,6 @@ private struct TimerText: View {
             .foregroundStyle(urgent ? IslandColor.red : base)
             .phaseAnimator(urgent && !motion.reduce ? [1.0, 0.55] : [1.0]) { v, o in v.opacity(o) } animation: { _ in
                 .easeInOut(duration: motion.seconds(0.5))
-            }
-    }
-}
-
-/// The recording dot, blinking (still under Reduce Motion).
-private struct RecordDot: View {
-    @Environment(\.islandMotion) private var motion
-    var body: some View {
-        Circle().fill(IslandColor.red)
-            .frame(width: 9, height: 9)
-            .shadow(color: IslandColor.red.opacity(0.7), radius: 3)
-            .phaseAnimator(motion.reduce ? [1.0] : [1.0, 0.45]) { v, o in v.opacity(o) } animation: { _ in
-                .easeInOut(duration: motion.seconds(0.6))
             }
     }
 }
@@ -1396,48 +1314,5 @@ private struct Shine: View {
             try? await Task.sleep(for: .seconds(motion.seconds(motion.delay + 1)))
             on = true
         }
-    }
-}
-
-/// Recording from the notch (11-06): the 3-2-1, pressed again to cancel.
-private struct RecordCountdownCard: View {
-    let director: IslandDirector
-
-    var body: some View {
-        let _ = director.now
-        HStack(spacing: 12) {
-            Image(systemName: "record.circle").font(.system(size: 21)).foregroundStyle(IslandColor.red)
-                .frame(width: 40, height: 40).background(Circle().fill(IslandColor.red.opacity(0.18))).rise(0)
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Recording in \(director.recordCountdown)").font(IslandType.title).monospacedDigit().lineLimit(1)
-                Text("The whole screen · ⌃⌥⌘R again cancels").font(IslandType.secondary)
-                    .foregroundStyle(IslandColor.secondary).lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .rise(1)
-        }
-        .frame(maxHeight: .infinity)
-    }
-}
-
-/// The recording is on the Desktop (and the Shelf): its name, length, and a way to it.
-private struct RecordingSavedCard: View {
-    let director: IslandDirector
-
-    var body: some View {
-        let r = director.lastRecording
-        HStack(spacing: 12) {
-            Image(systemName: "film").font(.system(size: 19)).foregroundStyle(IslandColor.green)
-                .frame(width: 40, height: 40).background(Circle().fill(IslandColor.green.opacity(0.18))).rise(0)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(r.name).font(IslandType.title).lineLimit(1).truncationMode(.middle)
-                Text("Desktop · \(clockText(r.seconds)) · on the Shelf too").font(IslandType.secondary)
-                    .foregroundStyle(IslandColor.secondary).lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .rise(1)
-            RoundButton(symbol: "folder", style: .gray, label: "Show in Finder") { director.perform(.revealRecording) }.rise(2)
-        }
-        .frame(maxHeight: .infinity)
     }
 }

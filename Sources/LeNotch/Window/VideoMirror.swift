@@ -1,18 +1,19 @@
 import AppKit
+import CoreImage
 import CoreMedia
 import OSLog
 import ScreenCaptureKit
 
 /// Watching a video in the island (owner, 11-11: "if it's a video, click on its card and you can watch it from the
-/// island"): a live mirror of the video in its browser window, through ScreenCaptureKit (the Screen Recording permission
-/// Record already asks for). The video keeps playing in its tab, with its own sound; only the picture comes here.
+/// island"): a live mirror of the video in its browser window, through ScreenCaptureKit. The video keeps playing in its
+/// tab, with its own sound; only the picture comes here. Screen Recording access is required, but no file is recorded.
 ///
 /// Where the video sits in the window isn't known, so the first half second is watched small and the part that moves is
 /// taken as the video (16:9 around it); then the stream crops to it at full resolution. Nothing moving (paused): the
 /// whole window. The browser only paints the tab in front of its window: on another tab the mirror says so.
 @MainActor @Observable
 final class VideoMirror {
-    enum State: Equatable { case idle, finding, showing, needsPermission, notFound, otherTab }
+    enum State: Equatable { case idle, finding, showing, needsPermission, notFound, otherTab, failed(String) }
     private(set) var state: State = .idle
     /// The video's shape once found (width over height), for the view's fit.
     private(set) var aspect = 16.0 / 9
@@ -27,27 +28,35 @@ final class VideoMirror {
     @ObservationIgnored private var stream: SCStream?
     @ObservationIgnored private var output: Output?
     @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var generation = UUID()
     private static let log = Logger(subsystem: "com.lenotch.app", category: "video")
 
     func start(app: String, title: String) {
         stop()
         guard CGPreflightScreenCaptureAccess() else { state = .needsPermission; return }
         state = .finding
-        task = Task { [weak self] in await self?.run(app: app, title: title) }
+        let session = generation
+        task = Task { [weak self] in await self?.run(app: app, title: title, session: session) }
     }
 
     func stop() {
         task?.cancel(); task = nil
+        generation = UUID()
         if let s = stream { Task { try? await s.stopCapture() } }
         stream = nil; output = nil
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         layer.contents = nil
+        CATransaction.commit()
         state = .idle
     }
 
-    private func run(app: String, title: String) async {
+    private func run(app: String, title: String, session: UUID) async {
         guard let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false) else {
+            guard isCurrent(session) else { return }
             state = .notFound; return
         }
+        guard isCurrent(session) else { return }
         let windows = content.windows.filter { $0.owningApplication?.bundleIdentifier == app && $0.frame.width > 200 && $0.windowLayer == 0 }
         let key = String(title.prefix(40))
         let window = windows.first { ($0.title ?? "").localizedCaseInsensitiveContains(key) }
@@ -68,21 +77,37 @@ final class VideoMirror {
         // Small first, to find the part that moves.
         let small = 480.0, k = small / window.frame.width
         config.width = Int(small); config.height = Int(window.frame.height * k)
-        let out = Output(cells: (32, 18))
-        let stream = SCStream(filter: SCContentFilter(desktopIndependentWindow: window), configuration: config, delegate: nil)
+        // Retaining an IOSurface alone doesn't stop the capture pool from reusing its pixels before the main queue
+        // presents it. Decode on a serial capture queue, then hand an independent CGImage to the presentation thread.
+        let out = Output(cells: (32, 18), onFrame: { [weak self] image in
+            Task { @MainActor [weak self] in self?.show(image, session: session) }
+        }, onFailure: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.isCurrent(session) else { return }
+                self.state = .failed("Video capture stopped. Bring the video window forward and try again.")
+                Self.log.notice("video: stream stopped unexpectedly")
+            }
+        })
+        let stream = SCStream(filter: SCContentFilter(desktopIndependentWindow: window), configuration: config, delegate: out)
+        self.stream = stream
+        output = out
         do {
-            try stream.addStreamOutput(out, type: .screen, sampleHandlerQueue: .global(qos: .userInitiated))
+            try stream.addStreamOutput(out, type: .screen,
+                                       sampleHandlerQueue: DispatchQueue(label: "com.lenotch.app.video.frames", qos: .userInitiated))
             try await stream.startCapture()
         } catch {
+            guard isCurrent(session) else { return }
             Self.log.notice("video: capture failed (\(error.localizedDescription, privacy: .public))")
-            state = .notFound; return
+            state = CGPreflightScreenCaptureAccess()
+                ? .failed("Couldn’t capture the video window. Bring it forward and try again.") : .needsPermission
+            return
         }
-        self.stream = stream; self.output = out
-        out.onFrame = { [weak self] surface in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.show(surface) } }
+        guard isCurrent(session) else {
+            try? await stream.stopCapture()
+            return
         }
-        try? await Task.sleep(for: .milliseconds(550))
-        guard !Task.isCancelled else { return }
+        do { try await Task.sleep(for: .milliseconds(550)) } catch { return }
+        guard isCurrent(session) else { return }
         // The moving part, in the window's points, made 16:9 around its middle.
         let found = out.movingBox().map { box -> CGRect in
             let r = CGRect(x: box.minX * window.frame.width, y: box.minY * window.frame.height,
@@ -99,15 +124,37 @@ final class VideoMirror {
         full.sourceRect = crop
         full.width = Int(min(crop.width * scale, 1280)); full.height = Int(Double(full.width) * crop.height / crop.width)
         out.finding = false
-        try? await stream.updateConfiguration(full)
-        aspect = crop.width / max(crop.height, 1)
-        state = .showing
+        do {
+            try await stream.updateConfiguration(full)
+            guard isCurrent(session) else { return }
+            aspect = crop.width / max(crop.height, 1)
+        } catch {
+            // Keep the already-visible full-window preview if this system can't apply the crop.
+            Self.log.notice("video: crop unavailable; keeping the window preview")
+        }
+        do { try await Task.sleep(for: .seconds(2)) } catch { return }
+        guard isCurrent(session), state == .finding else { return }
+        state = .failed("No video frames received. Bring the video window forward and try again.")
     }
 
-    private func show(_ surface: IOSurface) {
-        guard state == .showing || state == .finding else { return }
-        if state == .finding { return }            // the small frames only feed the search
-        layer.contents = surface
+    private func isCurrent(_ session: UUID) -> Bool { generation == session && !Task.isCancelled }
+
+    private func show(_ image: CGImage, session: UUID) {
+        guard isCurrent(session), state == .showing || state == .finding else { return }
+        Self.present(image, on: layer)
+        if state != .showing {
+            state = .showing
+            aspect = Double(image.width) / Double(max(image.height, 1))
+            Self.log.notice("video: displaying the first captured frame")
+        }
+    }
+
+    /// Also used by the native renderer regression tests with synthetic video frames (no screen access needed).
+    static func present(_ image: CGImage, on layer: CALayer) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.contents = image
+        CATransaction.commit()
     }
 
     /// A 16:9 rectangle covering `r`, centred on it, kept inside `bounds`.
@@ -121,20 +168,52 @@ final class VideoMirror {
     }
 
     /// Receives frames; while finding, adds up how much each cell of a coarse grid changes from frame to frame.
-    final class Output: NSObject, SCStreamOutput, @unchecked Sendable {
-        var onFrame: ((IOSurface) -> Void)?
-        var finding = true
+    final class Output: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
+        private let onFrame: @Sendable (CGImage) -> Void
+        private let onFailure: @Sendable () -> Void
+        private let context = CIContext(options: [.cacheIntermediates: false])
+        private var isFinding = true
+        var finding: Bool {
+            get { lock.withLock { isFinding } }
+            set { lock.withLock { isFinding = newValue } }
+        }
         private let cells: (Int, Int)
         private var last: [Double]?
         private var motion: [Double]
         private let lock = NSLock()
 
-        init(cells: (Int, Int)) { self.cells = cells; motion = Array(repeating: 0, count: cells.0 * cells.1) }
+        init(cells: (Int, Int), onFrame: @escaping @Sendable (CGImage) -> Void,
+             onFailure: @escaping @Sendable () -> Void = {}) {
+            self.cells = cells
+            self.onFrame = onFrame
+            self.onFailure = onFailure
+            motion = Array(repeating: 0, count: cells.0 * cells.1)
+        }
 
         func stream(_ stream: SCStream, didOutputSampleBuffer sample: CMSampleBuffer, of type: SCStreamOutputType) {
-            guard type == .screen, let pb = CMSampleBufferGetImageBuffer(sample) else { return }
-            if finding { measure(pb) }
-            if let s = CVPixelBufferGetIOSurface(pb)?.takeUnretainedValue() { onFrame?(s as IOSurface) }
+            guard type == .screen else { return }
+            receive(sample)
+        }
+
+        func stream(_ stream: SCStream, didStopWithError error: any Error) { onFailure() }
+
+        /// ScreenCaptureKit can send idle/blank/status-only buffers as well as real pictures. Keep the last good frame.
+        func receive(_ sample: CMSampleBuffer) {
+            autoreleasepool {
+                guard sample.isValid,
+                      let info = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
+                      let status = info.first?[.status] as? Int,
+                      status == SCFrameStatus.complete.rawValue,
+                      let pb = CMSampleBufferGetImageBuffer(sample),
+                      CVPixelBufferGetPixelFormatType(pb) == kCVPixelFormatType_32BGRA else { return }
+                if finding { measure(pb) }
+                let image = CIImage(cvPixelBuffer: pb)
+                // Force an independent snapshot before ScreenCaptureKit reuses its pixel buffer. Core Animation can
+                // display it reliably even after the capture callback and buffer pool have moved to the next frame.
+                guard let rendered = context.createCGImage(image, from: image.extent, format: .BGRA8,
+                                                          colorSpace: CGColorSpaceCreateDeviceRGB(), deferred: false) else { return }
+                onFrame(rendered)
+            }
         }
 
         private func measure(_ pb: CVPixelBuffer) {

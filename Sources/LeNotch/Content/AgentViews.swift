@@ -219,11 +219,7 @@ struct AgentsCardLayer: View {
                             chips(p, shown: s).rise(0)
                             messages(s).rise(1)
                             if let need = s.need { needBox(s, need).rise(2) }
-                            HStack(spacing: 8) {
-                                replyField(s)
-                                if p == .ask { screenChip }
-                            }
-                            .rise(2)
+                            replyField(s).rise(2)
                         }
                         .padding(.horizontal, 18).padding(.vertical, 16)
                         .frame(width: size.width, height: size.height)
@@ -508,22 +504,6 @@ struct AgentsCardLayer: View {
     /// Who answers this session: its provider, or for an Ask conversation the backend it runs on.
     private func backendOf(_ s: AgentSession) -> AgentProvider {
         s.provider == .ask ? (director.askBackend[s.id] ?? .claude) : s.provider
-    }
-
-    /// The Ask chat's Screen toggle: a fresh look at the screen goes with each message while it's on.
-    private var screenChip: some View {
-        let on = director.askShotOn && director.askShotAllowed
-        return Button { director.toggleAskShot() } label: {
-            Image(systemName: "display").font(.system(size: 13, weight: .medium))
-                .foregroundStyle(on ? .white : .white.opacity(0.45))
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(.white.opacity(on ? 0.16 : 0.06)))
-                .overlay(on ? nil : Image(systemName: "line.diagonal").font(.system(size: 18, weight: .regular)).foregroundStyle(.white.opacity(0.45)))
-                .contentShape(Circle())
-        }
-        .buttonStyle(PressScaleStyle())
-        .help(on ? "Sees your screen with each message" : "Your screen stays private")
-        .accessibilityLabel(on ? "Screen: on" : "Screen: off")
     }
 
     private func replyField(_ s: AgentSession) -> some View {

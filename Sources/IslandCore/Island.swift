@@ -816,8 +816,8 @@ public struct Island: Equatable, Sendable {
     /// picture.
     public static let videoCard = CardSize(width: 544, height: 354, radius: 32)
 
-    /// The quick-ask card (sim `agCardSize`'s ask view): the provider switch, the field, the Screen chip.
-    public static let askCard = CardSize(width: 420, height: 148, radius: 34)
+    /// Text-only Quick Ask: the provider switch and question field, without an attachment row.
+    public static let askCard = CardSize(width: 420, height: 112, radius: 34)
 
     /// The question alone, opened by a hover: the chat's width, so a press grows it downwards into the chat. A permission
     /// is two rows (what and the command with Deny / Allow), a question up to two lines over its options; 20 pt above

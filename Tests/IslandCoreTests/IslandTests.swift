@@ -5,8 +5,8 @@ import IslandCore
 /// replayed as event traces on the pure model.
 final class IslandTests: XCTestCase {
     func testRemovedScoreActivitiesCannotBeSelected() {
-        for name in ["kickoff", "match", "goal", "fulltime"] {
-            XCTAssertNil(ActivityID(rawValue: name), "removed score events must not be available to the activity menu or dev commands")
+        for name in ["kickoff", "match", "goal", "fulltime", "recording", "recordCountdown", "recordingSaved", "support"] {
+            XCTAssertNil(ActivityID(rawValue: name), "removed features must not be available to the activity menu or dev commands")
         }
     }
 
@@ -67,16 +67,16 @@ final class IslandTests: XCTestCase {
         XCTAssertEqual(i.cardSize(player: CardSize(width: 372, height: 148, radius: 34)).height, 148)
     }
 
-    func testAlertOpensItselfAndHandsBackTheCall() {
+    func testAlertOpensItselfAndHandsBackTheGame() {
         var i = island()
-        i.apply(.show(.recording))
+        i.apply(.show(.chess))
         i.apply(.show(.incoming))
         XCTAssertTrue(i.opened)
         XCTAssertTrue(i.holdsOpen)          // PT7: stays open until its buttons, the notch or a click outside
         XCTAssertEqual(i.mode, .card)
-        XCTAssertEqual(i.background.map(\.id), [.recording])
+        XCTAssertEqual(i.background.map(\.id), [.chess])
         i.apply(.endActivity)
-        XCTAssertEqual(i.activity?.id, .recording)
+        XCTAssertEqual(i.activity?.id, .chess)
         XCTAssertFalse(i.opened)
     }
 
@@ -209,27 +209,26 @@ final class IslandTests: XCTestCase {
         XCTAssertTrue(i.apply(.show(.charging)).contains(.takeover))
     }
 
-    // BUB1: a call while recording keeps the recording; answering it keeps the call in the ears and the recording
-    // in a ball; hanging up hands the ears back to the recording.
-    func testCallWhileRecordingKeepsTheRecording() {
+    // A call interrupts an existing live activity without ending it; hanging up restores that activity.
+    func testCallWhilePlayingChessKeepsTheGame() {
         var i = island()
-        i.apply(.show(.recording))
-        let rec = i.activity!.serial
+        i.apply(.show(.chess))
+        let game = i.activity!.serial
         i.apply(.show(.incoming, opened: false))
         XCTAssertEqual(i.activity?.id, .incoming)
-        XCTAssertEqual(i.arrangement.balls, [.background(rec), .media])
+        XCTAssertEqual(i.arrangement.balls, [.background(game), .media])
         i.apply(.show(.call, opened: false))
         XCTAssertEqual(i.activity?.id, .call)
-        XCTAssertEqual(i.background.map(\.id), [.recording])
+        XCTAssertEqual(i.background.map(\.id), [.chess])
         i.apply(.endActivity)
-        XCTAssertEqual(i.activity?.id, .recording)
+        XCTAssertEqual(i.activity?.id, .chess)
         XCTAssertEqual(i.arrangement.balls, [.media])
     }
 
     // Round 2: two balls at most, the rest of what deserves one in the +N ball; places are kept.
     func testTwoBallsThenMoreAndPlacesAreKept() {
         var i = island()
-        i.apply(.show(.recording))
+        i.apply(.show(.chess))
         i.apply(.show(.timer))
         i.apply(.show(.camera))
         let a = i.arrangement
@@ -271,7 +270,7 @@ final class IslandTests: XCTestCase {
     // The list holds everything not in a ball while it's open, even one the ears' party pushed out of its ball.
     func testTheListHoldsWhatTheEarsPushedOut() {
         var i = island()
-        i.apply(.show(.recording))
+        i.apply(.show(.chess))
         i.apply(.show(.call, opened: false))
         i.apply(.show(.timer))
         i.apply(.show(.camera))
@@ -307,7 +306,7 @@ final class IslandTests: XCTestCase {
         i.apply(.close)
 
         var j = island()
-        j.apply(.show(.recording))
+        j.apply(.show(.chess))
         j.apply(.show(.call, opened: false))
         j.apply(.show(.timer))
         j.apply(.show(.camera))

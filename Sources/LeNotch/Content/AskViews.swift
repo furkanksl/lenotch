@@ -1,8 +1,7 @@
 import IslandCore
 import SwiftUI
 
-/// The quick-ask card (sim `agAskHTML`, 420 × 148): a Claude | ChatGPT switch with the keys' hint, a capsule field with
-/// its send button, and the Screen chip with the frame taken when the card opened.
+/// Text-only Quick Ask: a provider switch, keyboard hint, and capsule field with its send button.
 struct AskCardLayer: View {
     let frame: FrameModel
     let director: IslandDirector
@@ -24,12 +23,6 @@ struct AskCardLayer: View {
                     .frame(height: 28)
                     .rise(0)
                     field(p).rise(1)
-                    HStack(spacing: 10) {
-                        shotChip
-                        Text(hint).font(.system(size: 12)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
-                    }
-                    .frame(height: 30)
-                    .rise(2)
                 }
                 .padding(.horizontal, 18).padding(.vertical, 14)
                 .frame(width: Island.askCard.width, height: Island.askCard.height)
@@ -42,11 +35,6 @@ struct AskCardLayer: View {
                 }
             }
         }
-    }
-
-    private var hint: String {
-        if !director.askShotAllowed { return "Allow Screen Recording in Setup to include it" }
-        return director.askShotOn ? "A fresh look with each message, never kept" : "Your screen stays private"
     }
 
     private func switcher(_ selected: AgentProvider) -> some View {
@@ -74,7 +62,7 @@ struct AskCardLayer: View {
     }
 
     private func field(_ p: AgentProvider) -> some View {
-        let placeholder = "Ask \(p == .claude ? "Claude" : "ChatGPT")\(director.askShotOn && director.askShotAllowed ? " about your screen" : "")"
+        let placeholder = "Ask \(p == .claude ? "Claude" : "ChatGPT")"
         return HStack(spacing: 0) {
             if motion.stills {
                 Text(placeholder).foregroundStyle(.white.opacity(0.4)).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
@@ -101,24 +89,6 @@ struct AskCardLayer: View {
         .frame(height: 40)
         .background(Capsule().fill(.white.opacity(0.1)))
         .overlay(Capsule().strokeBorder(.white.opacity(focused ? 0.35 : 0.12), lineWidth: focused ? 1 : 0.5))
-    }
-
-    private var shotChip: some View {
-        let on = director.askShotOn && director.askShotAllowed
-        return Button { director.toggleAskShot() } label: {
-            HStack(spacing: 8) {
-                // Just the screen's symbol: the frame itself isn't shown (owner, 11-07: the thumbnail "looks very messy").
-                Image(systemName: "display").font(.system(size: 12, weight: .medium))
-                Text("Screen").font(.system(size: 12.5, weight: .medium))
-                if on { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)) }
-            }
-            .foregroundStyle(on ? .white : .white.opacity(0.6))
-            .padding(.horizontal, 11).frame(height: 30)
-            .background(Capsule().fill(.white.opacity(on ? 0.16 : 0.08)))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(PressScaleStyle())
-        .accessibilityLabel(on ? "Screen: included" : "Screen: not included")
     }
 
     private func submit() {

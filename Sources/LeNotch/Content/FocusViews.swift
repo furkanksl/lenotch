@@ -323,8 +323,8 @@ private struct VideoFocusCard: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.black)
                 if motion.stills {
                     Image(systemName: "play.rectangle.fill").font(.system(size: 44)).foregroundStyle(.white.opacity(0.3))
-                } else {
-                    MirrorView(layer: mirror.layer)
+                } else if !director.pipOpen {
+                    VideoLayerHost(layer: mirror.layer)
                 }
                 message
             }
@@ -338,9 +338,20 @@ private struct VideoFocusCard: View {
     @ViewBuilder private var message: some View {
         switch mirror.state {
         case .finding: ProgressView().controlSize(.small).tint(.white)
-        case .needsPermission: note("Allow Screen Recording in Setup to watch it here")
+        case .needsPermission:
+            VStack(spacing: 12) {
+                note("Allow Screen Recording to watch this video in the notch. Nothing is recorded or saved.")
+                Button("Open Setup") { director.onNeedsSetup?() }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
         case .notFound: note("Couldn't find the video's window")
         case .otherTab: note("Bring its tab to the front of its window to watch it here")
+        case .failed(let message):
+            VStack(spacing: 12) {
+                note(message)
+                Button("Retry") { director.retryVideo() }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
         case .idle, .showing: EmptyView()
         }
     }
@@ -348,24 +359,5 @@ private struct VideoFocusCard: View {
     private func note(_ text: String) -> some View {
         Text(text).font(.system(size: 13, weight: .medium)).foregroundStyle(.white.opacity(0.7))
             .multilineTextAlignment(.center).padding(24)
-    }
-}
-
-/// Hosts the mirror's layer (frames land there straight from ScreenCaptureKit, no SwiftUI redraws).
-private struct MirrorView: NSViewRepresentable {
-    let layer: CALayer
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        v.wantsLayer = true
-        v.layer = CALayer()
-        layer.removeFromSuperlayer()
-        v.layer?.addSublayer(layer)
-        layer.frame = v.bounds
-        layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        return v
-    }
-    func updateNSView(_ v: NSView, context: Context) {
-        if layer.superlayer !== v.layer { layer.removeFromSuperlayer(); v.layer?.addSublayer(layer) }   // back from PiP
-        layer.frame = v.bounds
     }
 }

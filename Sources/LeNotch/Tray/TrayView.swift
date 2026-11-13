@@ -71,21 +71,17 @@ private struct TrayGrid: View {
     var body: some View {
         let timer = director.trayTimerLeft
         let running = director.trayRunning
-        let rec = director.recordState
         // Prompter joins the existing tools; Today opens the calendar page without another navigation layer.
-        VStack(spacing: 0) {
-        Grid(horizontalSpacing: 0, verticalSpacing: 10) {
-            GridRow {
+        VStack(spacing: 10) {
+            HStack(spacing: 0) {
                 // Quick ask (phase 3): Claude or ChatGPT, with the screen (⌃⌥⌘A anywhere).
                 Tool(symbol: "sparkles", label: "Ask") { director.openAsk() }
                     .help("Ask Claude or ChatGPT about your screen (⌥Space)")
                 Tool(symbol: "timer", label: timer.map(clockText) ?? "Timer", tint: timer != nil ? IslandColor.orange : nil) { tray.go(.timer) }
-                Tool(symbol: "record.circle", label: rec.map { $0.counting ? "Starting" : clockText($0.seconds) } ?? "Record",
-                     tint: rec != nil ? IslandColor.red : nil) { director.recordToggle() }
                 Tool(symbol: "moon", label: tray.focusName ?? tray.focus?.rawValue ?? "Focus", tint: tray.focusName != nil || tray.focus != nil ? IslandColor.indigo : nil) { tray.go(.focus) }
                 Tool(symbol: "text.alignleft", label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
             }
-            GridRow {
+            HStack(spacing: 0) {
                 Tool(symbol: running ? "pause" : "play", label: running ? "Pause" : "Play") { director.trayPause() }
                     .disabled(!director.trayCanPause)
                 Tool(symbol: "clipboard", label: "Clipboard") { tray.go(.clipboard) }
@@ -95,7 +91,6 @@ private struct TrayGrid: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
     }
 }
 
