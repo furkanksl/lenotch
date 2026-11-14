@@ -202,6 +202,18 @@ final class SetupTests: XCTestCase {
                     case .integrations:
                         XCTAssertTrue(content.contains("notifications"), "Notifications are clipped in \(name). Read: \(content)")
                         XCTAssertTrue(content.contains("agent sessions"), "Agent sessions are clipped in \(name). Read: \(content)")
+                        let scroll = try XCTUnwrap(descendant(of: host, matching: NSScrollView.self))
+                        let document = try XCTUnwrap(scroll.documentView)
+                        let offset = min(380, max(0, document.bounds.height - scroll.contentView.bounds.height))
+                        let y = document.isFlipped ? offset : document.bounds.maxY - offset - scroll.contentView.bounds.height
+                        scroll.contentView.scroll(to: NSPoint(x: scroll.contentView.bounds.minX, y: y))
+                        scroll.reflectScrolledClipView(scroll.contentView)
+                        let account = try await render(host, name: name + "-ask")
+                        let visible = normalized(account.transcript)
+                        XCTAssertTrue(visible.contains("chatgpt account"),
+                                      "ChatGPT connection must be reachable in \(name). Read: \(visible)")
+                        XCTAssertTrue(visible.contains("connect chatgpt") || visible.contains("connected"),
+                                      "ChatGPT connection state/action must be visible in \(name). Read: \(visible)")
                     }
                     XCTAssertEqual(host.fittingSize.width, size.width, accuracy: 0.5)
                     XCTAssertEqual(host.fittingSize.height, size.height, accuracy: 0.5)

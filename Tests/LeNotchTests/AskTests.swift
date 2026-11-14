@@ -32,6 +32,15 @@ final class AskTests: XCTestCase {
         XCTAssertEqual(d.mode, .idle)
     }
 
+    func testAskArrowConnectsChatGPTUntilSignInFinishes() {
+        XCTAssertEqual(AskPrimaryAction.forProvider(.codex, status: .disconnected), .connect)
+        XCTAssertEqual(AskPrimaryAction.forProvider(.codex, status: .error("Retry")), .connect)
+        XCTAssertEqual(AskPrimaryAction.forProvider(.codex, status: .connecting), .wait)
+        XCTAssertEqual(AskPrimaryAction.forProvider(.codex, status: .connected(email: nil, plan: nil)), .send)
+        XCTAssertEqual(AskPrimaryAction.forProvider(.claude, status: .disconnected), .send,
+                       "Claude does not depend on ChatGPT sign-in")
+    }
+
     // ASK2: Return makes a session (project Ask) and its chat card; the question goes to the chosen provider.
     func testASK2AQuestionBecomesASession() {
         let (d, _, _) = director()
@@ -49,6 +58,8 @@ final class AskTests: XCTestCase {
         XCTAssertEqual(sentBox().map(\.2), ["What's this error?"])
         XCTAssertEqual(d.replyRoute(s!), .ask)
         XCTAssertEqual(d.agentTitle(s!), "What's this error?")
+        XCTAssertEqual(AgentsCardLayer.pendingStatus(for: s!, messages: d.agentChats[s!.id] ?? []), "Working…",
+                       "Show activity as soon as Ask sends, before the first streamed token")
     }
 
     // ASK3: deltas stream into one message; the end settles it (read at once while its chat shows); errors show in it.
@@ -58,6 +69,8 @@ final class AskTests: XCTestCase {
         d.submitAsk("hi")
         let id = d.island.agents.sessions[0].id
         d.askEvent(id, .delta("Hello"))
+        XCTAssertNil(AgentsCardLayer.pendingStatus(for: d.island.agents.sessions[0], messages: d.agentChats[id] ?? []),
+                     "The activity indicator should yield to the streamed reply")
         d.askEvent(id, .delta(" there"))
         XCTAssertEqual(d.agentChats[id]?.last, .agent("Hello there"))
         d.askEvent(id, .tool("WebSearch"))
@@ -111,16 +124,83 @@ final class AskTests: XCTestCase {
             #"{"type":"result","subtype":"success","is_error":false}"#,
         ])
         XCTAssertEqual(claude, [.delta("Hi"), .tool("WebSearch"), .delta("\n\nFound it"), .done(error: nil)])
-        let codex = QuickAskParsing.codex([
-            #"{"type":"thread.started","thread_id":"th1"}"#,
-            #"{"type":"item.started","item":{"type":"web_search"}}"#,
-            #"{"type":"item.completed","item":{"type":"agent_message","text":"One"}}"#,
-            #"{"type":"item.completed","item":{"type":"agent_message","text":"Two"}}"#,
-            #"{"type":"turn.completed"}"#,
-        ])
-        XCTAssertEqual(codex.thread, "th1")
-        XCTAssertEqual(codex.events, [.tool("WebSearch"), .delta("One"), .delta("\n\nTwo"), .done(error: nil)])
-        XCTAssertEqual(QuickAskParsing.codex([#"{"type":"turn.failed","error":{"message":"Nope"}}"#]).events, [.done(error: "Nope")])
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.output_text.delta","delta":"Hi"}"#), .delta("Hi"))
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}]}}"#), .completed("Hi"))
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.failed","response":{"error":{"message":"Try again"}}}"#), .failed("Try again"))
+        XCTAssertEqual(ChatGPTChat.parseEvent("[DONE]"), .finished)
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.output_item.done","item":{"type":"message","content":[{"type":"output_text","text":"Hello"}]}}"#), .outputItem("Hello"))
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}"#), .failed("ChatGPT stopped the reply early (max_output_tokens)."))
+        XCTAssertEqual(ChatGPTChat.parseEvent("not json"), .ignored)
+        XCTAssertEqual(ChatGPTChat.errorMessage(from: Data(#"{"error":{"message":"Too many requests"}}"#.utf8)),
+                       "Too many requests")
+        XCTAssertEqual(ChatGPTChat.errorMessage(from: Data(#"{"detail":"Unsupported request field"}"#.utf8)),
+                       "Unsupported request field")
+        XCTAssertEqual(ChatGPTChat.errorMessage(from: Data(#"{"error":"Invalid model"}"#.utf8)),
+                       "Invalid model")
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.failed","response":{"error":{"message":"Retry later"}}}"#),
+                       .failed("Retry later"))
+    }
+
+    func testChatGPTStreamFramesEventsAcrossCRLFUTF8AndMissingFinalBlankLine() throws {
+        let wire = "\u{FEFF}: comment\r\nevent: response.output_text.delta\r\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"café\"}\r\n\r\ndata: {\"type\":\"response.completed\"}"
+        let bytes = Array(wire.utf8)
+        for split in 1..<bytes.count {
+            var decoder = ChatGPTSSEDecoder()
+            var events: [String] = []
+            for byte in bytes[..<split] { if let event = try decoder.push(byte) { events.append(event) } }
+            for byte in bytes[split...] { if let event = try decoder.push(byte) { events.append(event) } }
+            if let event = try decoder.finish() { events.append(event) }
+            XCTAssertEqual(events.map(ChatGPTChat.parseEvent), [.delta("café"), .completed(nil)], "Split at \(split)")
+        }
+    }
+
+    func testChatGPTStreamAcceptsExplicitDoneAndRejectsMalformedUTF8() throws {
+        var decoder = ChatGPTSSEDecoder()
+        var events: [String] = []
+        for byte in "data: [DONE]\n\n".utf8 {
+            if let event = try decoder.push(byte) { events.append(event) }
+        }
+        XCTAssertEqual(events.map(ChatGPTChat.parseEvent), [.finished])
+        var invalid = ChatGPTSSEDecoder()
+        for byte: UInt8 in [0x64, 0x61, 0x74, 0x61, 0x3A, 0x20, 0xC3] { _ = try invalid.push(byte) }
+        XCTAssertThrowsError(try invalid.push(0x0A))
+    }
+
+    func testChatGPTRequestRetainsOnlyCompletedConversationAndNeverUsesCodexCLI() throws {
+        let credentials = ChatGPTCredentials(accessToken: "test-only-token", accountID: "test-account")
+        let request = try ChatGPTChat.makeRequest(
+            question: "next?", history: [("first?", "answer")],
+            sessionID: "ask-session", credentials: credentials
+        )
+        XCTAssertEqual(request.url?.absoluteString, "https://chatgpt.com/backend-api/codex/responses")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "session_id"), "ask-session")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-ID"), "test-account")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-only-token")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "originator"), "lenotch")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "text/event-stream")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept-Encoding"), "identity")
+        let data = try XCTUnwrap(request.httpBody)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["stream"] as? Bool, true)
+        XCTAssertEqual(object["store"] as? Bool, false)
+        XCTAssertNil(object["session_id"], "The session_id belongs in the HTTP header, not the JSON body")
+        XCTAssertEqual(object["prompt_cache_key"] as? String, "ask-session")
+        let reasoning = try XCTUnwrap(object["reasoning"] as? [String: String])
+        XCTAssertEqual(reasoning["effort"], "low")
+        XCTAssertEqual(reasoning["summary"], "auto")
+        XCTAssertEqual(object["include"] as? [String], ["reasoning.encrypted_content"])
+        let input = try XCTUnwrap(object["input"] as? [[String: Any]])
+        XCTAssertEqual(input.count, 3)
+        XCTAssertEqual(input.map { $0["role"] as? String }, ["user", "assistant", "user"])
+        let last = try XCTUnwrap(input.last?["content"] as? [[String: String]])
+        XCTAssertEqual(last.first?["text"], "next?")
+        XCTAssertNil(object["tools"], "Ask chat cannot invoke shell or agent tools")
+        let overflow = Array(repeating: ("question", "reply"), count: 12)
+        let bounded = try ChatGPTChat.requestBody(question: "latest", history: overflow, sessionID: "bounded")
+        let boundedObject = try XCTUnwrap(JSONSerialization.jsonObject(with: bounded) as? [String: Any])
+        let boundedInput = try XCTUnwrap(boundedObject["input"] as? [[String: Any]])
+        XCTAssertEqual(boundedInput.count, 17, "Send at most eight completed turns plus the new question")
     }
 
     // ASK7: ask for a barrel roll and the ball does one.

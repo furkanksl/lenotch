@@ -369,13 +369,31 @@ struct AgentsCardLayer: View {
             }
             if !presenting {
                 ForEach(items, id: \.offset) { i, item in row(item, i) }
-                if s.state == .working, !s.step.isEmpty {
-                    Label(s.step, systemImage: "ellipsis").font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.55))
+                if let status = Self.pendingStatus(for: s, messages: items.map(\.element)) {
+                    HStack(spacing: 7) {
+                        if s.provider == .ask && s.step.isEmpty {
+                            ProgressView().controlSize(.mini).tint(.white.opacity(0.7))
+                        } else {
+                            Image(systemName: "ellipsis")
+                        }
+                        Text(status)
+                    }
+                    .font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.65))
+                    .accessibilityIdentifier("agent-working-status")
                 }
                 if s.state == .error { Text(s.step).foregroundStyle(IslandColor.red) }
             }
         }
         .font(.system(size: 13))
+    }
+
+    /// Ask has no tool name while waiting for its first streamed token. Other
+    /// agent sessions retain their own step labels; don't overlay streamed text.
+    static func pendingStatus(for session: AgentSession, messages: [AgentChatItem]) -> String? {
+        guard session.state == .working else { return nil }
+        if !session.step.isEmpty { return session.step }
+        guard session.provider == .ask, let last = messages.last, case .you = last else { return nil }
+        return "Working…"
     }
 
     @ViewBuilder private func row(_ item: AgentChatItem, _ i: Int) -> some View {

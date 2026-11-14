@@ -116,6 +116,7 @@ private struct SetupWallpaperPreview: View {
 
 struct SetupIntegrationsPage: View {
     var reviewAccess: () -> Void
+    @ObservedObject private var chatGPT = ChatGPTAccount.shared
     @AppStorage(NotificationStore.enabledKey) private var notifications = false
     @State private var readable = false
     @State private var agents = HookInstaller.installed()
@@ -191,6 +192,50 @@ struct SetupIntegrationsPage: View {
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            SetupSection(title: "Ask AI") {
+                HStack(spacing: 12) {
+                    SetupIconBadge(symbol: "sparkles")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ChatGPT account").font(.system(size: 13, weight: .medium))
+                        Text("Use your ChatGPT sign-in for Ask, without the Codex CLI.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    if case .connected = chatGPT.status {
+                        Label("Connected", systemImage: "checkmark")
+                            .font(.system(size: 12)).foregroundStyle(SetupTheme.success)
+                    } else if case .connecting = chatGPT.status {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Text("Not connected").font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(18)
+                Divider().overlay(SetupTheme.line)
+                HStack(spacing: 12) {
+                    switch chatGPT.status {
+                    case .connected(let email, _):
+                        if let email { Text(email).lineLimit(1).textSelection(.enabled) }
+                        Spacer(minLength: 8)
+                        Button("Disconnect") { chatGPT.disconnect() }
+                    case .connecting:
+                        Text("Finish signing in in your browser.")
+                        Spacer(minLength: 8)
+                        Button("Cancel") { chatGPT.disconnect() }
+                    case .disconnected, .error:
+                        Button("Connect ChatGPT…") { Task { try? await chatGPT.connect() } }
+                        Spacer(minLength: 8)
+                    }
+                }
+                .buttonStyle(SetupActionStyle())
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(18)
+                if case .error(let message) = chatGPT.status {
+                    Text(message).font(.system(size: 12)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 18).padding(.bottom, 18)
+                }
             }
             LauncherSettingsSection()
             UsageSettingsSection()

@@ -1,11 +1,27 @@
 import IslandCore
 import SwiftUI
 
+/// The Ask arrow sends a question once connected; before that it performs the
+/// same sign-in action as the text, instead of looking clickable but doing nothing.
+enum AskPrimaryAction: Equatable {
+    case send, connect, wait
+
+    static func forProvider(_ provider: AgentProvider, status: ChatGPTAccountStatus) -> Self {
+        guard provider == .codex else { return .send }
+        switch status {
+        case .connected: return .send
+        case .connecting: return .wait
+        case .disconnected, .error: return .connect
+        }
+    }
+}
+
 /// Text-only Quick Ask: a provider switch, keyboard hint, and capsule field with its send button.
 struct AskCardLayer: View {
     let frame: FrameModel
     let director: IslandDirector
     let provider: AgentProvider?
+    @ObservedObject private var chatGPT = ChatGPTAccount.shared
     @Environment(\.islandMotion) private var motion
     @State private var text = ""
     @FocusState private var focused: Bool
@@ -31,7 +47,10 @@ struct AskCardLayer: View {
                 .task {
                     // The panel has just become key: give the field the keyboard.
                     try? await Task.sleep(for: .milliseconds(60))
-                    focused = true
+                    focused = director.askProvider != .codex || chatGPTReady
+                }
+                .onChange(of: chatGPT.status) { _, _ in
+                    if director.askProvider == .codex && chatGPTReady { focused = true }
                 }
             }
         }
@@ -64,7 +83,23 @@ struct AskCardLayer: View {
     private func field(_ p: AgentProvider) -> some View {
         let placeholder = "Ask \(p == .claude ? "Claude" : "ChatGPT")"
         return HStack(spacing: 0) {
-            if motion.stills {
+            if p == .codex && !chatGPTReady {
+                if case .connecting = chatGPT.status {
+                    ProgressView().controlSize(.mini).tint(.white)
+                    Text("Waiting for ChatGPT sign-in…")
+                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.7))
+                        .padding(.leading, 8)
+                } else {
+                    Button(chatGPTSignInError == nil ? "Connect ChatGPT account…" : "Retry ChatGPT sign-in…") {
+                        primaryAction(for: p)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .help(chatGPTSignInError ?? "Sign in to ChatGPT in your browser to use Ask.")
+                    .accessibilityIdentifier("ask-connect-chatgpt")
+                }
+                Spacer(minLength: 0)
+            } else if motion.stills {
                 Text(placeholder).foregroundStyle(.white.opacity(0.4)).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 TextField(placeholder, text: $text)
@@ -74,7 +109,7 @@ struct AskCardLayer: View {
                     .onExitCommand { director.closeAsk() }
                     .accessibilityLabel(placeholder)
             }
-            Button(action: submit) {
+            Button { primaryAction(for: p) } label: {
                 Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold))
                     .foregroundStyle(p == .claude ? .white : .black)
                     .frame(width: 30, height: 30)
@@ -82,7 +117,8 @@ struct AskCardLayer: View {
                     .contentShape(Circle())
             }
             .buttonStyle(PressScaleStyle(pressed: 0.85, hover: 1.06))
-            .accessibilityLabel("Ask")
+            .accessibilityLabel(p == .codex && !chatGPTReady ? "Connect ChatGPT account" : "Ask")
+            .disabled(AskPrimaryAction.forProvider(p, status: chatGPT.status) == .wait)
         }
         .font(.system(size: 14))
         .padding(.leading, 16).padding(.trailing, 5)
@@ -92,10 +128,29 @@ struct AskCardLayer: View {
     }
 
     private func submit() {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { focused = true; return }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              director.askProvider != .codex || chatGPTReady else { focused = true; return }
         director.submitAsk(text)
         text = ""
         focused = false
+    }
+
+    private func primaryAction(for provider: AgentProvider) {
+        switch AskPrimaryAction.forProvider(provider, status: chatGPT.status) {
+        case .send: submit()
+        case .connect: Task { try? await chatGPT.connect() }
+        case .wait: break
+        }
+    }
+
+    private var chatGPTReady: Bool {
+        if case .connected = chatGPT.status { return true }
+        return false
+    }
+
+    private var chatGPTSignInError: String? {
+        if case .error(let message) = chatGPT.status { return message }
+        return nil
     }
 }
 

@@ -3,19 +3,19 @@ import IslandCore
 import os
 
 /// Quick ask (agents phase 3, docs/superpowers/specs/2026-11-06-quick-ask-native-design.md): questions the notch asks on
-/// the owner's own plans (no API keys). Claude: one long-lived `claude -p` per session over stream-json, stopped after 15
-/// minutes idle (Aide's `Brain`). ChatGPT: one `codex exec` per question, resuming its thread (Aide's `CodexBrain`).
+/// the owner's own plans (no API keys). Claude uses `claude -p`; ChatGPT uses the
+/// signed-in account over HTTPS, without starting or borrowing credentials from the Codex CLI.
 @MainActor
 final class QuickAsk {
     enum Event: Equatable {
-        /// Text as it arrives (Claude streams deltas; Codex sends each message whole).
+        /// Text as it arrives from the selected provider.
         case delta(String)
         /// A tool started (web search, a fetch).
         case tool(String)
         case done(error: String?)
     }
 
-    /// The working folder: hooks from here are the notch's own questions (Codex's hooks fire for `codex exec`).
+    /// The working folder distinguishes the notch's own Claude questions from agent hooks.
     nonisolated static var workspace: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("lenotch/Ask", isDirectory: true)
@@ -35,20 +35,20 @@ final class QuickAsk {
 
     var onEvent: ((String, Event) -> Void)?
     private var claude: [String: ClaudeProcess] = [:]
-    private var codex: [String: CodexRun] = [:]
+    private var chatGPT: [String: ChatGPTChat] = [:]
 
     /// Asks `text` in session `id` (a new one, or a follow-up).
     func ask(_ id: String, provider: AgentProvider, text: String) {
-        try? FileManager.default.createDirectory(at: Self.workspace, withIntermediateDirectories: true)
         let emit: (Event) -> Void = { [weak self] e in self?.onEvent?(id, e) }
         switch provider {
         case .claude, .ask:
+            try? FileManager.default.createDirectory(at: Self.workspace, withIntermediateDirectories: true)
             let p = claude[id] ?? ClaudeProcess(emit: emit)
             claude[id] = p
             p.ask(text)
         case .codex:
-            let c = codex[id] ?? CodexRun(emit: emit)
-            codex[id] = c
+            let c = chatGPT[id] ?? ChatGPTChat(emit: emit)
+            chatGPT[id] = c
             c.ask(text)
         }
     }
@@ -56,11 +56,11 @@ final class QuickAsk {
     /// The session left the island: its process goes too.
     func end(_ id: String) {
         claude.removeValue(forKey: id)?.stop()
-        codex.removeValue(forKey: id)?.stop()
+        chatGPT.removeValue(forKey: id)?.stop()
     }
 
     func stopAll() {
-        for id in Array(claude.keys) + Array(codex.keys) { end(id) }
+        for id in Array(claude.keys) + Array(chatGPT.keys) { end(id) }
     }
 }
 
@@ -219,116 +219,6 @@ private final class ClaudeProcess {
     }
 }
 
-// MARK: - Codex
-
-@MainActor
-private final class CodexRun {
-    private let emit: (QuickAsk.Event) -> Void
-    private var proc: Process?
-    private var thread: String?
-    private var buffer = Data()
-    private var sent = false
-    private var finished = true
-    private var generation = 0
-
-    init(emit: @escaping (QuickAsk.Event) -> Void) { self.emit = emit }
-
-    func ask(_ text: String) {
-        guard let exe = AgentReply.codex else {
-            emit(.done(error: "Can't find Codex on this Mac (it comes with the ChatGPT app)."))
-            return
-        }
-        if proc?.isRunning == true { proc?.terminate() }
-        sent = false; finished = false; buffer.removeAll()
-        generation += 1
-        let gen = generation
-        var args = ["exec"]
-        if let thread { args += ["resume", thread] }
-        args += ["--json", "--skip-git-repo-check", "-s", "read-only"]
-        args.append("-")   // the prompt on stdin
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: exe)
-        p.arguments = args
-        p.currentDirectoryURL = QuickAsk.workspace
-        p.environment = ClaudeProcess.environment
-        let i = Pipe(), o = Pipe()
-        p.standardInput = i
-        p.standardOutput = o
-        p.standardError = FileHandle.nullDevice
-        o.fileHandleForReading.readabilityHandler = { [weak self] h in
-            let d = h.availableData
-            if d.isEmpty { h.readabilityHandler = nil; return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { if self?.generation == gen { self?.consume(d) } } }
-        }
-        p.terminationHandler = { [weak self] proc in
-            DispatchQueue.main.async { MainActor.assumeIsolated { if self?.generation == gen { self?.exited() } } }
-        }
-        do {
-            try p.run()
-            proc = p
-            let preface = thread == nil ? QuickAsk.systemPrompt + "\n\n" : ""
-            try i.fileHandleForWriting.write(contentsOf: Data((preface + text).utf8))
-            try i.fileHandleForWriting.close()
-        } catch {
-            finish(error: "Couldn't start Codex: \(error.localizedDescription)")
-        }
-    }
-
-    func stop() {
-        generation += 1
-        if proc?.isRunning == true { proc?.terminate() }
-        proc = nil
-    }
-
-    private func consume(_ d: Data) {
-        buffer.append(d)
-        while let nl = buffer.firstIndex(of: 0x0A) {
-            let line = buffer[buffer.startIndex..<nl]
-            buffer.removeSubrange(buffer.startIndex...nl)
-            for e in Self.parse(Data(line), sent: &sent, thread: &thread) {
-                if case .done(let err) = e { finish(error: err) } else { emit(e) }
-            }
-        }
-    }
-
-    private func exited() {
-        proc = nil
-        if !finished { finish(error: "Codex stopped unexpectedly.") }
-    }
-
-    private func finish(error: String?) {
-        guard !finished else { return }
-        finished = true
-        emit(.done(error: error))
-    }
-
-    /// One `codex exec --json` line → events (tested).
-    nonisolated static func parse(_ line: Data, sent: inout Bool, thread: inout String?) -> [QuickAsk.Event] {
-        guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any], let type = obj["type"] as? String else { return [] }
-        let item = obj["item"] as? [String: Any]
-        switch type {
-        case "thread.started": thread = obj["thread_id"] as? String
-        case "item.started":
-            switch item?["type"] as? String {
-            case "web_search": return [.tool("WebSearch")]
-            case "command_execution": return [.tool("Bash")]
-            default: break
-            }
-        case "item.completed":
-            if item?["type"] as? String == "agent_message", let text = item?["text"] as? String, !text.isEmpty {
-                defer { sent = true }
-                return [.delta(sent ? "\n\n" + text : text)]
-            }
-        case "turn.completed": return [.done(error: nil)]
-        case "turn.failed", "error":
-            let msg = (obj["error"] as? [String: Any])?["message"] as? String ?? obj["message"] as? String
-            return [.done(error: msg ?? "Codex couldn't finish that.")]
-        default: break
-        }
-        return []
-    }
-}
-
 /// Tests reach the parsers through these.
 enum QuickAskParsing {
     static func claude(_ lines: [String]) -> [QuickAsk.Event] {
@@ -336,9 +226,4 @@ enum QuickAskParsing {
         return lines.flatMap { ClaudeProcess.parse(Data($0.utf8), sawText: &saw, needsBreak: &brk, session: &sid) }
     }
 
-    static func codex(_ lines: [String]) -> (events: [QuickAsk.Event], thread: String?) {
-        var sent = false, thread: String?
-        let events = lines.flatMap { CodexRun.parse(Data($0.utf8), sent: &sent, thread: &thread) }
-        return (events, thread)
-    }
 }
