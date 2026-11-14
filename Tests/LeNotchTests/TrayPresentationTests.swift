@@ -120,6 +120,19 @@ final class TrayPresentationTests: XCTestCase {
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         let image = try XCTUnwrap(renderer.cgImage)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let firstToolX = FrameModel.cx - card.halfWidth + 20 + (card.width - 40) / 8 - 20
+        let firstToolY = frame.cardTop + 20
+        func backgroundBrightness(x: Double, y: Double) throws -> CGFloat {
+            let color = try XCTUnwrap(bitmap.colorAt(x: Int((firstToolX + x) * 2),
+                                                     y: Int((firstToolY + y) * 2))?.usingColorSpace(.deviceRGB))
+            return color.redComponent
+        }
+        // This point lies inside a rounded square but outside the old 40 pt circle.
+        XCTAssertGreaterThan(try backgroundBrightness(x: 4, y: 5), 0.07,
+                             "Tool backgrounds should be rounded squares, not circles")
+        XCTAssertLessThan(try backgroundBrightness(x: 0, y: 0), 0.03,
+                          "Tool backgrounds should retain rounded corners")
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["en-US"]

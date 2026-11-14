@@ -52,7 +52,7 @@ private struct TrayPages: View {
 
 // MARK: - Grid
 
-/// Two rows of tools: 40 pt circles with 11 pt labels, the rows 10 pt apart.
+/// Two rows of tools: 40 pt rounded squares with 11 pt labels, the rows 10 pt apart.
 private struct TrayGrid: View {
     let tray: TrayModel
     let director: IslandDirector
@@ -129,7 +129,8 @@ private struct Tool: View {
                     .accessibilityHidden(true)
                     .foregroundStyle(tint ?? .white)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(tint.map { $0.opacity(0.3) } ?? .white.opacity(0.14)))
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(tint.map { $0.opacity(0.3) } ?? .white.opacity(0.14)))
                     .overlay(alignment: .topTrailing) {
                         if let badge {
                             Text("\(badge)").font(.system(size: 11, weight: .semibold)).monospacedDigit()
