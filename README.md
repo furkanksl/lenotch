@@ -47,6 +47,10 @@ For Setup-window work, use `swift tools/dev.swift --setup` to reopen Setup after
 
 To watch a video in the notch, allow **Screen Recording** in Setup → Permissions → Music & media. This is macOS’s name for screen-capture access: LeNotch mirrors the video window without recording or saving a video file. The screen-recorder tool and its shortcut are not included.
 
+Both video views have **back 10 seconds**, **play/pause**, and **forward 10 seconds** controls. The notch view also has an elapsed/total-time slider. Seeking is available when the source player supplies a duration and accepts media seek commands; LeNotch does not inject browser shortcuts.
+
+Use the captions button to load a local `.srt` or `.vtt` subtitle file. Subtitles follow the video’s reported playback time, including seeking, in the notch and PiP. Captions already enabled in the source player are part of the mirrored picture too. LeNotch does not automatically download or transcribe captions; subtitle files must match the video.
+
 ## Prompter
 
 Open the notch's tools and choose **Prompter**, or right-click the notch and choose **Prompter…**. Write or paste a script in the editor; scripts and display preferences save locally on your Mac.

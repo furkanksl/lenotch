@@ -302,7 +302,8 @@ private struct VideoFocusCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Marquee(text: director.media.title, font: .system(size: 15, weight: .semibold))
+                Marquee(text: director.videoPlayback.title.isEmpty ? director.media.title : director.videoPlayback.title,
+                        font: .system(size: 15, weight: .semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button { director.popOutVideo() } label: {
                     Image(systemName: "pip.enter").font(.system(size: 12, weight: .bold)).foregroundStyle(.white.opacity(0.8))
@@ -325,6 +326,13 @@ private struct VideoFocusCard: View {
                     Image(systemName: "play.rectangle.fill").font(.system(size: 44)).foregroundStyle(.white.opacity(0.3))
                 } else if !director.pipOpen {
                     VideoLayerHost(layer: mirror.layer)
+                }
+                if mirror.state == .showing, !director.pipOpen {
+                    VideoSubtitleOverlay(playback: director.videoPlayback, bottomInset: 114)
+                    VStack {
+                        Spacer(minLength: 0)
+                        VideoTransportControls(playback: director.videoPlayback, showsTimeline: true)
+                    }
                 }
                 message
             }

@@ -28,6 +28,7 @@ typealias Schedule = @MainActor (_ seconds: Double, _ body: @escaping @MainActor
 final class IslandDirector {
     private(set) var island = Island()
     let prompter: PrompterModel
+    let videoPlayback = VideoPlaybackState()
     @ObservationIgnored private let prompterEditor = PrompterEditor()
 
     init(prompter: PrompterModel? = nil) {
@@ -148,6 +149,9 @@ final class IslandDirector {
     private(set) var artwork2: Artwork?
     /// Sends a command to one player by its app (the second player's controls).
     @ObservationIgnored var sendCommandTo: ((MediaCommand, String) -> Void)?
+    @ObservationIgnored var sendSeekTo: ((Double, String) -> Void)?
+
+    func videoPlayerChanged(_ player: NowPlaying) { videoPlayback.update(player) }
 
     var secondInFocus: Bool {
         guard island.media2On else { return false }
@@ -162,6 +166,15 @@ final class IslandDirector {
     }
 
     func nowPlaying2Changed(_ np: NowPlaying?) {
+        if let np { videoPlayback.update(np) }
+        if np == nil, let pinned = videoPlayback.snapshot,
+           pinned.bundleID == nowPlaying2?.bundleID,
+           pipOpen || (island.mediaFocus && island.cardOwner == .media2) {
+            // The main-player sorter hides paused alternatives. Keep the explicitly watched video, rather than
+            // closing its card or redirecting Resume to the music player.
+            nowPlaying2 = pinned
+            return
+        }
         if let data = np?.artwork { if data != artwork2?.data { artwork2 = Artwork(data: data) } } else if np == nil { artwork2 = nil }
         nowPlaying2 = np
         island.media2Title = np?.title ?? ""
@@ -243,7 +256,7 @@ final class IslandDirector {
         if groups.tray && !trayWas { tray.opened() }   // it starts at the grid (or the Shelf for a drag)
         for e in effects { perform(e) }
         if !island.mediaFocus && !pipOpen && videoMirror.state != .idle { videoMirror.stop() }   // the video's view closed
-        if pipOpen && !island.media2On && pipParty == .media2 { closePiP() }   // the video stopped
+        // Pausing can remove a video from the secondary-player ball, but must not close its floating controls.
         if !island.opened && !heldNotices.isEmpty { showHeldNotices() }
         if let a = island.activity {
             if shownActivity != a { shownActivity = a }
@@ -618,7 +631,7 @@ final class IslandDirector {
         guard island.mediaFocus, island.focusVideo else { return }
         pipParty = island.cardOwner
         pipOpen = true
-        pip.show(layer: videoMirror.pipLayer, aspect: videoMirror.aspect)
+        pip.show(layer: videoMirror.pipLayer, aspect: videoMirror.aspect, playback: videoPlayback)
         send(.close)
     }
 
@@ -626,17 +639,32 @@ final class IslandDirector {
         pipOpen = false
         pip.hide()
         videoMirror.stop()
+        videoPlayback.clear()
     }
 
     func pipBackToIsland() {
         pipOpen = false
         pip.hide()
-        openCard(pipParty)
-        openFocus()
+        if let video = videoPlayback.snapshot, let app = video.bundleID {
+            if nowPlaying?.bundleID == app {
+                pipParty = .media
+            } else {
+                nowPlaying2 = video
+                send(.startMedia2(app))
+                pipParty = .media2
+            }
+            openCard(pipParty)
+            island.focusVideo = true
+            send(.focusMedia)
+        } else {
+            openCard(pipParty)
+            openFocus()
+        }
     }
 
     /// The player in focus is a video (YouTube in a browser, a movie): its focused view shows the video, not lyrics.
     var focusedIsVideo: Bool {
+        if island.mediaFocus && island.focusVideo && videoPlayback.available { return true }
         let np = secondInFocus ? nowPlaying2 : (sampleOn ? nil : nowPlaying)
         return np.map { $0.kind == .video || !$0.isMusic } ?? false
     }
@@ -649,6 +677,7 @@ final class IslandDirector {
         island.focusVideo = video
         send(.focusMedia)
         if video, let np, let app = np.bundleID {
+            prepareVideoPlayback(np)
             videoMirror.start(app: app, title: np.title)
             if videoMirror.state == .needsPermission { onNeedsSetup?() }
             onPulse?(media.colorHex); kick(35)
@@ -658,6 +687,14 @@ final class IslandDirector {
         kick(35)
         lyricsDelay = outputLatency()
         loadLyrics()
+    }
+
+    private func prepareVideoPlayback(_ player: NowPlaying) {
+        videoPlayback.date = { [weak self] in self?.date() ?? Date() }
+        videoPlayback.onCommand = { [weak self] command, app in self?.sendCommandTo?(command, app) }
+        videoPlayback.onSeek = { [weak self] seconds, app in self?.sendSeekTo?(seconds, app) }
+        videoPlayback.onScrub = { [weak self] on in self?.scrub(on) }
+        videoPlayback.bind(player)
     }
 
     func retryVideo() {

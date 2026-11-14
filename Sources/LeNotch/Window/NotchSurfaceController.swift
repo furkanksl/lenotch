@@ -130,7 +130,9 @@ final class NotchSurfaceController {
         director.sendCommand = { [weak self] c in self?.nowPlaying.send(c) }
         director.sendCommandTo = { [weak self] c, app in self?.nowPlaying.send(c, to: app) }
         nowPlaying.onSecond = { [weak self] np in self?.director.nowPlaying2Changed(np) }
+        nowPlaying.onPlayerChange = { [weak self] np in self?.director.videoPlayerChanged(np) }
         director.sendSeek = { [weak self] seconds in self?.nowPlaying.seek(to: seconds) }
+        director.sendSeekTo = { [weak self] seconds, app in self?.nowPlaying.seek(to: seconds, in: app) }
         director.sendShuffle = { [weak self] on in self?.nowPlaying.setShuffle(on) }
         director.probeShuffle = { [weak self] done in self?.nowPlaying.probeShuffle(done) }
         director.probePosition = { [weak self] done in self?.nowPlaying.probePosition(done) }

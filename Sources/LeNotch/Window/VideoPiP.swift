@@ -13,10 +13,11 @@ final class VideoPiP {
 
     var isShown: Bool { panel?.isVisible == true }
 
-    func show(layer: CALayer, aspect: Double) {
+    func show(layer: CALayer, aspect: Double, playback: VideoPlaybackState? = nil) {
         let p = panel ?? makePanel()
         panel = p
-        let host = NSHostingView(rootView: PiPContent(layer: layer, close: { [weak self] in self?.onClose?() },
+        let host = NSHostingView(rootView: PiPContent(layer: layer, playback: playback,
+                                                      close: { [weak self] in self?.onClose?() },
                                                       back: { [weak self] in self?.onBackToIsland?() }))
         host.frame = NSRect(origin: .zero, size: p.contentLayoutRect.size)
         host.autoresizingMask = [.width, .height]
@@ -55,25 +56,46 @@ final class VideoPiP {
 
 private struct PiPContent: View {
     let layer: CALayer
+    let playback: VideoPlaybackState?
     let close: () -> Void
     let back: () -> Void
     @State private var over = false
+    @State private var hasHovered = false
+    @State private var controlsActive = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var showsControls: Bool { over || !hasHovered || playback?.playing == false || controlsActive }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             VideoLayerHost(layer: layer, allowsWindowDragging: true)
+            if let playback {
+                VideoSubtitleOverlay(playback: playback, bottomInset: showsControls ? 80 : 16)
+                VStack {
+                    Spacer(minLength: 0)
+                    VideoTransportControls(playback: playback, compact: true,
+                                           onInteractionChange: { controlsActive = $0 })
+                }
+                .opacity(showsControls ? 1 : 0)
+                .allowsHitTesting(showsControls)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: showsControls)
+            }
             HStack(spacing: 8) {
                 button("xmark", "Close", close)
                 Spacer()
                 button("pip.exit", "Back to the island", back)
             }
             .padding(10)
-            .opacity(over ? 1 : 0)
-            .animation(.easeOut(duration: 0.18), value: over)
+            .opacity(over || controlsActive ? 1 : 0)
+            .allowsHitTesting(over || controlsActive)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: over)
         }
         .background(.black)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .onHover { over = $0 }
+        .onHover {
+            over = $0
+            if $0 { hasHovered = true }
+        }
     }
 
     private func button(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
@@ -82,6 +104,7 @@ private struct PiPContent: View {
                 .frame(width: 28, height: 28).background(Circle().fill(.black.opacity(0.55)))
         }
         .buttonStyle(.plain)
+        .help(label)
         .accessibilityLabel(label)
     }
 }

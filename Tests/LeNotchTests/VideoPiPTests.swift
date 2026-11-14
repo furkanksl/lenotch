@@ -1,9 +1,30 @@
 import AppKit
+import NowPlaying
 import XCTest
 @testable import Lenotch
 
 @MainActor
 final class VideoPiPTests: XCTestCase {
+    func testTransportControlsLeaveTheMiddleOfTheVideoDraggable() async throws {
+        let pip = VideoPiP()
+        defer { pip.hide() }
+        let playback = VideoPlaybackState()
+        playback.bind(NowPlaying(title: "A video", bundleID: "com.example.browser", playing: false,
+                                 duration: 120, elapsed: 30, kind: .video))
+        playback.onCommand = { _, _ in }
+        playback.onSeek = { _, _ in }
+        pip.show(layer: try redVideoLayer(), aspect: 16.0 / 9.0, playback: playback)
+        let panel = try XCTUnwrap(pip.panel)
+        await settleLayout(panel)
+        let root = try XCTUnwrap(panel.contentView)
+        let host = try XCTUnwrap(videoHost(in: root))
+        XCTAssertTrue(host.allowsWindowDragging)
+        XCTAssertTrue(root.hitTest(NSPoint(x: root.bounds.midX, y: root.bounds.midY)) === host,
+                      "bottom controls must not swallow dragging from the center of the video")
+        XCTAssertEqual(panel.contentLayoutRect.width, root.bounds.width, accuracy: 1)
+        try assertNativeFrameIsRed(root)
+    }
+
     func testNativeWindowDisplaysSyntheticVideoFrameAcrossItsContent() async throws {
         _ = NSApplication.shared
         let video = try redVideoLayer()

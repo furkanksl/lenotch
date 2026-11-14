@@ -67,6 +67,8 @@ public final class NowPlayingMonitor {
     /// the other is the second.
     public private(set) var second: NowPlaying?
     public var onSecond: ((NowPlaying?) -> Void)?
+    /// App metadata before main/secondary sorting: paused PiP videos still need clock and transport updates.
+    public var onPlayerChange: ((NowPlaying) -> Void)?
 
     /// The main player and the second: the reported one, unless it's paused while Spotify or Music plays (then that
     /// one); both playing, the song is the main one.
@@ -77,6 +79,8 @@ public final class NowPlayingMonitor {
     }
 
     private func republish() {
+        if let fromNotifications { onPlayerChange?(fromNotifications) }
+        if source == .adapter, let fromAdapter { onPlayerChange?(fromAdapter) }
         guard source == .adapter else { publish(fromNotifications); publishSecond(nil); return }
         let s = Self.split(primary: fromAdapter, alternate: fromNotifications)
         publish(s.main)
@@ -145,6 +149,7 @@ public final class NowPlayingMonitor {
     /// Seeks the player to `seconds`: the adapter's `seek <microseconds>`, else AppleScript's `set player position`
     /// to Music or Spotify (only where Automation is already allowed).
     public func seek(to seconds: Double) {
+        guard seconds.isFinite else { return }
         let s = max(seconds, 0)
         if showingAdapter, let adapter {
             run("/usr/bin/perl", [adapter.script.path, adapter.framework.path, "seek", String(Int64(s * 1_000_000))])
@@ -152,6 +157,18 @@ public final class NowPlayingMonitor {
         }
         guard let bundle = current?.bundleID, let script = PlayerNotifications.seekScript(seconds: s, bundleID: bundle) else { return }
         ifAutomationAllowed(bundle) { [weak self] in self?.run("/usr/bin/osascript", ["-e", script]) }
+    }
+
+    /// Seek only the requested app, never whichever player happened to become the main music source.
+    public func seek(to seconds: Double, in bundle: String) {
+        guard seconds.isFinite, !bundle.isEmpty else { return }
+        let s = max(seconds, 0)
+        if source == .adapter, bundle == fromAdapter?.bundleID, let adapter,
+           s <= Double(Int64.max / 1_000_000) {
+            run("/usr/bin/perl", [adapter.script.path, adapter.framework.path, "seek", String(Int64(s * 1_000_000))])
+        } else if let script = PlayerNotifications.seekScript(seconds: s, bundleID: bundle) {
+            ifAutomationAllowed(bundle) { [weak self] in self?.run("/usr/bin/osascript", ["-e", script]) }
+        }
     }
 
     /// Turns shuffle on or off: AppleScript to Music or Spotify where Automation is allowed (Spotify ignores
