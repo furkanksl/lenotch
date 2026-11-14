@@ -1428,25 +1428,7 @@ final class IslandDirector {
         return island.activity?.id == .timer || island.background.contains { $0.id == .timer } ? samples.timerLeft : nil
     }
 
-    /// Something runs that the tray's Pause can stop: the song, or a timer.
-    var trayRunning: Bool { (island.mediaOn && playing) || (trayTimerLeft != nil && !samples.timerPaused) }
-    var trayCanPause: Bool { island.mediaOn || trayTimerLeft != nil }
-
-    /// Pause stops everything that runs (the song and a timer), or resumes it all.
-    func trayPause() {
-        let timer = trayTimerLeft != nil
-        if trayRunning {
-            if island.mediaOn && playing { togglePlaying() }
-            if timer { samples.timerPaused = true }
-        } else {
-            if island.mediaOn && !playing { togglePlaying() }
-            if timer { samples.timerPaused = false }
-        }
-        kick(25)
-        changed()
-    }
-
-    /// Opens the tray at a page: the empty notch's tools, or the player's card with them. Not over an activity's ears.
+    /// Opens the standalone tools menu without interrupting the current activity or playback.
     func openTray(at page: TrayModel.Page = .main) {
         guard forcedMode == nil else { return }
         if groups.tray { if page != .main { tray.go(page) }; return }

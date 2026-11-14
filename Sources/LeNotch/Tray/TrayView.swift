@@ -59,8 +59,7 @@ private struct TrayGrid: View {
 
     var body: some View {
         let timer = director.trayTimerLeft
-        let running = director.trayRunning
-        // Prompter joins the existing tools; Today opens the calendar page without another navigation layer.
+        // The same seven tools whether playback is running or paused.
         VStack(spacing: 10) {
             HStack(spacing: 0) {
                 // Text-only Quick Ask (⌥Space).
@@ -71,8 +70,6 @@ private struct TrayGrid: View {
                 Tool(icon: .today, label: "Today") { tray.go(.today) }
             }
             HStack(spacing: 0) {
-                Tool(icon: running ? .pause : .play, label: running ? "Pause" : "Play") { director.trayPause() }
-                    .disabled(!director.trayCanPause)
                 Tool(icon: .clipboard, label: "Clipboard") { tray.go(.clipboard) }
                 Tool(icon: .shelf, label: "Shelf", badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
                 Tool(icon: .shortcuts, label: "Shortcuts") { tray.go(.shortcuts) }

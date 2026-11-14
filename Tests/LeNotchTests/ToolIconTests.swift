@@ -4,8 +4,8 @@ import XCTest
 
 @MainActor
 final class ToolIconTests: XCTestCase {
-    func testEveryToolHasANonemptyVectorIncludingBothPlaybackStates() {
-        XCTAssertEqual(ToolIcon.allCases.count, 9)
+    func testEveryToolHasANonemptyVector() {
+        XCTAssertEqual(ToolIcon.allCases.count, 7)
         for icon in ToolIcon.allCases {
             let path = ToolIconShape(icon: icon).path(in: CGRect(x: 0, y: 0, width: 24, height: 24))
             XCTAssertFalse(path.isEmpty, "\(icon) must not disappear if an external asset cannot load")

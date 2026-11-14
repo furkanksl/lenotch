@@ -82,20 +82,6 @@ final class TrayPresentationTests: XCTestCase {
         XCTAssertEqual(director.tray.page, .shelf)
     }
 
-    func testToolsPlaybackButtonPausesAndResumesWithoutOpeningThePlayer() {
-        let director = director()
-        director.startMusic()
-        director.openTray()
-
-        director.trayPause()
-        XCTAssertFalse(director.playing)
-        assertToolsOnly(director)
-
-        director.trayPause()
-        XCTAssertTrue(director.playing)
-        assertToolsOnly(director)
-    }
-
     func testReturningToMusicClosesTheToolsAndRestoresThePlayer() {
         let director = director()
         director.startMusic()
@@ -109,8 +95,17 @@ final class TrayPresentationTests: XCTestCase {
     }
 
     func testNativeToolsGridFitsTheStandaloneCardWhileMusicIsPlaying() throws {
+        try assertNativeToolsGrid(playing: true)
+    }
+
+    func testNativeToolsGridOmitsPlaybackControlWhileMusicIsPaused() throws {
+        try assertNativeToolsGrid(playing: false)
+    }
+
+    private func assertNativeToolsGrid(playing: Bool) throws {
         let director = director()
         director.startMusic()
+        if !playing { director.togglePlaying() }
         director.openTray()
         let card = director.island.cardSize(player: CardSize(width: 520, height: 240, radius: 32))
         let frame = FrameModel()
@@ -132,10 +127,29 @@ final class TrayPresentationTests: XCTestCase {
         request.minimumTextHeight = 0.01
         try VNImageRequestHandler(cgImage: image).perform([request])
         let observations = request.results ?? []
-        let labels = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
-        for label in ["Ask", "Timer", "Prompter", "Today", "Pause", "Clipboard", "Shelf", "Shortcuts"] {
+        // Read the label bands separately: Vision can otherwise merge a centered outline icon with "Shelf".
+        var recognizedLabels: [String] = []
+        let labelPitch = (card.height - 40 + 10) / 2
+        for row in 0..<2 {
+            let rect = CGRect(x: FrameModel.cx - card.halfWidth + 20,
+                              y: frame.cardTop + 20 + Double(row) * labelPitch + 42,
+                              width: card.width - 40, height: 20)
+            let crop = try XCTUnwrap(image.cropping(to: CGRect(x: rect.minX * 2, y: rect.minY * 2,
+                                                             width: rect.width * 2, height: rect.height * 2)))
+            let labelRequest = VNRecognizeTextRequest()
+            labelRequest.recognitionLevel = .accurate
+            labelRequest.recognitionLanguages = ["en-US"]
+            labelRequest.usesLanguageCorrection = false
+            try VNImageRequestHandler(cgImage: crop).perform([labelRequest])
+            recognizedLabels += (labelRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        }
+        let labels = recognizedLabels.joined(separator: " ").lowercased()
+        for label in ["Ask", "Timer", "Prompter", "Today", "Clipboard", "Shelf", "Shortcuts"] {
             XCTAssertTrue(labels.contains(label.lowercased()), "Missing tools label \(label): \(labels)")
         }
+        let words = Set(labels.split(whereSeparator: \.isWhitespace))
+        XCTAssertFalse(words.contains("play"), "Playback belongs in the player, not the tools menu")
+        XCTAssertFalse(words.contains("pause"), "Playback belongs in the player, not the tools menu")
 
         // The two rows must remain inside the narrow card, not in a displaced player-side column.
         let cardRect = CGRect(x: FrameModel.cx - card.halfWidth, y: frame.cardTop, width: card.width, height: card.height)
