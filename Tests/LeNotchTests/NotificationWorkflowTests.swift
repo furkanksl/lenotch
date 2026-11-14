@@ -21,6 +21,52 @@ import XCTest
                body: "Message \(index)", date: Date().addingTimeInterval(Double(index) - 100))
     }
 
+    func testStartupAndRepeatedPollsDoNotImportStoredHistory() {
+        let (d, _) = director(), history = (1...80).map { notice($0) }
+        d.noticesChanged(all: history, arrived: [])
+        XCTAssertTrue(d.notificationInbox.items.isEmpty, "Stored records are not an unread count")
+        XCTAssertFalse(d.island.opened)
+        d.noticesChanged(all: history, arrived: [])
+        XCTAssertTrue(d.notificationInbox.items.isEmpty, "Polling must not import historical records either")
+        d.showTool(.notifications)
+        XCTAssertTrue(d.notificationInbox.items.isEmpty, "Opening Inbox must not seed it from history")
+    }
+
+    func testOnlyNewArrivalsEnterInboxEvenWhileAnotherToolIsOpen() {
+        let (d, _) = director(), history = (1...80).map { notice($0) }, fresh = notice(81)
+        d.noticesChanged(all: history, arrived: [])
+        d.showTool(.notifications)
+        d.noticesChanged(all: history + [fresh], arrived: [fresh])
+        XCTAssertEqual(d.notificationInbox.items.map(\.id), [fresh.id])
+        XCTAssertEqual(d.tray.page, .notifications)
+        d.noticesChanged(all: history + [fresh], arrived: [])
+        XCTAssertEqual(d.notificationInbox.items.map(\.id), [fresh.id])
+        d.noticesChanged(all: history, arrived: [])
+        XCTAssertTrue(d.notificationInbox.items.isEmpty, "A removed live notification must not be replaced with history")
+    }
+
+    func testRestartingOrReenablingDoesNotCountExistingSessionHistoryAgain() {
+        let (d, _) = director(), first = notice(1)
+        d.noticesChanged(all: [first], arrived: [first])
+        XCTAssertEqual(d.notificationInbox.items.count, 1)
+        d.noticesChanged(all: [], arrived: [])
+        d.noticesChanged(all: [first], arrived: [])
+        XCTAssertTrue(d.notificationInbox.items.isEmpty)
+        let (restarted, _) = director()
+        restarted.noticesChanged(all: [first], arrived: [])
+        XCTAssertTrue(restarted.notificationInbox.items.isEmpty)
+    }
+
+    func testCapacityDoesNotRefillFromOlderRecordsAfterClear() {
+        let (d, _) = director(), arrivals = (1...65).map { notice($0) }
+        d.showTool(.notifications)
+        d.noticesChanged(all: arrivals, arrived: arrivals)
+        XCTAssertEqual(d.notificationInbox.items.count, NotificationInbox.capacity)
+        d.clearNotificationInbox()
+        d.noticesChanged(all: arrivals, arrived: [])
+        XCTAssertTrue(d.notificationInbox.items.isEmpty, "The older 25 records must not refill the cleared list")
+    }
+
     func testBannerExpiresButInboxRetainsArrival() {
         let (d, scheduler) = director(), n = notice(1)
         d.noticesChanged(all: [n], arrived: [n])
@@ -46,7 +92,7 @@ import XCTest
 
     func testExpandedStackKeepsBannerOpenAndUsesTheListSize() {
         let (d, scheduler) = director(), first = notice(1), second = notice(2)
-        d.noticesChanged(all: [first, second], arrived: [second])
+        d.noticesChanged(all: [first, second], arrived: [first, second])
         d.expandNotices(true)
         scheduler.advance(8)
         XCTAssertTrue(d.island.opened)
@@ -114,7 +160,7 @@ import XCTest
 
     func testNativeNotificationDetailAndExpandedColumnRenderReadableContent() async throws {
         let (d, _) = director(), first = notice(1), second = notice(2)
-        d.noticesChanged(all: [first, second], arrived: [second])
+        d.noticesChanged(all: [first, second], arrived: [first, second])
         for expanded in [false, true] {
             d.expandNotices(expanded)
             let height = expanded ? 348.0 : 206.0

@@ -10,7 +10,7 @@ private let noticeLog = Logger(subsystem: "com.lenotch.app", category: "notices"
 /// database, readable with Full Disk Access. Each record has its app, the plist of the request (title `titl`, subtitle
 /// `subt`, body `body`, thread `thre`), the interruption level (`intl`) and when it was delivered. The list is read off
 /// the main thread and watched through the database's write-ahead log, so an arrival lands at once. Nothing a
-/// notification says is ever logged.
+/// notification says is ever logged. Stored records may be historical; they are not an unread count.
 final class NotificationStore: @unchecked Sendable {
     static let folder = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Group Containers/group.com.apple.usernoted/db2")

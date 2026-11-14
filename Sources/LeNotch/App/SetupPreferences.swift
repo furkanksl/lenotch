@@ -127,7 +127,7 @@ struct SetupIntegrationsPage: View {
         VStack(alignment: .leading, spacing: 24) {
             SetupSection(title: "Notifications") {
                 SetupPreferenceRow(symbol: "bell.badge", title: "Notifications in the notch",
-                                   detail: "Stack notifications in the notch and browse up to 40 in this session. Nothing is saved by LeNotch.",
+                                   detail: "Collect new notifications while LeNotch is running, up to 40 per session. Existing history isn’t imported or counted as unread.",
                                    isOn: $notifications)
                     .padding(18)
                 Divider().overlay(SetupTheme.line)

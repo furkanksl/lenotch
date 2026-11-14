@@ -20,13 +20,15 @@ import XCTest
 
     func testDismissedNotificationsDoNotReappearOnPoll() {
         let inbox = NotificationInbox(), snapshot = [notice(1), notice(2)]
-        inbox.synchronize(snapshot)
+        inbox.synchronize(snapshot, arrived: snapshot)
         inbox.dismiss("nc:2")
         inbox.synchronize(snapshot)
         XCTAssertEqual(inbox.items.map(\.id), ["nc:1"])
         inbox.synchronize([])
         inbox.synchronize(snapshot)
-        XCTAssertEqual(inbox.items.count, 2, "A removed notification may later arrive anew")
+        XCTAssertTrue(inbox.items.isEmpty, "An interrupted snapshot must not replay previously observed history")
+        inbox.synchronize(snapshot, arrived: snapshot)
+        XCTAssertEqual(inbox.items.count, 2, "Only an explicit new arrival can admit a removed record again")
     }
 
     func testNewArrivalDoesNotStealAnActiveReply() {
@@ -45,7 +47,7 @@ import XCTest
 
     func testSnapshotRemovalAndClearDiscardSensitiveDrafts() {
         let inbox = NotificationInbox()
-        inbox.synchronize([notice(1), notice(2)])
+        inbox.synchronize([notice(1), notice(2)], arrived: [notice(1), notice(2)])
         inbox.beginReply(to: notice(1)); inbox.draft = "Private"
         inbox.synchronize([notice(2)])
         XCTAssertEqual(inbox.selected?.id, "nc:2")
@@ -56,7 +58,7 @@ import XCTest
 
     func testStaleRowCannotStartAReplyAgainstAnotherNotification() {
         let inbox = NotificationInbox()
-        inbox.synchronize([notice(1), notice(2)])
+        inbox.synchronize([notice(1), notice(2)], arrived: [notice(1), notice(2)])
         inbox.select(notice(2))
         inbox.synchronize([notice(2)])
         inbox.beginReply(to: notice(1))
@@ -66,7 +68,7 @@ import XCTest
 
     func testRemovingSourceAfterSendKeepsPinnedTargetAndSubmissionState() {
         let inbox = NotificationInbox()
-        inbox.synchronize([notice(1)])
+        inbox.synchronize([notice(1)], arrived: [notice(1)])
         inbox.beginReply(to: notice(1)); inbox.draft = "A reply"
         XCTAssertEqual(inbox.beginSubmission()?.id, "nc:1")
         inbox.synchronize([notice(2)])

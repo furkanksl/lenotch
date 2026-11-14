@@ -230,7 +230,7 @@ struct NotificationHistoryView: View {
             if director.notificationInbox.items.isEmpty {
                 VStack(spacing: 9) {
                     Image(systemName: "bell").font(.system(size: 25)).foregroundStyle(IslandColor.dim)
-                    Text("You're all caught up").font(IslandType.body)
+                    Text("No new notifications").font(IslandType.body)
                     Text(NotificationStore.enabled ? "New notifications will appear here." : "Enable Notifications in Setup to get started.")
                         .font(.system(size: 11)).foregroundStyle(IslandColor.dim).multilineTextAlignment(.center)
                     if !NotificationStore.enabled {
@@ -267,7 +267,7 @@ struct NotificationHistoryView: View {
                 }
                 .scrollIndicators(.hidden)
             }
-            Text("This session only · Clear dismisses from LeNotch, not Notification Center")
+            Text("New this session · Clear dismisses from LeNotch, not Notification Center")
                 .font(.system(size: 9)).foregroundStyle(IslandColor.dim).lineLimit(1).minimumScaleFactor(0.8)
         }
     }

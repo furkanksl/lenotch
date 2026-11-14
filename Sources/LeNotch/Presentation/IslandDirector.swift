@@ -1512,7 +1512,7 @@ final class IslandDirector {
 
     /// macOS delivered these just now (the store's first read after launch delivers none).
     func noticesChanged(all: [Notice], arrived: [Notice]) {
-        notificationInbox.synchronize(all.filter { $0.app != "com.lenotch.app" })
+        notificationInbox.synchronize(all.filter { $0.app != "com.lenotch.app" }, arrived: arrived)
         for n in arrived { notify(n) }
     }
 

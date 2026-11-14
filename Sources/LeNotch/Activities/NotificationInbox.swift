@@ -33,12 +33,17 @@ final class NotificationInbox {
         if selectedID == nil { selectedID = items.first?.id }
     }
 
-    /// Backlog is visible in the inbox, but only fresh arrivals are allowed to interrupt the notch.
-    func synchronize(_ snapshot: [Notice]) {
+    /// Notification Center retains historical records; a snapshot is not an unread list.
+    /// Admit only live arrivals. Later snapshots may update or remove those entries, never backfill history.
+    func synchronize(_ snapshot: [Notice], arrived: [Notice] = []) {
+        let tracked = Set(items.map(\.id))
+        let incoming = Set(arrived.map(\.id))
         let available = Set(snapshot.map(\.id))
         dismissed.formIntersection(available)
         items.removeAll { !available.contains($0.id) }
-        for notice in snapshot { receive(notice) }
+        for notice in snapshot where tracked.contains(notice.id) || incoming.contains(notice.id) {
+            receive(notice)
+        }
         if let selectedID, !items.contains(where: { $0.id == selectedID }) {
             // Native Send commonly removes its source notification. Keep its exact target and outcome visible.
             if replyTarget?.id == selectedID { return }
