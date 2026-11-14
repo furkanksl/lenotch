@@ -199,8 +199,6 @@ private struct ActivityControls: View {
                         .tint(running != nil ? .accentColor : nil)
                         .buttonStyle(.bordered)
                 }
-                Button("Focus on") { director.showFocusSample(on: true) }.buttonStyle(.bordered)
-                Button("Focus off") { director.showFocusSample(on: false) }.buttonStyle(.bordered)
                 Button("Battery 20%") { director.showLowBatterySample(level: 20) }.buttonStyle(.bordered)
                 Button("Battery 10%") { director.showLowBatterySample(level: 10) }.buttonStyle(.bordered)
                 // Notifications (11-07): the next sample (every shape and level in turn), and the center.
@@ -229,7 +227,7 @@ private struct ContextControls: View {
         Section("Context") {
             Toggle("Live: the island follows the Mac", isOn: Binding(get: { director.liveContext },
                                                                    set: { director.setLiveContext($0) }))
-            Text("System: \(sys.frontmostApp)\(sys.fullscreen ? " · fullscreen" : "")\(sys.menuOpen ? " · menu open" : "")\(sys.locked ? " · locked" : "")\(sys.micInUse ? " · mic in use" : "")\(sys.cameraInUse ? " · camera in use" : "")\(sys.focusOn.map { $0 ? " · Focus on" : " · Focus off" } ?? " · Focus unknown")")
+            Text("System: \(sys.frontmostApp)\(sys.fullscreen ? " · fullscreen" : "")\(sys.menuOpen ? " · menu open" : "")\(sys.locked ? " · locked" : "")\(sys.micInUse ? " · mic in use" : "")\(sys.cameraInUse ? " · camera in use" : "")")
                 .font(.caption.monospaced()).foregroundStyle(.secondary)
             Picker("Frontmost app", selection: binding(\.frontmostApp)) {
                 ForEach(Self.apps, id: \.0) { Text($0.1).tag($0.0) }

@@ -1,7 +1,7 @@
 /// The activities the island can show, with what the simulator says about each one
 /// (`ACT` in `sim/src/acts.js`).
 public enum ActivityID: String, CaseIterable, Sendable {
-    case incoming, call, airpods, focus, charging, battery, timer, meeting, camera, download, messages
+    case incoming, call, airpods, charging, battery, timer, meeting, camera, download, messages
     case prompter
     /// Chess (11-06, docs/superpowers/specs/2026-11-06-chess-design.md): the opponent moved while you were elsewhere.
     case chess
@@ -56,7 +56,7 @@ public struct ActivitySpec: Sendable {
     /// short ones like the iPhone's (owner, 11-01: the short cards were cramped where there's more than one row).
     public var padding: Double {
         switch id {
-        case .call, .focus, .meeting, .download, .messages, .incoming, .camera, .prompter,
+        case .call, .meeting, .download, .messages, .incoming, .camera, .prompter,
              .chess, .agentLimit, .agentBack, .notice: 20
         default: 14
         }
@@ -75,7 +75,6 @@ public struct ActivitySpec: Sendable {
         case .incoming: "Incoming call"
         case .call: "Call"
         case .airpods: "AirPods"
-        case .focus: "Focus"
         case .charging: "Charging"
         case .battery: "Low battery"
         case .timer: "Timer"
@@ -109,9 +108,6 @@ public struct ActivitySpec: Sendable {
             ActivitySpec(id: .airpods, tier: .transient, ear: nil,
                          card: CardSize(width: 372, height: 120, radius: 40), transient: 5, opens: false,
                          pulse: nil, colorHex: "#E8F0FF"),
-            ActivitySpec(id: .focus, tier: .transient, ear: 96,
-                         card: CardSize(width: 372, height: 84, radius: 42), transient: 3.4, opens: false,
-                         pulse: nil, colorHex: "#7D7AFF"),
             ActivitySpec(id: .charging, tier: .transient, ear: 120,
                          card: CardSize(width: 372, height: 102, radius: 40), transient: 4, opens: false,
                          pulse: nil, colorHex: green),

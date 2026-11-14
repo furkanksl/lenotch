@@ -19,10 +19,6 @@ final class NoticeTests: XCTestCase {
         XCTAssertEqual(NoticeArrival.of(n("a"), context: c, trayOpen: false), .ears)
         XCTAssertEqual(NoticeArrival.of(n("a", level: .passive), context: c, trayOpen: false), .skip)
         XCTAssertEqual(NoticeArrival.of(n("a"), context: c, trayOpen: true), .skip)
-        var focus = c; focus.focusOn = true
-        XCTAssertEqual(NoticeArrival.of(n("a"), context: focus, trayOpen: false), .skip)
-        XCTAssertEqual(NoticeArrival.of(n("a", level: .timeSensitive), context: focus, trayOpen: false), .ears)
-        XCTAssertEqual(NoticeArrival.of(n("a", level: .critical), context: focus, trayOpen: false), .ears)
         var front = c; front.frontmostApp = "com.apple.mail"
         XCTAssertEqual(NoticeArrival.of(n("a"), context: front, trayOpen: false), .skip)
         var sharing = c; sharing.sharing = true

@@ -143,7 +143,7 @@ final class NotchSurfaceController {
             guard let self else { return 0 }
             let c = director.island.context
             let key = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
-            return DesktopColors.pulseScale(focusOn: c.focusOn, secondsSinceKey: key, presenting: c.presenting)
+            return DesktopColors.pulseScale(secondsSinceKey: key, presenting: c.presenting)
         }
         LockWallpaper.shared.raiseAbove = { [weak self] in
             guard let self else { return }
@@ -188,14 +188,13 @@ final class NotchSurfaceController {
         clipboard.stop()
     }
 
-    /// The tray's sources: the clipboard, Shortcuts, and asynchronous Control Center Focus controls.
+    /// The tray's sources: the clipboard and Shortcuts.
     private func wireTray() {
         let tray = director.tray
         clipboard.onText = { [weak tray] text in tray?.addClip(text) }
         clipboard.start()
         tray.copyToPasteboard = { [weak self] text in self?.clipboard.write(text) }
         tray.runShortcut = { name in ShortcutsCLI.run(shortcut: name) }
-        tray.setFocus = { mode, enabled in await FocusSwitcher.set(mode.rawValue, enabled: enabled) }
         tray.listShortcuts = { [weak tray] in
             Task { @MainActor in
                 let names = await ShortcutsCLI.list()

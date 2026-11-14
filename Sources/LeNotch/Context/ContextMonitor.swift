@@ -1,12 +1,11 @@
 import AppKit
 import CoreAudio
 import CoreMediaIO
-import Intents
 import IslandCore
 import OSLog
 
-/// Publishes where you are on the Mac (`DesktopContext`) from the system's own signals, with no
-/// permission beyond Focus: the frontmost app (debounced), Space changes, fullscreen and open menus
+/// Publishes where you are on the Mac (`DesktopContext`) from the system's own signals:
+/// the frontmost app (debounced), Space changes, fullscreen and open menus
 /// (from the window list), lock and sleep, and whether the microphone or a camera is in use.
 /// Typing is read at the moment it matters (`typingNow`), so nothing polls for it.
 @MainActor
@@ -26,8 +25,6 @@ final class ContextMonitor {
     private var viewedPoll: Timer?
     private var viewedReading = false
     private let claudeTitles = ClaudeWindowTitle()
-    private var focusPoll: Timer?
-    private var focusWatch: DispatchSourceFileSystemObject?
     private var frontTitlePoll: Timer?
     private var inputDevice = AudioObjectID(kAudioObjectUnknown)
     private var inputListener: AudioObjectPropertyListenerBlock?
@@ -54,7 +51,6 @@ final class ContextMonitor {
         if let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier { context.frontmostApp = app }
         startMicrophone()
         startCameras()
-        startFocus()
         recheckScreen(after: [0])
         publish()
     }
@@ -312,55 +308,6 @@ final class ContextMonitor {
         CMIOObjectPropertyAddress(mSelector: CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere),
                                   mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeWildcard),
                                   mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementWildcard))
-    }
-
-    // MARK: - Focus (on/off only, once allowed in the setup window)
-
-    private func startFocus() {
-        readFocus()
-        let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.readFocus() } }
-        t.tolerance = 5
-        RunLoop.main.add(t, forMode: .common)
-        focusPoll = t
-        observe(NSWorkspace.shared.notificationCenter, NSWorkspace.activeSpaceDidChangeNotification) { $0.readFocus() }
-    }
-
-    func readFocus() {
-        // Which mode, from macOS's Focus database when it's readable (Full Disk Access); else on or off only.
-        if let state = FocusDatabase.read() {
-            if context.focusOn != (state != nil) || context.focusName != state?.name {
-                Self.log.notice("focus: \(state.map { "\($0.name) (\($0.identifier))" } ?? "off", privacy: .public)")
-            }
-            set(\.focusOn, state != nil)
-            set(\.focusName, state?.name)
-            set(\.focusSymbol, state?.symbol)
-            watchFocusDatabase()
-            return
-        }
-        set(\.focusName, nil)
-        set(\.focusSymbol, nil)
-        let center = INFocusStatusCenter.default
-        guard center.authorizationStatus == .authorized else { set(\.focusOn, nil); return }
-        set(\.focusOn, center.focusStatus.isFocused)
-    }
-
-    /// The database's folder changes as a Focus turns on, off or switches: read it again at once (the 30 s poll was
-    /// the only signal, so a change could show half a minute late).
-    private func watchFocusDatabase() {
-        guard focusWatch == nil else { return }
-        let fd = open(FocusDatabase.folder.path, O_EVTONLY)
-        guard fd >= 0 else { return }
-        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .extend],
-                                                            queue: .main)
-        src.setEventHandler { [weak self] in
-            MainActor.assumeIsolated {
-                // The files are replaced a moment after the folder changes: read once it has settled.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { MainActor.assumeIsolated { self?.readFocus() } }
-            }
-        }
-        src.setCancelHandler { close(fd) }
-        src.resume()
-        focusWatch = src
     }
 
     // MARK: - Helpers

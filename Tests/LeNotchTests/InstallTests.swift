@@ -19,10 +19,11 @@ final class InstallTests: XCTestCase {
         XCTAssertEqual(Uninstaller.bundleID, "com.lenotch.app")
 
         for key in ["NSCalendarsFullAccessUsageDescription", "NSBluetoothAlwaysUsageDescription",
-                    "NSFocusStatusUsageDescription", "NSAudioCaptureUsageDescription", "NSAppleEventsUsageDescription"] {
+                    "NSAudioCaptureUsageDescription", "NSAppleEventsUsageDescription"] {
             let description = try XCTUnwrap(info[key] as? String, key)
             XCTAssertTrue(description.contains("LeNotch"), "\(key) should use the app's display name")
         }
+        XCTAssertNil(info["NSFocusStatusUsageDescription"], "LeNotch no longer requests Focus status")
     }
 
     func testAlreadyInApplicationsStays() {

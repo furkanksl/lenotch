@@ -5,7 +5,7 @@ import IslandCore
 /// replayed as event traces on the pure model.
 final class IslandTests: XCTestCase {
     func testRemovedScoreActivitiesCannotBeSelected() {
-        for name in ["kickoff", "match", "goal", "fulltime", "recording", "recordCountdown", "recordingSaved", "support"] {
+        for name in ["kickoff", "match", "goal", "fulltime", "recording", "recordCountdown", "recordingSaved", "support", "focus"] {
             XCTAssertNil(ActivityID(rawValue: name), "removed features must not be available to the activity menu or dev commands")
         }
     }

@@ -18,7 +18,6 @@
 	<key>SUEnableAutomaticChecks</key><true/>
 	<key>NSCalendarsFullAccessUsageDescription</key><string>LeNotch shows your next meeting and its join link.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key><string>LeNotch shows your AirPods connecting and their battery.</string>
-	<key>NSFocusStatusUsageDescription</key><string>LeNotch shows when a Focus is on.</string>
 	<key>NSAudioCaptureUsageDescription</key><string>LeNotch moves the music bars with the sound your Mac plays. Nothing is recorded or saved.</string>
 	<key>NSAppleEventsUsageDescription</key><string>LeNotch controls Music and Spotify (play, pause, skip) when it can't read Now Playing directly.</string>
 </dict>

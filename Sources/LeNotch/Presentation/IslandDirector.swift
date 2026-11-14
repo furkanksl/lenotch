@@ -1232,12 +1232,6 @@ final class IslandDirector {
         case .pauseDownload:
             if let a = target, !isSample(a) { transferControl?(.pauseDownload) } else { samples.downloadPaused.toggle() }
             kick(25)
-        case .focusSettings:
-            // Focus can't be set from here: its settings can.
-            if let url = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension") {
-                NSWorkspace.shared.open(url)
-            }
-            endTarget()
         case .send(let text):
             // P4 sends through Messages with AppleScript; the sample only ends the notification.
             guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
@@ -1380,13 +1374,6 @@ final class IslandDirector {
         systemContext = c
         if liveContext { setContext(c) }
         if c.lockScreen != was.lockScreen { lockScreenChanged(c.lockScreen) }
-        // Focus turning on or off (not its first reading), and the camera turning on or off.
-        // On, off, or another mode while on (Work → Sleep): the Focus moment shows.
-        if let on = c.focusOn, let before = was.focusOn, on != before || (on && c.focusName != was.focusName && was.focusName != nil) {
-            show(.focus, sample: false)
-        }
-        if c.focusOn == false { tray.focusTurnedOff() }
-        if c.focusOn == true { tray.systemFocus(c.focusName) }
         if c.cameraInUse && !was.cameraInUse {
             cameraSince = date()
             show(.camera, opened: false, sample: false)
@@ -1398,18 +1385,6 @@ final class IslandDirector {
 
     /// When the camera turned on (live camera activity).
     private(set) var cameraSince: Date?
-
-    /// Whether Focus is on, for its ears and card: live, or the sample's.
-    func focusOnFor(_ a: ActivityInstance) -> Bool {
-        if !isSample(a), let on = systemContext.focusOn { return on }
-        return samples.focusOn
-    }
-
-    /// The Focus that's on, by name and symbol, when macOS says which (live only; the sample is plain "Focus").
-    func focusModeFor(_ a: ActivityInstance) -> (name: String, symbol: String)? {
-        guard !isSample(a), let name = systemContext.focusName else { return nil }
-        return (name, systemContext.focusSymbol ?? "moon.fill")
-    }
 
     /// Seconds the camera has been on, and since when.
     func cameraFor(_ a: ActivityInstance) -> (seconds: Double, since: Date) {
@@ -1430,12 +1405,6 @@ final class IslandDirector {
     func lowBattery(_ p: PowerInfo) {
         power = p
         show(.battery, sample: false)
-    }
-
-    /// Debug: Focus on or off (sample).
-    func showFocusSample(on: Bool) {
-        samples.focusOn = on
-        show(.focus)
     }
 
     /// Debug: low battery at a level (sample).
@@ -2238,7 +2207,6 @@ enum ActivityAction: Equatable, Sendable {
     case pauseTimer, cancelTimer
     case join
     case pauseDownload, showInFinder
-    case focusSettings
     case send(String), markRead
 }
 

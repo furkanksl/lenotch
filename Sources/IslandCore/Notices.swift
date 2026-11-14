@@ -8,7 +8,7 @@ import Foundation
 public enum NoticeLevel: Int, Sendable, Equatable {
     case passive = 0, active = 1, timeSensitive = 2, critical = 3
 
-    /// Comes through a Focus, like iPhone's.
+    /// Time-sensitive or critical delivery.
     public var urgent: Bool { self == .timeSensitive || self == .critical }
 }
 
@@ -60,11 +60,10 @@ public enum NoticeArrival: Equatable, Sendable {
     /// Nothing shows (macOS keeps it in its own Notification Center).
     case skip
 
-    /// Skipped when it's passive, from the app you're at (that app shows it; on the other display it comes here), presenting, in fullscreen, locked, while the
-    /// tray is open, or during a Focus unless it's time-sensitive or critical.
+    /// Skipped when it's passive, from the app you're at (that app shows it; on the other display it comes here),
+    /// presenting, in fullscreen, locked, or while the tray is open.
     public static func of(_ n: Notice, context c: DesktopContext, trayOpen: Bool) -> NoticeArrival {
         if n.level == .passive || c.presenting || c.fullscreen || c.locked || trayOpen || c.at(n.app) { return .skip }
-        if c.focusOn == true && !n.level.urgent { return .skip }
         return .ears
     }
 }

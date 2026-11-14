@@ -45,7 +45,6 @@ private struct TrayPages: View {
                 switch tray.page {
                 case .main: TrayGrid(tray: tray, director: director)
                 case .timer: TimerPage(tray: tray, director: director)
-                case .focus: FocusPage(tray: tray)
                 case .clipboard: ClipboardPage(tray: tray)
                 case .shelf: ShelfPage(tray: tray)
                 case .shortcuts: ShortcutsPage(tray: tray)
@@ -74,12 +73,12 @@ private struct TrayGrid: View {
         // Prompter joins the existing tools; Today opens the calendar page without another navigation layer.
         VStack(spacing: 10) {
             HStack(spacing: 0) {
-                // Quick ask (phase 3): Claude or ChatGPT, with the screen (⌃⌥⌘A anywhere).
+                // Text-only Quick Ask (⌥Space).
                 Tool(symbol: "sparkles", label: "Ask") { director.openAsk() }
-                    .help("Ask Claude or ChatGPT about your screen (⌥Space)")
+                    .help("Ask Claude or ChatGPT (⌥Space)")
                 Tool(symbol: "timer", label: timer.map(clockText) ?? "Timer", tint: timer != nil ? IslandColor.orange : nil) { tray.go(.timer) }
-                Tool(symbol: "moon", label: tray.focusName ?? tray.focus?.rawValue ?? "Focus", tint: tray.focusName != nil || tray.focus != nil ? IslandColor.indigo : nil) { tray.go(.focus) }
                 Tool(symbol: "text.alignleft", label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
+                Tool(symbol: "calendar", label: "Today") { tray.go(.today) }
             }
             HStack(spacing: 0) {
                 Tool(symbol: running ? "pause" : "play", label: running ? "Pause" : "Play") { director.trayPause() }
@@ -87,7 +86,6 @@ private struct TrayGrid: View {
                 Tool(symbol: "clipboard", label: "Clipboard") { tray.go(.clipboard) }
                 Tool(symbol: "tray", label: "Shelf", badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
                 Tool(symbol: "square.on.square", label: "Shortcuts") { tray.go(.shortcuts) }
-                Tool(symbol: "calendar", label: "Today") { tray.go(.today) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -224,7 +222,7 @@ private struct Pill<Icon: View>: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 icon
-                Text(label).lineLimit(1).minimumScaleFactor(0.85)   // "Do Not Disturb" in the column beside the player
+                Text(label).lineLimit(1).minimumScaleFactor(0.85)
                 if !centred { Spacer(minLength: 0) }
             }
             .font(.system(size: centred ? 15 : 13, weight: .medium)).monospacedDigit()
@@ -396,35 +394,6 @@ private struct TimerPage: View {
                     Pill(label: "\(m) min", centred: true) { EmptyView() } action: { director.startTimer(minutes: m) }
                 }
             }
-        }
-    }
-}
-
-private struct FocusPage: View {
-    let tray: TrayModel
-
-    var body: some View {
-        Page(tray: tray, title: "Focus", action: ("Settings", {
-            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension")!)
-        }), status: tray.focusError) {
-            Pills {
-                ForEach(TrayModel.FocusMode.allCases) { mode in
-                    Pill(label: mode.rawValue, on: tray.focus == mode) {
-                        Group {
-                            if tray.focusPending == mode {
-                                ProgressView().controlSize(.mini).tint(.white)
-                            } else {
-                                Image(systemName: mode.symbol).font(.system(size: 13))
-                                    .foregroundStyle(tray.focus == mode ? Color(hex: "#A9A7FF") : .white)
-                            }
-                        }
-                        .frame(width: 16, height: 16)
-                    } action: { Task { await tray.pick(mode) } }
-                    .accessibilityValue(tray.focus == mode ? "On" : "Off")
-                    .help(tray.focus == mode ? "Turn off \(mode.rawValue)" : "Turn on \(mode.rawValue)")
-                }
-            }
-            .disabled(tray.focusPending != nil)
         }
     }
 }

@@ -59,11 +59,6 @@ public struct DesktopContext: Equatable, Sendable {
     /// Something is using the microphone or a camera (for calls and the filming indicator, P4).
     public var micInUse: Bool
     public var cameraInUse: Bool
-    /// A Focus is on (nil: not readable).
-    public var focusOn: Bool?
-    /// Which one, and its symbol, when macOS's Focus database is readable (Full Disk Access); nil otherwise.
-    public var focusName: String?
-    public var focusSymbol: String?
     /// The front window's title while a browser is in front (its active tab): a player in that browser leaves the
     /// island only while you're on its own tab (owner, 11-11).
     public var frontWindowTitle: String?
@@ -74,7 +69,7 @@ public struct DesktopContext: Equatable, Sendable {
 
     public init(frontmostApp: String = BundleID.finder, fullscreen: Bool = false, menuOpen: Bool = false,
                 typing: Bool = false, sharing: Bool = false, locked: Bool = false, micInUse: Bool = false,
-                cameraInUse: Bool = false, focusOn: Bool? = nil, lockScreen: Bool = false, viewedSession: String? = nil) {
+                cameraInUse: Bool = false, lockScreen: Bool = false, viewedSession: String? = nil) {
         self.frontmostApp = frontmostApp
         self.fullscreen = fullscreen
         self.menuOpen = menuOpen
@@ -83,7 +78,6 @@ public struct DesktopContext: Equatable, Sendable {
         self.locked = locked
         self.micInUse = micInUse
         self.cameraInUse = cameraInUse
-        self.focusOn = focusOn
         self.lockScreen = lockScreen
         self.viewedSession = viewedSession
     }

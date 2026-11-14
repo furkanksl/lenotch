@@ -375,7 +375,6 @@ enum SnapshotRunner {
                     d.startMusic(); d.togglePlaying(); d.pointerDown(at: .zero, hit: .ears); d.pointerDown(at: .zero, hit: .ears)
                 },
                 Scenario(name: "tray · timer running") { d in d.startTimer(minutes: 5); d.startMusic(); d.openTray() },
-                Scenario(name: "tray · Focus") { d in d.startMusic(); d.openTray(at: .focus) },
                 Scenario(name: "tray · Timer") { d in d.openTray(at: .timer) },
                 Scenario(name: "tray · Clipboard") { d in
                     for t in ["rgba(125, 122, 255, 0.28)", "https://developer.apple.com/design", "Design review moved to 15:30"] { d.tray.addClip(t) }

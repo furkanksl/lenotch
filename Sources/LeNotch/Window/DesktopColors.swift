@@ -698,11 +698,11 @@ final class DesktopColors {
     // MARK: - The beat
 
     /// How strongly the strip pulses now (owner, 11-07: "can't it pulse and not bug me? the strip? because desktop
-    /// beating makes no sense"): wherever you are, while music plays, so gently it never distracts; held during a Focus
-    /// and while presenting; half as strong while you type (a key in the last 20 s). It used to pulse only with the
+    /// beating makes no sense"): wherever you are, while music plays, so gently it never distracts; held while
+    /// presenting; reduced while you type (a key in the last 20 s). It used to pulse only with the
     /// player or Finder in front and no key in 20 s, which held it nearly always ("I don't see the beats").
-    nonisolated static func pulseScale(focusOn: Bool?, secondsSinceKey: Double, presenting: Bool) -> Double {
-        guard focusOn != true, !presenting else { return 0 }
+    nonisolated static func pulseScale(secondsSinceKey: Double, presenting: Bool) -> Double {
+        guard !presenting else { return 0 }
         return secondsSinceKey > 20 ? 1 : 0.6
     }
 

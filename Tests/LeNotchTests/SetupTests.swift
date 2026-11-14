@@ -77,7 +77,7 @@ final class SetupTests: XCTestCase {
         }
     }
 
-    func testGroupedPermissionsScrollAtTheirReadableNaturalHeight() throws {
+    func testGroupedPermissionsScrollAtTheirReadableNaturalHeight() async throws {
         // Layout fixture: both optional players are present and all eight rows are allowed.
         // It must scroll, not squeeze every permission above the footer by reducing row heights.
         for width in [696.0, 760.0] {
@@ -85,8 +85,20 @@ final class SetupTests: XCTestCase {
                 let content = permissionGroups.frame(width: width)
                     .fixedSize(horizontal: false, vertical: true)
                 let naturalHeight = NSHostingView(rootView: content.environment(\.colorScheme, scheme)).fittingSize.height
-                XCTAssertGreaterThanOrEqual(naturalHeight, 576)
-                XCTAssertLessThanOrEqual(naturalHeight, 840)
+                XCTAssertGreaterThanOrEqual(naturalHeight, 8 * 64)
+                XCTAssertLessThanOrEqual(naturalHeight, 776)
+                let (fixtureWindow, fixtureHost) = makeWindow(content,
+                    size: NSSize(width: width, height: naturalHeight), scheme: scheme)
+                defer { fixtureWindow.close() }
+                let fixture = try await render(fixtureHost,
+                    name: "permission-groups-\(Int(width))-\(scheme == .dark ? "dark" : "light")")
+                let fixtureText = normalized(fixture.transcript)
+                XCTAssertFalse(fixtureText.contains("focus status"),
+                               "The removed Focus permission must not appear in Setup")
+                XCTAssertTrue(fixtureText.contains(normalized(SetupScreenCaptureAccess.title)),
+                              "Video's Screen Recording permission must remain visible")
+                XCTAssertTrue(fixtureText.contains("music bars"),
+                              "System audio access for music bars must remain visible")
                 let viewportHeight = SetupWindowController.minimumContentSize.height - 72 - 64
                 let viewport = ScrollView { content }.frame(width: width, height: viewportHeight)
                 let (window, host) = makeWindow(viewport,
@@ -163,6 +175,7 @@ final class SetupTests: XCTestCase {
                     }.map(\.value).joined(separator: " "))
                     switch page {
                     case .permissions:
+                        XCTAssertFalse(content.contains("focus status"), name)
                         for title in ["Everyday essentials", "Accessibility", "Calendar"] {
                             let row = try XCTUnwrap(text.first { normalized($0.value).contains(normalized(title)) },
                                                    "Priority permission \(title) is missing in \(name). Read: \(content)")
@@ -177,6 +190,7 @@ final class SetupTests: XCTestCase {
                         scroll.contentView.scroll(to: NSPoint(x: scroll.contentView.bounds.minX, y: bottom))
                         scroll.reflectScrolledClipView(scroll.contentView)
                         let scrolled = try await render(host, name: name + "-bottom", footerHeight: 64)
+                        XCTAssertFalse(normalized(scrolled.transcript).contains("focus status"), name)
                         let disk = try XCTUnwrap(scrolled.text.first { normalized($0.value).contains("full disk access") },
                                                 "Full Disk Access must be reachable by scrolling in \(name). Read: \(scrolled.transcript)")
                         XCTAssertGreaterThan(disk.frame.minY, 64, "Last permission is covered by the footer in \(name)")
@@ -199,10 +213,9 @@ final class SetupTests: XCTestCase {
     private var permissionGroups: some View {
         VStack(alignment: .leading, spacing: 24) {
             SetupSection(title: "Everyday essentials") {
-                permission("accessibility", "Accessibility", "Call controls, volume and brightness HUDs, and Focus.")
+                permission("accessibility", "Accessibility", "Call controls and volume and brightness HUDs.")
                 permission("calendar", "Calendar", "Upcoming meetings and your daily agenda.")
                 permission("headphones", "Bluetooth", "AirPods connections and battery levels.")
-                permission("moon", "Focus status", "Show the current Focus in the notch.")
             }
             SetupSection(title: "Media & capture") {
                 permission("music.note", "Music automation", "Fallback playback controls for Music.")

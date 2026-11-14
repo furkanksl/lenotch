@@ -39,8 +39,6 @@ struct SampleState: Sendable {
     var downloadSpeed = 42.0
     var downloadPaused = false
     var downloadDone = false
-    /// Focus is read-only: on or off (the Mac can't say which Focus, nor set one).
-    var focusOn = true
     /// The timer's length, from the menu bar's Timer menu.
     var timerTotal = 60.0
     var cameraSeconds = 0.0

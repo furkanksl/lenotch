@@ -111,16 +111,17 @@ final class LockTests: XCTestCase {
     }
 
     // BEAT2 (owner, 11-07: "can't it pulse and not bug me? the strip? because desktop beating makes no sense"): the
-    // strip pulses wherever you are while music plays; held during a Focus and while presenting; softer while you type.
+    // strip pulses wherever you are while music plays; held while presenting; softer while you type.
     func testBEAT2PulsesGentlyWherever() {
-        func scale(focus: Bool? = false, key: Double = 60, presenting: Bool = false) -> Double {
-            DesktopColors.pulseScale(focusOn: focus, secondsSinceKey: key, presenting: presenting)
+        func scale(key: Double = 60, presenting: Bool = false) -> Double {
+            DesktopColors.pulseScale(secondsSinceKey: key, presenting: presenting)
         }
         XCTAssertEqual(scale(), 1)
         XCTAssertEqual(scale(key: 5), 0.6, "typing: softer, still there")
-        XCTAssertEqual(scale(focus: true), 0)
+        XCTAssertEqual(scale(key: 20), 0.6, "the typing reduction includes the 20-second boundary")
+        XCTAssertEqual(scale(key: 20.1), 1)
         XCTAssertEqual(scale(presenting: true), 0)
-        XCTAssertEqual(scale(focus: nil), 1, "Focus unknown")
+        XCTAssertEqual(scale(key: 5, presenting: true), 0, "presenting stays silent even while typing")
     }
 
     // DESK2 (owner, 11-07: "not getting darker on pause"): pausing stops only the breathing. The strip, its glow and

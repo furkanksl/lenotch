@@ -164,15 +164,6 @@ final class LiveTests: XCTestCase {
         XCTAssertNil(d.island.activity, "a transient: it leaves by itself")
     }
 
-    func testFocusChangesShowNotTheFirstReading() {
-        let (d, _) = director()
-        d.systemContextChanged(DesktopContext(focusOn: false))
-        XCTAssertNil(d.island.activity, "the first reading isn't a change")
-        d.systemContextChanged(DesktopContext(focusOn: true))
-        XCTAssertEqual(d.island.activity?.id, .focus)
-        XCTAssertTrue(d.focusOnFor(d.island.activity!))
-    }
-
     func testCameraOnAndOff() {
         let (d, _) = director()
         var now = Date(timeIntervalSince1970: 1000)

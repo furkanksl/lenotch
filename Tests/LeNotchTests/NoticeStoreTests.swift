@@ -139,20 +139,28 @@ final class NoticeStoreTests: XCTestCase {
         XCTAssertEqual(d.island.activity?.id, .notice, "it comes once the card closes")
     }
 
-    // NDIR4: passive, from the app in front, or during a Focus (unless time-sensitive) nothing shows.
+    // NDIR4: passive, from the app in front, or while presenting nothing shows.
     func testNDIR4QuietArrivals() {
         let (d, _) = director()
         let p = notice("p", level: .passive)
         d.noticesChanged(all: [p], arrived: [p])
         XCTAssertNil(d.island.activity)
-        var c = d.island.context
-        c.focusOn = true
-        d.setContext(c)
         let q = notice("q")
+        var c = d.island.context
+        c.frontmostApp = q.app
+        d.setContext(c)
         d.noticesChanged(all: [q, p], arrived: [q])
-        XCTAssertNil(d.island.activity)
+        XCTAssertNil(d.island.activity, "the app in front already shows its own notification")
+        c.frontmostApp = ""
+        c.sharing = true
+        d.setContext(c)
         let t = notice("t", level: .timeSensitive)
         d.noticesChanged(all: [t, q, p], arrived: [t])
-        XCTAssertEqual(d.island.activity?.id, .notice, "time-sensitive comes through a Focus")
+        XCTAssertNil(d.island.activity, "presenting suppresses even time-sensitive notifications")
+        c.sharing = false
+        d.setContext(c)
+        let a = notice("a")
+        d.noticesChanged(all: [a, t, q, p], arrived: [a])
+        XCTAssertEqual(d.island.activity?.id, .notice, "active notifications appear outside presentation")
     }
 }

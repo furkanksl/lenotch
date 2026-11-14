@@ -3,7 +3,6 @@ import ApplicationServices
 import CoreBluetooth
 import CoreGraphics
 import EventKit
-import Intents
 import NowPlaying
 import OSLog
 import SwiftUI
@@ -49,12 +48,12 @@ struct SetupPermissionsPage: View {
                 .pickerStyle(.segmented).labelsHidden().frame(width: 256)
                 .accessibilityIdentifier("setup-permission-filter")
             }
-            if hasAny([access.accessibility, access.calendar, access.bluetooth, access.focus]) {
+            if hasAny([access.accessibility, access.calendar, access.bluetooth]) {
                 SetupSection(title: "Everyday essentials") {
                     if filter.includes(access.accessibility) {
                         SetupPermissionRow(
                             symbol: "accessibility", title: "Accessibility",
-                            detail: "Call controls, hardware-key HUDs, and Focus.",
+                            detail: "Call controls and hardware-key HUDs.",
                             state: access.accessibility, actionLabel: "Open Settings"
                         ) { setupOpenPrivacy("Privacy_Accessibility") }
                         rowDivider
@@ -71,13 +70,6 @@ struct SetupPermissionsPage: View {
                             symbol: "headphones", title: "Bluetooth",
                             detail: "AirPods connections and battery levels.", state: access.bluetooth
                         ) { allow(.bluetooth, current: access.bluetooth, settings: "Privacy_Bluetooth") }
-                        rowDivider
-                    }
-                    if filter.includes(access.focus) {
-                        SetupPermissionRow(
-                            symbol: "moon", title: "Focus status",
-                            detail: "Share Focus on/off status with LeNotch.", state: access.focus
-                        ) { allow(.focus, current: access.focus, settings: "Focus") }
                     }
                 }
             }
@@ -126,7 +118,7 @@ struct SetupPermissionsPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if !hasAny([access.accessibility, access.calendar, access.bluetooth, access.focus, access.disk] + mediaStates) {
+            if !hasAny([access.accessibility, access.calendar, access.bluetooth, access.disk] + mediaStates) {
                 VStack(spacing: 10) {
                     Image(systemName: filter == .allowed ? "lock.open" : "checkmark.circle")
                         .font(.system(size: 24, weight: .light)).foregroundStyle(.secondary)
@@ -186,14 +178,12 @@ struct SetupPermissionsPage: View {
 /// Shared with the setup panes; opening Settings never triggers an authorization request itself.
 @MainActor
 func setupOpenPrivacy(_ anchor: String) {
-    let destination = anchor == "Focus"
-        ? "x-apple.systempreferences:com.apple.Focus"
-        : "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
+    let destination = "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
     if let url = URL(string: destination) { NSWorkspace.shared.open(url) }
 }
 
 private enum SetupPermissionRequest: Equatable {
-    case calendar, bluetooth, focus, music, spotify, audio, screen
+    case calendar, bluetooth, music, spotify, audio, screen
 }
 
 /// macOS names the permission Screen Recording even when the app only displays captured frames, as VideoMirror does.
@@ -225,7 +215,6 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
     @Published private(set) var accessibility: SetupAccessState = .notAsked
     @Published private(set) var calendar: SetupAccessState = .notAsked
     @Published private(set) var bluetooth: SetupAccessState = .notAsked
-    @Published private(set) var focus: SetupAccessState = .notAsked
     @Published private(set) var music: SetupAccessState = .notAsked
     @Published private(set) var spotify: SetupAccessState = .notAsked
     @Published private(set) var audio: SetupAccessState = .notAsked
@@ -262,7 +251,6 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
         accessibility = AXIsProcessTrusted() ? .allowed : .denied
         if asking != .calendar { calendar = Self.calendarState() }
         if asking != .bluetooth { bluetooth = Self.bluetoothState() }
-        if asking != .focus { focus = Self.focusState() }
         if asking != .audio {
             audio = UserDefaults.standard.bool(forKey: AudioBars.heardKey) ? .allowed : .notAsked
         }
@@ -322,10 +310,6 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
             while CBManager.authorization == .notDetermined {
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
             }
-        case .focus:
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                INFocusStatusCenter.default.requestAuthorization { _ in continuation.resume() }
-            }
         case .music, .spotify:
             let bundleID = permission == .music ? "com.apple.Music" : "com.spotify.client"
             if NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
@@ -360,7 +344,6 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
         switch permission {
         case .calendar: calendar = .asking
         case .bluetooth: bluetooth = .asking
-        case .focus: focus = .asking
         case .music: music = .asking
         case .spotify: spotify = .asking
         case .audio: audio = .asking
@@ -381,15 +364,6 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
     private static func bluetoothState() -> SetupAccessState {
         switch CBManager.authorization {
         case .allowedAlways: .allowed
-        case .notDetermined: .notAsked
-        case .denied, .restricted: .denied
-        @unknown default: .unavailable
-        }
-    }
-
-    private static func focusState() -> SetupAccessState {
-        switch INFocusStatusCenter.default.authorizationStatus {
-        case .authorized: .allowed
         case .notDetermined: .notAsked
         case .denied, .restricted: .denied
         @unknown default: .unavailable

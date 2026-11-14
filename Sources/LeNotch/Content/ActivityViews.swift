@@ -122,12 +122,6 @@ struct ActivityEars: View {
                 let buds = director.podsFor(instance).buds
                 Ring(progress: Double(buds ?? 0) / 100, color: (buds ?? 100) <= 20 ? IslandColor.red : IslandColor.green,
                      size: 24, stroke: 4, fillsIn: true).entrance(side, 0)
-            case (.focus, .left):
-                FocusPill(on: director.focusOnFor(instance), grows: true)
-            case (.focus, .right):
-                let on = director.focusOnFor(instance)
-                Text(on ? director.focusModeFor(instance)?.name ?? "Focus" : "Focus off").font(IslandType.ear).lineLimit(1)
-                    .foregroundStyle(on ? IslandColor.indigo : IslandColor.secondary).entrance(side, 0)
             case (.battery, .left):
                 Text("Low Battery").font(IslandType.ear).entrance(side, 0)
             case (.battery, .right):
@@ -197,9 +191,6 @@ struct ActivityGlyph: View {
         case .incoming: Caller(size: 22)
         case .call: Image(systemName: "phone.fill").font(.system(size: 13)).foregroundStyle(IslandColor.green)
         case .airpods: BudsImage(height: 16)
-        case .focus:
-            Image(systemName: "moon.fill").font(.system(size: 12))
-                .foregroundStyle(director.focusOnFor(instance) ? IslandColor.indigo : IslandColor.secondary)
         case .battery: Battery(level: Double(director.lowPowerFor(instance).level) / 100, width: 20, height: 10, low: true)
         case .camera: Image(systemName: "video.fill").font(.system(size: 12)).foregroundStyle(IslandColor.green)
         case .charging: Image(systemName: "bolt.fill").font(.system(size: 14)).foregroundStyle(IslandColor.green)
@@ -229,7 +220,6 @@ struct ActivityCard: View {
         case .incoming: incoming
         case .call: CallCard(director: director)
         case .airpods: airpods
-        case .focus: FocusCard(instance: instance, director: director)
         case .battery: lowBattery
         case .camera: CameraCard(instance: instance, director: director)
         case .charging: charging
@@ -360,33 +350,6 @@ private struct CallCard: View {
                 RoundButton(symbol: "phone.down.fill", style: .red, label: "End call") { director.perform(.endCall) }
             }
             .rise(1)
-        }
-        .frame(maxHeight: .infinity)
-    }
-}
-
-/// Focus, read-only, like iPhone's Silent mode: on or off (which one, with its symbol, when macOS says), and a way to
-/// its settings.
-private struct FocusCard: View {
-    let instance: ActivityInstance
-    let director: IslandDirector
-
-    var body: some View {
-        let on = director.focusOnFor(instance), mode = on ? director.focusModeFor(instance) : nil
-        HStack(spacing: 12) {
-            Image(systemName: mode?.symbol ?? "moon.fill").font(.system(size: 20)).foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(on ? IslandColor.indigo : Color.white.opacity(0.15)))
-                .rise(0)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(on ? mode.map { "\($0.name) on" } ?? "Focus on" : "Focus off").font(IslandType.title).lineLimit(1)
-                Text(on ? "Notifications are silenced" : "Notifications are back").font(IslandType.secondary)
-                    .foregroundStyle(IslandColor.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .rise(1)
-            RoundButton(symbol: "gearshape.fill", style: .gray, label: "Focus settings") { director.perform(.focusSettings) }
-                .rise(2)
         }
         .frame(maxHeight: .infinity)
     }
@@ -780,38 +743,6 @@ private struct TimerText: View {
             .foregroundStyle(urgent ? IslandColor.red : base)
             .phaseAnimator(urgent && !motion.reduce ? [1.0, 0.55] : [1.0]) { v, o in v.opacity(o) } animation: { _ in
                 .easeInOut(duration: motion.seconds(0.5))
-            }
-    }
-}
-
-/// Focus's ear: the moon in a pill, indigo when on, grey when off.
-private struct FocusPill: View {
-    let on: Bool
-    /// In the ears it grows out of nothing and the moon turns in after it (sim `pillGrow`, `moonIn`).
-    var grows = false
-    @State private var pill = false
-    @State private var moon = false
-    @Environment(\.islandMotion) private var motion
-
-    var body: some View {
-        let still = !grows || motion.reduce
-        let pillOut = still || pill, moonIn = still || moon
-        Image(systemName: "moon.fill").font(.system(size: 13))
-            .foregroundStyle(.white)
-            .rotationEffect(.degrees(moonIn ? 0 : -120))
-            .scaleEffect(moonIn ? 1 : 0.3)
-            .opacity(moonIn ? 1 : 0)
-            .frame(width: pillOut ? 40 : 0, height: 24)
-            .background(Capsule().fill(on ? IslandColor.indigo : Color.white.opacity(0.18)))
-            .opacity(pillOut ? 1 : 0)
-            .frame(width: 40, alignment: .leading)
-            .onAppear {
-                guard !still else { return }
-                let overshoot = { (s: Double, delay: Double) in
-                    Animation.timingCurve(0.2, 1.4, 0.4, 1, duration: motion.seconds(s)).delay(motion.seconds(motion.delay + delay))
-                }
-                withAnimation(overshoot(0.6, 0)) { pill = true }
-                withAnimation(overshoot(0.7, 0.15)) { moon = true }
             }
     }
 }

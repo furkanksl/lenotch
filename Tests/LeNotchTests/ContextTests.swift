@@ -97,37 +97,6 @@ final class ContextTests: XCTestCase {
         XCTAssertTrue(DesktopContext(frontmostApp: BundleID.keynote).presenting)
     }
 
-    // FOCUS1 (11-11, "it doesn't recognize if it's already on or which mode"): the active mode from macOS's Focus
-    // database, named from its configuration (a custom one too), off when nothing is asserted, the tray following it.
-    func testFOCUS1WhichFocusIsOn() throws {
-        let assertions: [String: Any] = ["data": [["storeAssertionRecords": [[
-            "assertionDetails": ["assertionDetailsModeIdentifier": "com.apple.focus.reading-1A2B",
-                                 "assertionDetailsReason": "user-action"],
-        ]]]]]
-        let configs: [String: Any] = ["data": [["modeConfigurations": [
-            "com.apple.focus.reading-1A2B": ["mode": ["name": "Reading", "modeIdentifier": "com.apple.focus.reading-1A2B",
-                                                      "symbolImageName": "book.fill"]],
-            "com.apple.donotdisturb.mode.default": ["mode": ["name": "Do Not Disturb",
-                                                             "modeIdentifier": "com.apple.donotdisturb.mode.default"]],
-        ]]]]
-        let m = try XCTUnwrap(FocusDatabase.active(assertions: assertions, configurations: configs))
-        XCTAssertEqual(m.name, "Reading")
-        XCTAssertEqual(m.symbol, "book.fill")
-        XCTAssertNil(FocusDatabase.active(assertions: ["data": [["storeAssertionRecords": []]]], configurations: configs))
-        XCTAssertEqual(FocusDatabase.fallbackName("com.apple.donotdisturb.mode.default"), "Do Not Disturb")
-        XCTAssertEqual(FocusDatabase.fallbackName("com.apple.sleep.sleep-mode"), "Sleep-Mode")
-        XCTAssertNil(FocusDatabase.read(folder: URL(fileURLWithPath: "/nonexistent")), "unreadable: nil, not off")
-
-        let tray = TrayModel()
-        tray.systemFocus("Work")
-        XCTAssertEqual(tray.focus, .work)
-        tray.systemFocus("Reading")
-        XCTAssertEqual(tray.focusName, "Reading")
-        XCTAssertNil(tray.focus, "a custom mode lights no built-in pill")
-        tray.focusTurnedOff()
-        XCTAssertNil(tray.focusName)
-    }
-
     // NP-DISP3 (11-11): where the frontmost app's front window is, from the window list (on screen only, front to
     // back). Two displays side by side: the built-in at (0, 0), an external to its right.
     func testTheFrontWindowIsOnTheIslandsDisplay() {
