@@ -33,6 +33,15 @@ final class IslandDirector {
 
     init(prompter: PrompterModel? = nil) {
         self.prompter = prompter ?? PrompterModel()
+        tray.onGo = { [weak self] page in
+            guard let self else { return }
+            if page != .notifications && notificationInbox.composing {
+                notificationInbox.cancelComposition()
+                onYieldsKey?()
+            }
+            if page != .today && island.dayLarge { send(.closeDay) }
+            else { changed() }
+        }
     }
 
     // Media: what's really playing (P2), or the samples while the debug panel plays them.
@@ -86,6 +95,11 @@ final class IslandDirector {
 
     /// What's in the tray (the island decides when it shows).
     let tray = TrayModel()
+    let notificationInbox = NotificationInbox()
+    let launcher = LauncherModel.shared
+    let usage = UsageModel.shared
+    var sendNotificationReply: ((Notice, String) async throws -> String)?
+    @ObservationIgnored private var notificationReplyTask: Task<Void, Never>?
     /// The pointer is over the empty notch: it swells a little to say a press opens the tray.
     private(set) var idleHover = false
 
@@ -253,6 +267,10 @@ final class IslandDirector {
         forcedMode = nil
         let trayWas = groups.tray
         let effects = island.apply(event)
+        if !island.opened {
+            notificationInbox.cancelComposition()
+            onYieldsKey?()
+        }
         if groups.tray && !trayWas { tray.opened() }   // it starts at the grid (or the Shelf for a drag)
         for e in effects { perform(e) }
         if !island.mediaFocus && !pipOpen && videoMirror.state != .idle { videoMirror.stop() }   // the video's view closed
@@ -1299,10 +1317,6 @@ final class IslandDirector {
     /// Your day, large (a click on the event card or its ball's peek): the tools at the lyrics player's size, on the day.
     func openDay() {
         guard forcedMode == nil else { return }
-        tray.onGo = { [weak self] page in
-            guard let self, page != .today, island.dayLarge else { return }
-            send(.closeDay)
-        }
         hoverOff?.cancel(); hoverOff = nil
         setIdleHover(false)
         if groups.tray { tray.go(.today); send(.openDay); return }
@@ -1362,6 +1376,11 @@ final class IslandDirector {
     // MARK: - Context (debug panel in P1; ContextMonitor in P3)
 
     func setContext(_ c: DesktopContext) {
+        if c.locked || c.presenting {
+            notificationReplyTask?.cancel()
+            notificationInbox.cancelComposition()
+            onYieldsKey?()
+        }
         if c.menuOpen || c.fullscreen { hoverOff?.cancel(); hoverOff = nil }
         // Opening a session whose question waits here lets its app ask it at once.
         if let viewed = c.viewedSession, viewed != island.context.viewedSession, heldQuestions[viewed] != nil { settleApproval(viewed, nil) }
@@ -1477,7 +1496,7 @@ final class IslandDirector {
         if let session = island.running.first(where: { $0.id == .prompter }) { end(serial: session.serial) }
     }
 
-    // MARK: - Notifications (11-07; banners only since 11-11: no inbox, they pass and go)
+    // MARK: - Notifications
 
     /// Which notification each showing is.
     private(set) var noticeBySerial: [Int: Notice] = [:]
@@ -1487,11 +1506,13 @@ final class IslandDirector {
     nonisolated static let noticeBannerSeconds = 4.0
 
     func notice(for instance: ActivityInstance) -> Notice {
-        noticeBySerial[instance.serial] ?? pendingNotice ?? NoticeSamples.arrivals(now: date())[0]
+        if instance.id == .notice, let selected = notificationInbox.selected { return selected }
+        return noticeBySerial[instance.serial] ?? pendingNotice ?? NoticeSamples.arrivals(now: date())[0]
     }
 
     /// macOS delivered these just now (the store's first read after launch delivers none).
     func noticesChanged(all: [Notice], arrived: [Notice]) {
+        notificationInbox.synchronize(all.filter { $0.app != "com.lenotch.app" })
         for n in arrived { notify(n) }
     }
 
@@ -1500,8 +1521,11 @@ final class IslandDirector {
     func notify(_ n: Notice) {
         noticeBySerial = noticeBySerial.filter { s, _ in island.running.contains { $0.serial == s } || shownActivity?.serial == s }
         guard NoticeArrival.of(n, context: island.context, trayOpen: island.trayShows) == .ears else { return }
+        notificationInbox.receive(n)
         // A card is open (you're using it): it waits, and comes when the card closes.
         if island.opened { heldNotices = Array((heldNotices + [n]).suffix(3)); return }
+        notificationInbox.select(n)
+        notificationInbox.expanded = false
         let before = island.running.map(\.serial).max() ?? 0
         pendingNotice = n
         show(.notice, opened: island.opened ? false : nil, sample: false)
@@ -1530,8 +1554,103 @@ final class IslandDirector {
     /// when the pointer leaves).
     private func closeNoticeBanner(serial: Int) {
         guard island.opened, island.cardOwner == .activity, island.activity?.serial == serial,
+              !notificationInbox.expanded, !notificationInbox.composing, !notificationInbox.submitting,
               !island.pointerOnLiquid, !pressed else { return }
         send(.close)
+    }
+
+    func showTool(_ page: TrayModel.Page) {
+        openTray(at: page)
+    }
+
+    func toggleLauncher() {
+        if island.trayShows && tray.page == .launcher { send(.close) }
+        else { showTool(.launcher) }
+    }
+
+    func presentationCard(player: CardSize) -> CardSize {
+        if island.trayShows {
+            switch tray.page {
+            case .notifications: return CardSize(width: 420, height: 348, radius: 36)
+            case .launcher: return CardSize(width: 480, height: 250, radius: 36)
+            case .usage: return CardSize(width: 480, height: 266, radius: 36)
+            default: break
+            }
+        }
+        if !island.trayShows, island.cardOwner == .activity, island.instance(.activity)?.id == .notice {
+            return CardSize(width: 420, height: notificationInbox.expanded ? 348 : 206, radius: 36)
+        }
+        return island.cardSize(player: player)
+    }
+
+    func expandNotices(_ expanded: Bool) {
+        guard !notificationInbox.submitting else { return }
+        notificationInbox.expanded = expanded
+        if expanded { notificationInbox.cancelComposition(); onYieldsKey?() }
+        changed()
+    }
+
+    func selectInboxNotice(_ notice: Notice) {
+        guard !notificationInbox.submitting else { return }
+        notificationInbox.select(notice)
+        notificationInbox.expanded = false
+        changed()
+    }
+
+    func beginNoticeReply(_ notice: Notice) {
+        guard !island.context.locked, !island.context.presenting,
+              !notificationInbox.submitting, NotificationReplyService.supports(notice),
+              notificationInbox.items.contains(notice) else { return }
+        notificationInbox.beginReply(to: notice)
+        onWantsKey?()
+        changed()
+    }
+
+    func cancelNoticeReply() {
+        guard !notificationInbox.submitting else { return }
+        notificationInbox.cancelComposition()
+        onYieldsKey?()
+        changed()
+    }
+
+    func submitNoticeReply() {
+        let inbox = notificationInbox
+        guard !island.context.locked, !island.context.presenting,
+              inbox.composing, !inbox.submitting,
+              let dispatch = sendNotificationReply else { return }
+        let text = inbox.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.count <= 4000 else { return }
+        guard let target = inbox.beginSubmission() else { return }
+        onYieldsKey?()
+        notificationReplyTask = Task { [weak self] in
+            defer { self?.notificationReplyTask = nil }
+            do {
+                try Task.checkCancellation()
+                let status = try await dispatch(target, text)
+                inbox.submitting = false
+                guard inbox.selected?.id == target.id else { return }
+                inbox.draft = ""
+                inbox.composing = false
+                inbox.feedback = status
+            } catch {
+                inbox.submitting = false
+                guard inbox.selected?.id == target.id else { return }
+                inbox.feedback = error.localizedDescription
+                if self?.island.context.locked == false && self?.island.context.presenting == false {
+                    self?.onWantsKey?()
+                }
+            }
+            self?.changed()
+        }
+    }
+
+    func clearNotificationInbox() {
+        guard !notificationInbox.submitting else { return }
+        notificationInbox.clear()
+        heldNotices = []
+        for activity in island.running where activity.id == .notice { end(serial: activity.serial) }
+        onYieldsKey?()
+        changed()
     }
 
     /// The debug panel's Notification button: the next sample, as if macOS had delivered it.
@@ -1551,6 +1670,8 @@ final class IslandDirector {
 
     /// × on the card: it leaves the notch.
     func dismissNotice(_ n: Notice) {
+        guard !notificationInbox.submitting else { return }
+        notificationInbox.dismiss(n.id)
         for (serial, m) in noticeBySerial where m.id == n.id && island.running.contains(where: { $0.serial == serial }) {
             end(serial: serial)
         }
@@ -1577,6 +1698,7 @@ final class IslandDirector {
     private(set) var askProvider: AgentProvider = .claude
     /// The field asked for the keyboard (the panel becomes key without activating the app).
     @ObservationIgnored var onWantsKey: (() -> Void)?
+    @ObservationIgnored var onYieldsKey: (() -> Void)?
     /// Bumps when the Ask chat's field should take the keyboard (opening it from its ball, the shortcut).
     private(set) var askFocusTick = 0
     /// Sends a question to its session's process (tests record it instead of starting claude or codex).
@@ -1991,7 +2113,7 @@ final class IslandDirector {
         // Holding the card is using it: the linger starts on release.
         guard island.hovered || island.peekBall != nil, hoverOff == nil, !pressed, !scrubbing else { return }
         if island.holdsOpen { return }      // closes by its buttons, the notch or a click outside
-        if island.opened && replyFocused { return }   // typing a reply holds it
+        if island.opened && (replyFocused || notificationInbox.composing || notificationInbox.submitting) { return }
         let t = tuning()
         hoverOff = schedule(island.opened ? t.closeDelay : t.leaveDelay) { [weak self] in
             guard let self else { return }

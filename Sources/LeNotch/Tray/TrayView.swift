@@ -11,11 +11,12 @@ struct TrayLayer: View {
     let card: CardSize
 
     var body: some View {
+        let inset: Double = [.launcher, .usage].contains(director.tray.page) ? 0 : 20
         CardPlacement(frame: frame, card: card) {
             ZStack(alignment: .topLeading) {
                 TrayPages(tray: director.tray, director: director)
-                    .frame(width: max(card.width - 40, 0), height: card.height - 40, alignment: .topLeading)
-                    .offset(x: 20, y: 20)
+                    .frame(width: max(card.width - inset * 2, 0), height: card.height - inset * 2, alignment: .topLeading)
+                    .offset(x: inset, y: inset)
             }
             .frame(width: card.width, height: card.height, alignment: .topLeading)
             .foregroundStyle(.white)
@@ -40,6 +41,23 @@ private struct TrayPages: View {
                 case .shortcuts: ShortcutsPage(tray: tray)
                 case .today: DayPage(tray: tray, director: director)
                 case .prompter: PrompterPage(tray: tray, director: director)
+                case .launcher:
+                    LauncherView(model: director.launcher, onClose: { tray.go(.main) }, onConfigure: { LauncherEditor.shared.show() })
+                case .usage:
+                    UsageView(model: director.usage, onClose: { tray.go(.main) }, onOpenSettings: { director.onNeedsSetup?() })
+                case .notifications:
+                    if !director.notificationInbox.expanded, let notice = director.notificationInbox.selected {
+                        VStack(spacing: 8) {
+                            HStack {
+                                RoundButton(symbol: "chevron.left", style: .gray, size: 26, label: "All notifications") { director.expandNotices(true) }
+                                Text("Notifications").font(IslandType.title)
+                                Spacer()
+                            }
+                            NoticeDetailView(notice: notice, director: director)
+                        }
+                    } else {
+                        NotificationHistoryView(director: director) { tray.go(.main) }
+                    }
                 }
             }
             .id(tray.page)
@@ -59,7 +77,7 @@ private struct TrayGrid: View {
 
     var body: some View {
         let timer = director.trayTimerLeft
-        // The same seven tools whether playback is running or paused.
+        // Five tools per row, independent of playback state.
         VStack(spacing: 10) {
             HStack(spacing: 0) {
                 // Text-only Quick Ask (⌥Space).
@@ -68,11 +86,17 @@ private struct TrayGrid: View {
                 Tool(icon: .timer, label: timer.map(clockText) ?? "Timer", tint: timer != nil ? IslandColor.orange : nil) { tray.go(.timer) }
                 Tool(icon: .prompter, label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
                 Tool(icon: .today, label: "Today") { tray.go(.today) }
+                Tool(icon: .launcher, label: "Launcher") { tray.go(.launcher) }
             }
             HStack(spacing: 0) {
                 Tool(icon: .clipboard, label: "Clipboard") { tray.go(.clipboard) }
                 Tool(icon: .shelf, label: "Shelf", badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
                 Tool(icon: .shortcuts, label: "Shortcuts") { tray.go(.shortcuts) }
+                Tool(icon: .usage, label: "Usage") { tray.go(.usage) }
+                Tool(icon: .inbox, label: "Inbox", badge: director.notificationInbox.items.isEmpty ? nil : director.notificationInbox.items.count) {
+                    director.expandNotices(true)
+                    tray.go(.notifications)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

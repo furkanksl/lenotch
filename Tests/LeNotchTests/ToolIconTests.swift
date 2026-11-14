@@ -1,3 +1,4 @@
+import IslandCore
 import SwiftUI
 import XCTest
 @testable import Lenotch
@@ -5,7 +6,10 @@ import XCTest
 @MainActor
 final class ToolIconTests: XCTestCase {
     func testEveryToolHasANonemptyVector() {
-        XCTAssertEqual(ToolIcon.allCases.count, 7)
+        XCTAssertEqual(ToolIcon.allCases, [
+            .ask, .timer, .prompter, .today, .launcher,
+            .clipboard, .shelf, .shortcuts, .usage, .inbox,
+        ], "Every tool must have a Hugeicons vector, including newly added tools")
         for icon in ToolIcon.allCases {
             let path = ToolIconShape(icon: icon).path(in: CGRect(x: 0, y: 0, width: 24, height: 24))
             XCTAssertFalse(path.isEmpty, "\(icon) must not disappear if an external asset cannot load")
@@ -17,6 +21,21 @@ final class ToolIconTests: XCTestCase {
             XCTAssertLessThanOrEqual(bounds.maxX, 24, "\(icon)")
             XCTAssertLessThanOrEqual(bounds.maxY, 24, "\(icon)")
         }
+    }
+
+    func testNewToolsHaveThePublishedHugeiconsBoundsAndDistinctGeometry() {
+        let box = CGRect(x: 0, y: 0, width: 24, height: 24)
+        let launcher = ToolIconShape(icon: .launcher).path(in: box)
+        let usage = ToolIconShape(icon: .usage).path(in: box)
+        let inbox = ToolIconShape(icon: .inbox).path(in: box)
+        // @hugeicons/core-free-icons@4.4.0: DashboardSquare01Icon, PieChart08Icon,
+        // Notification01Icon. These are three distinct native paths, not fallbacks.
+        XCTAssertEqual(launcher.boundingRect, CGRect(x: 3, y: 3, width: 18, height: 18))
+        XCTAssertEqual(usage.boundingRect, CGRect(x: 2, y: 2, width: 20, height: 20))
+        XCTAssertEqual(inbox.boundingRect, CGRect(x: 3, y: 2.5, width: 18, height: 19))
+        XCTAssertNotEqual(launcher, usage)
+        XCTAssertNotEqual(usage, inbox)
+        XCTAssertNotEqual(inbox, launcher)
     }
 
     func testVectorsFitWithoutStretchingInANonsquareContainer() {
@@ -44,6 +63,52 @@ final class ToolIconTests: XCTestCase {
                 XCTAssertGreaterThan(visible.count, Int(12 * scale), "\(icon) must visibly render at tool size")
                 XCTAssertLessThan(visible.count, image.width * image.height / 2,
                                   "\(icon) must remain an outline, not an opaque rectangular image")
+            }
+        }
+    }
+
+    func testEveryActualToolsGridButtonContainsVisibleIconPixels() throws {
+        let director = IslandDirector(prompter: PrompterModel(storageURL: nil))
+        let scheduler = ManualScheduler()
+        director.schedule = scheduler.schedule
+        director.clock = { 0 }
+        director.realTime = { 0 }
+        director.openTray()
+        let card = director.island.cardSize(player: CardSize(width: 520, height: 240, radius: 32))
+        let frame = FrameModel()
+        frame.cardHalfWidth = card.halfWidth
+        frame.cardHeight = card.height
+        frame.cardTop = 80
+        frame.cardRadius = card.radius
+        let labels = [
+            ["Ask", "Timer", "Prompter", "Today", "Launcher"],
+            ["Clipboard", "Shelf", "Shortcuts", "Usage", "Inbox"],
+        ]
+        let view = TrayLayer(frame: frame, director: director, card: card)
+            .environment(\.islandMotion, IslandMotion(reduce: true, stills: true))
+            .frame(width: NotchContentView.size.width, height: NotchContentView.size.height)
+            .background(.black)
+        for scale in [1.0, 2.0] {
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = scale
+            let image = try XCTUnwrap(renderer.cgImage)
+            for (row, names) in labels.enumerated() {
+                for (column, name) in names.enumerated() {
+                    let centerX = FrameModel.cx - card.halfWidth + 20
+                        + (card.width - 40) / 5 * (Double(column) + 0.5)
+                    let top = frame.cardTop + 20 + (card.height - 40 + 10) / 2 * Double(row)
+                    let crop = try XCTUnwrap(image.cropping(to: CGRect(
+                        x: (centerX - 12) * scale, y: (top + 8) * scale,
+                        width: 24 * scale, height: 24 * scale
+                    )), "\(name) icon region must be inside the card")
+                    let pixels = try rgba(crop)
+                    let foreground = stride(from: 0, to: pixels.count, by: 4).filter {
+                        pixels[$0] > 160 && pixels[$0 + 1] > 160
+                            && pixels[$0 + 2] > 160 && pixels[$0 + 3] > 200
+                    }
+                    XCTAssertGreaterThan(foreground.count, Int(12 * scale),
+                                         "\(name) must render an icon, not only a background and label, at \(scale)x")
+                }
             }
         }
     }

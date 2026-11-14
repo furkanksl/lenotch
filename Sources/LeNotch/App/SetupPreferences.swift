@@ -127,7 +127,7 @@ struct SetupIntegrationsPage: View {
         VStack(alignment: .leading, spacing: 24) {
             SetupSection(title: "Notifications") {
                 SetupPreferenceRow(symbol: "bell.badge", title: "Notifications in the notch",
-                                   detail: "Read notifications stored on this Mac and show them in the notch.",
+                                   detail: "Stack notifications in the notch and browse up to 40 in this session. Nothing is saved by LeNotch.",
                                    isOn: $notifications)
                     .padding(18)
                 Divider().overlay(SetupTheme.line)
@@ -159,6 +159,7 @@ struct SetupIntegrationsPage: View {
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            SetupInlineNote(symbol: "arrowshape.turn.up.left", text: "Messages and WhatsApp replies use the matching macOS notification’s Reply action and need Accessibility. If Reply isn’t available, open the app instead. Delivery isn’t confirmed by LeNotch.")
             SetupSection(title: "Claude & Codex") {
                 SetupPreferenceRow(symbol: "apple.terminal", title: "Agent sessions",
                                    detail: "See coding activity and respond to permission requests in the notch.",
@@ -191,6 +192,8 @@ struct SetupIntegrationsPage: View {
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            LauncherSettingsSection()
+            UsageSettingsSection()
             SetupInlineNote(symbol: "text.alignleft", text: "Prompter works locally and doesn’t need any permissions.")
         }
         .onAppear(perform: refresh)

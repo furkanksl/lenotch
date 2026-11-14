@@ -147,9 +147,9 @@ public struct ActivitySpec: Sendable {
             ActivitySpec(id: .unlocked, tier: .transient, ear: 56,
                          card: CardSize(width: 372, height: 84, radius: 42), transient: 1.3, opens: false,
                          pulse: nil, colorHex: green),
-            // Laid out like Messages (sim `ACT.notice`): the app's icon, the title and two lines, × and Open in <App>.
+            // Compact notification detail reserves room for native reply entry and submission feedback.
             ActivitySpec(id: .notice, tier: .transient, ear: 96,
-                         card: CardSize(width: 372, height: 146, radius: 40), transient: 6, opens: true,
+                         card: CardSize(width: 420, height: 206, radius: 36), transient: 6, opens: true,
                          pulse: nil, colorHex: "#0A84FF"),
             ActivitySpec(id: .agentBack, tier: .transient, ear: 112,
                          card: CardSize(width: 372, height: 84, radius: 42), transient: 4, opens: false,

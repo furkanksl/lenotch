@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let args = CommandLine.arguments
     private var askKey: HotKey?
+    private var launcherKey: HotKey?
+    private var launcherShortcutObserver: NSObjectProtocol?
+    private let notificationReplies = NotificationReplyService()
     private let agentSocket = AgentSocket()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -36,8 +39,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         surface?.contextMenu = { [unowned self] hit in makeMenu(hit) }
         if let d = surface?.director {
             d.onNeedsSetup = { [unowned self] in setup.show() }
+            d.usage.start()
             // Quick ask (phase 3): ⌥Space (the key tap, `MediaKeyTap.onAskKey`), and ⌃⌥⌘A as a backup that needs no permission.
             askKey = HotKey(keyCode: kVK_ANSI_A, modifiers: controlKey | optionKey | cmdKey) { d.toggleAsk() }
+            configureLauncherShortcut()
+            launcherShortcutObserver = NotificationCenter.default.addObserver(forName: .launcherShortcutChanged, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.configureLauncherShortcut() }
+            }
+            let replies = notificationReplies
+            d.sendNotificationReply = { notice, text in
+                try await replies.send(text: text, to: notice).displayMessage
+            }
             // Claude and Codex (phase 2): their hooks write here once Setup's "Watch Claude and Codex" adds them.
             agentSocket.onLine = { d.agentHook($0, reply: $1) }
             HookInstaller.refreshScript()   // an installed hook's script keeps up with updates (our own file only)
@@ -148,9 +160,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAllCalendars() { MeetingWatcher.shared?.showAllCalendars() }
 
     func applicationWillTerminate(_ notification: Notification) {
+        UsageModel.shared.stop()
+        launcherKey?.unregister()
+        askKey?.unregister()
+        if let launcherShortcutObserver { NotificationCenter.default.removeObserver(launcherShortcutObserver) }
         LockWallpaper.shared.restoreOnQuit()   // never leave someone's wallpaper behind
         agentSocket.stop()
         surface?.stop()
+    }
+
+    private func configureLauncherShortcut() {
+        launcherKey?.unregister()
+        launcherKey = nil
+        LauncherModel.shared.shortcutUnavailable = false
+        guard UserDefaults.standard.object(forKey: "lenotch.launcher.shortcut") as? Bool ?? true,
+              let director = surface?.director else { return }
+        launcherKey = HotKey(keyCode: kVK_ANSI_A, modifiers: optionKey) {
+            director.toggleLauncher()
+        }
+        LauncherModel.shared.shortcutUnavailable = launcherKey == nil
     }
 
     @objc private func toggleDebug() { debugPanel?.toggle() }

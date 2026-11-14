@@ -75,7 +75,7 @@ struct ActivityCardLayer: View {
 
     var body: some View {
         if let a = director.cardShown {
-            let size = a.spec.card
+            let size = a.id == .notice ? card : a.spec.card
             CardPlacement(frame: frame, card: size) {
                 ActivityCard(instance: a, director: director)
                     .padding(.horizontal, a.id == .incoming ? 20 : 18)

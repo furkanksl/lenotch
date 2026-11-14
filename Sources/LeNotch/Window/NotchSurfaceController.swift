@@ -275,6 +275,7 @@ final class NotchSurfaceController {
         // Quick ask: the answers stream in; the field takes the keyboard without activating the app.
         d.quickAsk.onEvent = { [weak d] id, e in d?.askEvent(id, e) }
         d.onWantsKey = { [weak self] in self?.panel.makeKey() }
+        d.onYieldsKey = { [weak self] in self?.panel.resignKey() }
     }
 
     private func now() -> Double {
@@ -331,7 +332,7 @@ final class NotchSurfaceController {
         if d.forcedMode != nil { context.bubbleModes = [.split]; context.leftBallModes = []; context.moreModes = [] }
         context.activityHoldsEars = island.earsHeld
         context.activityEar = island.heldEar
-        context.card = island.cardSize(player: playerCard)
+        context.card = d.presentationCard(player: playerCard)
         context.idleHover = d.idleHover
         let peek = d.groups.peekPlace
         let peekCard = peek.flatMap { d.groups.balls[$0] }.map(Island.peekCard)   // a song's is wider (11-06)
@@ -497,7 +498,7 @@ final class NotchSurfaceController {
         clock.timeScale = t.timeScale
         rebuildConstants()
         syncContentSettings()
-        context.card = director.island.cardSize(player: playerCard)
+        context.card = director.presentationCard(player: playerCard)
         content.card = context.card ?? playerCard
         // Slider changes animate to the new resting shape, which is the point of tuning live.
         if let targets { animator.setTarget(targets.resting(mode)) }

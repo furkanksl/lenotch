@@ -85,51 +85,190 @@ struct NoticeEar: View {
     }
 }
 
-/// The card it opens as (by itself on arrival, or on hover): the icon, who and when, two lines; × dismisses it, the pill
-/// opens it in its app.
+/// The newest card stays compact. Its count opens the session-only, scrollable notification column.
 struct NoticeCard: View {
     let notice: Notice
     let director: IslandDirector
     @Environment(\.presenting) private var presenting
 
     var body: some View {
-        VStack(spacing: 10) {
-            Button { director.openNotice(notice) } label: {
-                HStack(alignment: .top, spacing: 12) {
-                    NoticeIcon(app: notice.app, size: 40)
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(presenting ? notice.appName : notice.head).font(IslandType.title).lineLimit(1)
-                            Spacer(minLength: 4)
-                            NoticeWhen(notice: notice, now: director.date())
+        if director.notificationInbox.expanded {
+            NotificationHistoryView(director: director) { director.expandNotices(false) }
+        } else {
+            NoticeDetailView(notice: notice, director: director)
+        }
+    }
+}
+
+struct NoticeDetailView: View {
+    let notice: Notice
+    let director: IslandDirector
+    @Environment(\.presenting) private var presenting
+
+    private var inbox: NotificationInbox { director.notificationInbox }
+    private var replySupported: Bool {
+        NotificationReplyService.supports(notice)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(notice.appName.uppercased()).font(.system(size: 10, weight: .semibold)).foregroundStyle(IslandColor.dim)
+                Spacer()
+                if inbox.items.count > 1 {
+                    Button { director.expandNotices(true) } label: {
+                        Label("\(inbox.items.count)", systemImage: "square.stack.3d.up")
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.8))
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(.white.opacity(0.1), in: Capsule())
+                    }
+                    .buttonStyle(.plain).accessibilityLabel("Show all \(inbox.items.count) notifications")
+                }
+                NoticeWhen(notice: notice, now: director.date())
+            }
+            HStack(alignment: .top, spacing: 12) {
+                NoticeIcon(app: notice.app, size: 36)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(presenting ? notice.appName : notice.head).font(IslandType.title).lineLimit(1)
+                    Group {
+                        if presenting { Text("Content hidden while presenting").font(IslandType.body).foregroundStyle(IslandColor.dim) }
+                        else { NoticeText(notice: notice) }
+                    }
+                    .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            if inbox.composing && !presenting {
+                NoticeReplyComposer(director: director)
+            } else {
+                HStack(spacing: 8) {
+                    RoundButton(symbol: "xmark", style: .gray, size: 30, label: "Dismiss notification") { director.dismissNotice(notice) }
+                    if replySupported && !presenting {
+                        Button { director.beginNoticeReply(notice) } label: {
+                            Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                                .font(IslandType.body.weight(.medium)).frame(maxWidth: .infinity, minHeight: 30)
+                                .foregroundStyle(.black).background(.white, in: Capsule())
                         }
-                        // Never show what it says while presenting.
-                        Group {
-                            if presenting { Text("Hidden while presenting").font(IslandType.body).foregroundStyle(.white.opacity(0.5)) }
-                            else { NoticeText(notice: notice) }
-                        }
-                        .lineLimit(2).lineSpacing(1.5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .buttonStyle(.plain).accessibilityLabel("Reply to this notification")
+                    }
+                    Button { director.openNotice(notice) } label: {
+                        Text("Open \(notice.appName)").font(.system(size: 12, weight: .medium)).lineLimit(1)
+                            .frame(maxWidth: .infinity, minHeight: 30)
+                            .background(.white.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .disabled(inbox.submitting)
+            }
+            if let feedback = inbox.feedback {
+                Text(feedback).font(.system(size: 10)).foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(2).help(feedback)
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .center)
+        .background(alignment: .bottom) {
+            if inbox.items.count > 1 && !inbox.composing {
+                RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.13), lineWidth: 1)
+                    .frame(height: 5).padding(.horizontal, 15).offset(y: 8)
+            }
+        }
+    }
+}
+
+private struct NoticeReplyComposer: View {
+    let director: IslandDirector
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        @Bindable var inbox = director.notificationInbox
+        HStack(spacing: 8) {
+            TextField("Reply…", text: $inbox.draft)
+                .textFieldStyle(.plain).font(IslandType.body).focused($focused)
+                .padding(.horizontal, 12).frame(height: 34)
+                .background(.white.opacity(0.12), in: Capsule())
+                .onSubmit { director.submitNoticeReply() }
+                .accessibilityLabel("Reply text")
+            Button { director.submitNoticeReply() } label: {
+                Group {
+                    if inbox.submitting { ProgressView().controlSize(.small) }
+                    else { Image(systemName: "arrow.up").font(.system(size: 15, weight: .semibold)).foregroundStyle(.black) }
+                }
+                .frame(width: 34, height: 34).background(.white, in: Circle())
+            }
+            .buttonStyle(.plain).accessibilityLabel("Submit reply")
+            .disabled(inbox.submitting || inbox.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inbox.draft.count > 4000)
+            Button { director.cancelNoticeReply() } label: {
+                Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).frame(width: 20, height: 30)
+            }
+            .buttonStyle(.plain).accessibilityLabel("Cancel reply").disabled(inbox.submitting)
+        }
+        .disabled(inbox.submitting)
+        .task { focused = true }
+        .onChange(of: inbox.submitting) { _, submitting in
+            focused = !submitting && inbox.composing
+        }
+        .onExitCommand { director.cancelNoticeReply() }
+    }
+}
+
+struct NotificationHistoryView: View {
+    let director: IslandDirector
+    let onBack: () -> Void
+    @Environment(\.presenting) private var presenting
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 9) {
+                RoundButton(symbol: "chevron.left", style: .gray, size: 26, label: "Back") { onBack() }
+                Text("Notifications").font(IslandType.title)
+                Text("\(director.notificationInbox.items.count)").font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(IslandColor.dim)
+                Spacer()
+                Button("Clear") { director.clearNotificationInbox() }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(IslandColor.dim)
+                    .disabled(director.notificationInbox.submitting || director.notificationInbox.items.isEmpty)
+            }
+            if director.notificationInbox.items.isEmpty {
+                VStack(spacing: 9) {
+                    Image(systemName: "bell").font(.system(size: 25)).foregroundStyle(IslandColor.dim)
+                    Text("You're all caught up").font(IslandType.body)
+                    Text(NotificationStore.enabled ? "New notifications will appear here." : "Enable Notifications in Setup to get started.")
+                        .font(.system(size: 11)).foregroundStyle(IslandColor.dim).multilineTextAlignment(.center)
+                    if !NotificationStore.enabled {
+                        Button("Open Setup") { director.onNeedsSetup?() }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.blue)
                     }
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open \(notice.head)")
-            .rise(0)
-            HStack(spacing: 10) {
-                RoundButton(symbol: "xmark", style: .gray, size: 32, label: "Clear") { director.dismissNotice(notice) }
-                Button { director.openNotice(notice) } label: {
-                    Text("Open in \(notice.appName)").font(IslandType.body.weight(.medium)).lineLimit(1)
-                        .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
-                        .background(Capsule().fill(.white.opacity(0.1)))
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
-                        .contentShape(Capsule())
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(director.notificationInbox.items) { notice in
+                            Button {
+                                director.selectInboxNotice(notice)
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    NoticeIcon(app: notice.app, size: 30)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text(presenting ? notice.appName : notice.head).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                                            Spacer(minLength: 4)
+                                            NoticeWhen(notice: notice, now: director.date(), font: .system(size: 10))
+                                        }
+                                        if !presenting { NoticeText(notice: notice, font: .system(size: 11)).lineLimit(2) }
+                                        else { Text("Content hidden while presenting").font(.system(size: 11)).foregroundStyle(IslandColor.dim) }
+                                    }
+                                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(IslandColor.dim)
+                                }
+                                .padding(11).frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                            }
+                            .buttonStyle(.plain).disabled(director.notificationInbox.submitting)
+                        }
+                    }
                 }
-                .buttonStyle(PressScaleStyle(pressed: 0.97, hover: 1))
+                .scrollIndicators(.hidden)
             }
-            .rise(1)
+            Text("This session only · Clear dismisses from LeNotch, not Notification Center")
+                .font(.system(size: 9)).foregroundStyle(IslandColor.dim).lineLimit(1).minimumScaleFactor(0.8)
         }
-        .frame(maxHeight: .infinity)
     }
 }

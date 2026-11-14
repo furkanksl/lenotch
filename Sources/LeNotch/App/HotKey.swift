@@ -5,6 +5,7 @@ import Carbon.HIToolbox
 @MainActor
 final class HotKey {
     private var ref: EventHotKeyRef?
+    private var registeredID: UInt32?
     private static var actions: [UInt32: () -> Void] = [:]
     private static var installed = false
     private static var nextID: UInt32 = 1
@@ -18,6 +19,14 @@ final class HotKey {
         guard RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &ref) == noErr
         else { return nil }
         Self.actions[id] = action
+        registeredID = id
+    }
+
+    func unregister() {
+        if let ref { UnregisterEventHotKey(ref) }
+        ref = nil
+        if let registeredID { Self.actions.removeValue(forKey: registeredID) }
+        registeredID = nil
     }
 
     private static func install() {

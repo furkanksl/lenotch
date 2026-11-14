@@ -121,7 +121,7 @@ final class TrayPresentationTests: XCTestCase {
         renderer.scale = 2
         let image = try XCTUnwrap(renderer.cgImage)
         let bitmap = NSBitmapImageRep(cgImage: image)
-        let firstToolX = FrameModel.cx - card.halfWidth + 20 + (card.width - 40) / 8 - 20
+        let firstToolX = FrameModel.cx - card.halfWidth + 20 + (card.width - 40) / 10 - 20
         let firstToolY = frame.cardTop + 20
         func backgroundBrightness(x: Double, y: Double) throws -> CGFloat {
             let color = try XCTUnwrap(bitmap.colorAt(x: Int((firstToolX + x) * 2),
@@ -157,7 +157,7 @@ final class TrayPresentationTests: XCTestCase {
             recognizedLabels += (labelRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         }
         let labels = recognizedLabels.joined(separator: " ").lowercased()
-        for label in ["Ask", "Timer", "Prompter", "Today", "Clipboard", "Shelf", "Shortcuts"] {
+        for label in ["Ask", "Timer", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "Inbox"] {
             XCTAssertTrue(labels.contains(label.lowercased()), "Missing tools label \(label): \(labels)")
         }
         let words = Set(labels.split(whereSeparator: \.isWhitespace))
