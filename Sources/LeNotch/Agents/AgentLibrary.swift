@@ -2,12 +2,19 @@ import CoreServices
 import Foundation
 import IslandCore
 
+/// Public web citations returned by ChatGPT's hosted search; never fetched by LeNotch itself.
+struct WebSource: Equatable, Sendable {
+    let title: String
+    let url: URL
+}
+
 /// One line of a session's chat in the card: what you said, what the agent said, or a run of tools folded into one line.
 enum AgentChatItem: Equatable, Sendable {
     case you(String)
     case agent(String)
     /// A summary (`Ran 3 commands · edited 2 files`) and each tool on its own line.
     case tools(String, [String])
+    case sources([WebSource])
 }
 
 /// Reads a session's transcript, the tail only: Claude Code's session JSONL (`~/.claude/projects/…`, the desktop app's

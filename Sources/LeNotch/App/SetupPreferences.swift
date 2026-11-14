@@ -198,7 +198,7 @@ struct SetupIntegrationsPage: View {
                     SetupIconBadge(symbol: "sparkles")
                     VStack(alignment: .leading, spacing: 4) {
                         Text("ChatGPT account").font(.system(size: 13, weight: .medium))
-                        Text("Use your ChatGPT sign-in for Ask, without the Codex CLI.")
+                        Text("Ask can search and open web pages through ChatGPT. Search queries are sent to ChatGPT; no Codex CLI is needed.")
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 8)

@@ -75,6 +75,10 @@ final class AskTests: XCTestCase {
         XCTAssertEqual(d.agentChats[id]?.last, .agent("Hello there"))
         d.askEvent(id, .tool("WebSearch"))
         XCTAssertEqual(d.agentChats[id]?.last, .tools("Searched the web", []))
+        XCTAssertEqual(d.island.agents.sessions[0].step, "Searching the web…")
+        let source = WebSource(title: "Example", url: URL(string: "https://example.com/guide")!)
+        d.askEvent(id, .sources([source]))
+        XCTAssertEqual(d.agentChats[id]?.last, .sources([source]))
         d.askEvent(id, .done(error: nil))
         XCTAssertEqual(d.island.agents.sessions[0].state, .ready, "its chat was showing: read")
         XCTAssertTrue(d.island.arrangement.all.contains(.agents(.ask)), "read, it keeps its ball: that's where you type")
@@ -129,6 +133,9 @@ final class AskTests: XCTestCase {
         XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.failed","response":{"error":{"message":"Try again"}}}"#), .failed("Try again"))
         XCTAssertEqual(ChatGPTChat.parseEvent("[DONE]"), .finished)
         XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.output_item.done","item":{"type":"message","content":[{"type":"output_text","text":"Hello"}]}}"#), .outputItem("Hello"))
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.output_item.added","item":{"type":"web_search_call","action":{"type":"search"}}}"#), .tool("WebSearch"))
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.output_item.added","item":{"type":"web_search_call","action":{"type":"open_page"}}}"#), .tool("WebFetch"))
+        XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.output_item.added","item":{"type":"web_search_call","action":{"type":"find_in_page"}}}"#), .tool("WebFind"))
         XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}"#), .failed("ChatGPT stopped the reply early (max_output_tokens)."))
         XCTAssertEqual(ChatGPTChat.parseEvent("not json"), .ignored)
         XCTAssertEqual(ChatGPTChat.errorMessage(from: Data(#"{"error":{"message":"Too many requests"}}"#.utf8)),
@@ -139,6 +146,18 @@ final class AskTests: XCTestCase {
                        "Invalid model")
         XCTAssertEqual(ChatGPTChat.parseEvent(#"{"type":"response.failed","response":{"error":{"message":"Retry later"}}}"#),
                        .failed("Retry later"))
+    }
+
+    func testWebSearchSourcesAreBoundedDeduplicatedAndPublicLinksOnly() {
+        let payload = #"{"type":"response.output_item.done","item":{"type":"message","content":[{"type":"output_text","text":"Answer","annotations":[{"type":"url_citation","url":"https://example.com/story","title":"Example story"},{"type":"url_citation","url":"https://example.com/story","title":"Duplicate"},{"type":"url_citation","url":"file:///etc/hosts","title":"File"},{"type":"url_citation","url":"https://user:pass@example.com/secret","title":"Credentials"},{"type":"url_citation","url":"javascript:alert(1)","title":"Script"},{"type":"url_citation","url":"http://example.org/guide","title":""}]}]}}"#
+        XCTAssertEqual(ChatGPTChat.sources(from: payload), [
+            WebSource(title: "Example story", url: URL(string: "https://example.com/story")!),
+            WebSource(title: "example.org", url: URL(string: "http://example.org/guide")!),
+        ])
+        let activity = #"{"type":"response.output_item.done","item":{"type":"web_search_call","action":{"type":"open_page","sources":[{"url":"https://example.com/page","title":"Read page"}]}}}"#
+        XCTAssertEqual(ChatGPTChat.sources(from: activity), [WebSource(title: "Read page", url: URL(string: "https://example.com/page")!)])
+        let final = #"{"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","annotations":[{"type":"url_citation","url":"https://example.com/final","title":"Final"}]}]}]}}"#
+        XCTAssertEqual(ChatGPTChat.sources(from: final).first?.title, "Final")
     }
 
     func testChatGPTStreamFramesEventsAcrossCRLFUTF8AndMissingFinalBlankLine() throws {
@@ -195,7 +214,12 @@ final class AskTests: XCTestCase {
         XCTAssertEqual(input.map { $0["role"] as? String }, ["user", "assistant", "user"])
         let last = try XCTUnwrap(input.last?["content"] as? [[String: String]])
         XCTAssertEqual(last.first?["text"], "next?")
-        XCTAssertNil(object["tools"], "Ask chat cannot invoke shell or agent tools")
+        let tools = try XCTUnwrap(object["tools"] as? [[String: Any]])
+        XCTAssertEqual(tools.count, 1, "Only the hosted web tool, never shell or local-file tools")
+        XCTAssertEqual(tools[0]["type"] as? String, "web_search")
+        XCTAssertEqual(tools[0]["external_web_access"] as? Bool, true)
+        XCTAssertEqual(object["tool_choice"] as? String, "auto")
+        XCTAssertEqual(object["parallel_tool_calls"] as? Bool, false)
         let overflow = Array(repeating: ("question", "reply"), count: 12)
         let bounded = try ChatGPTChat.requestBody(question: "latest", history: overflow, sessionID: "bounded")
         let boundedObject = try XCTUnwrap(JSONSerialization.jsonObject(with: bounded) as? [String: Any])

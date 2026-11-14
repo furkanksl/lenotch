@@ -391,6 +391,7 @@ struct AgentsCardLayer: View {
     /// agent sessions retain their own step labels; don't overlay streamed text.
     static func pendingStatus(for session: AgentSession, messages: [AgentChatItem]) -> String? {
         guard session.state == .working else { return nil }
+        if session.provider == .ask, let last = messages.last, case .agent = last { return nil }
         if !session.step.isEmpty { return session.step }
         guard session.provider == .ask, let last = messages.last, case .you = last else { return nil }
         return "Working…"
@@ -427,6 +428,21 @@ struct AgentsCardLayer: View {
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
+        case .sources(let links):
+            VStack(alignment: .leading, spacing: 5) {
+                Label("Sources", systemImage: "globe")
+                    .font(.system(size: 11.5, weight: .medium)).foregroundStyle(.white.opacity(0.56))
+                ForEach(links, id: \.url) { link in
+                    Link(destination: link.url) {
+                        HStack(spacing: 5) {
+                            Text(link.title).lineLimit(1)
+                            Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .semibold))
+                        }
+                        .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.8))
+                    }
+                }
+            }
+            .padding(.vertical, 3)
         }
     }
 

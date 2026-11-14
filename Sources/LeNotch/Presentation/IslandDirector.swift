@@ -1849,9 +1849,12 @@ final class IslandDirector {
             if case .agent(let prev)? = chat.last { chat[chat.count - 1] = .agent(prev + t) } else { chat.append(.agent(t)) }
             agentChats[id] = chat
         case .tool(let name):
-            askHook("PreToolUse", id, tool: name)
-            let line = name == "WebSearch" ? "Searched the web" : name == "WebFetch" ? "Read a page" : "Used \(name)"
+            let label = name == "WebSearch" ? "Searching the web…" : name == "WebFetch" ? "Opening a page…" : name == "WebFind" ? "Finding on a page…" : name
+            askHook("PreToolUse", id, tool: label)
+            let line = name == "WebSearch" ? "Searched the web" : name == "WebFetch" ? "Read a page" : name == "WebFind" ? "Searched a page" : "Used \(name)"
             agentChats[id, default: []].append(.tools(line, []))
+        case .sources(let links):
+            if !links.isEmpty { agentChats[id, default: []].append(.sources(links)) }
         case .done(let error):
             if let error {
                 agentChats[id, default: []].append(.agent(error))

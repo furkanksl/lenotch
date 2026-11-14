@@ -12,6 +12,8 @@ final class QuickAsk {
         case delta(String)
         /// A tool started (web search, a fetch).
         case tool(String)
+        /// Links returned with a hosted web search answer.
+        case sources([WebSource])
         case done(error: String?)
     }
 
