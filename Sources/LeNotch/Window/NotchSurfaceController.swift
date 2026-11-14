@@ -32,6 +32,7 @@ final class NotchSurfaceController {
     let keys = MediaKeyTap()
     private var keyRetry: Timer?
     private let panel = NotchPanel()
+    private let launcherFan = LauncherFanController()
     private let container = DropView()
     private let view: LiquidView
     private let content = NotchContentModel()
@@ -181,6 +182,7 @@ final class NotchSurfaceController {
 
     /// Stops the Now Playing feed (the adapter's perl process goes with it) and the key tap.
     func stop() {
+        launcherFan.stop()
         director.prompter.pause()
         bars.shutdown()
         nowPlaying.stop()
@@ -276,6 +278,14 @@ final class NotchSurfaceController {
         d.quickAsk.onEvent = { [weak d] id, e in d?.askEvent(id, e) }
         d.onWantsKey = { [weak self] in self?.panel.makeKey() }
         d.onYieldsKey = { [weak self] in self?.panel.resignKey() }
+        d.onShowLauncher = { [weak self] in self?.launcherFan.show() }
+        d.onToggleLauncher = { [weak self] in self?.launcherFan.toggle(showsControls: false) }
+        d.onDismissLauncher = { [weak self] in self?.launcherFan.hide(animated: false) }
+        launcherFan.onVisibilityChanged = { [weak self] visible in
+            guard let self else { return }
+            if visible { panel.ignoresMouseEvents = true }
+            director.launcherVisibilityChanged(visible)
+        }
     }
 
     private func now() -> Double {
@@ -531,11 +541,13 @@ final class NotchSurfaceController {
         guard let (_, g) = NotchGeometry.current() else {
             // No screen at all (every display asleep or gone).
             geometry = nil
+            launcherFan.updateGeometry(nil)
             panel.orderOut(nil)
             return
         }
         let changed = g != geometry
         geometry = g
+        launcherFan.updateGeometry(g)
         frameModel.notchHalfWidth = Double(g.notchWidth / 2)
         frameModel.notchHeight = Double(g.notchHeight)
         rebuildConstants()
@@ -614,6 +626,7 @@ final class NotchSurfaceController {
     }
 
     private func updateMouse(still: Bool = false) {
+        guard !launcherFan.isOpen else { panel.ignoresMouseEvents = true; return }
         let p = panelPoint(NSEvent.mouseLocation)
         let h = hit(p)
         // While pressed the drag is ours, wherever the pointer goes.
@@ -744,5 +757,6 @@ final class NotchSurfaceController {
         let on = forceReduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         animator.reduceMotion = on
         content.reduceMotion = on
+        if launcherFan.isOpen { launcherFan.hide(animated: false) }
     }
 }

@@ -35,6 +35,11 @@ final class IslandDirector {
         self.prompter = prompter ?? PrompterModel()
         tray.onGo = { [weak self] page in
             guard let self else { return }
+            if page == .launcher {
+                tray.go(.main)
+                showLauncher()
+                return
+            }
             if page != .notifications && notificationInbox.composing {
                 notificationInbox.cancelComposition()
                 onYieldsKey?()
@@ -1377,6 +1382,7 @@ final class IslandDirector {
 
     func setContext(_ c: DesktopContext) {
         if c.locked || c.presenting {
+            onDismissLauncher?()
             notificationReplyTask?.cancel()
             notificationInbox.cancelComposition()
             onYieldsKey?()
@@ -1389,6 +1395,7 @@ final class IslandDirector {
 
     /// The system reported where you are (ContextMonitor).
     func systemContextChanged(_ c: DesktopContext) {
+        if c.locked || c.presenting { onDismissLauncher?() }
         let was = systemContext
         systemContext = c
         if liveContext { setContext(c) }
@@ -1450,6 +1457,8 @@ final class IslandDirector {
     /// Opens the standalone tools menu without interrupting the current activity or playback.
     func openTray(at page: TrayModel.Page = .main) {
         guard forcedMode == nil else { return }
+        if page == .launcher { showLauncher(); return }
+        onDismissLauncher?()
         if groups.tray { if page != .main { tray.go(page) }; return }
         tray.nextPage = page
         hoverOff?.cancel(); hoverOff = nil
@@ -1522,6 +1531,7 @@ final class IslandDirector {
         noticeBySerial = noticeBySerial.filter { s, _ in island.running.contains { $0.serial == s } || shownActivity?.serial == s }
         guard NoticeArrival.of(n, context: island.context, trayOpen: island.trayShows) == .ears else { return }
         notificationInbox.receive(n)
+        if launcherVisible { return }
         // A card is open (you're using it): it waits, and comes when the card closes.
         if island.opened { heldNotices = Array((heldNotices + [n]).suffix(3)); return }
         notificationInbox.select(n)
@@ -1564,15 +1574,33 @@ final class IslandDirector {
     }
 
     func toggleLauncher() {
-        if island.trayShows && tray.page == .launcher { send(.close) }
-        else { showTool(.launcher) }
+        showLauncher(toggle: true)
+    }
+
+    @ObservationIgnored var onShowLauncher: (() -> Void)?
+    @ObservationIgnored var onToggleLauncher: (() -> Void)?
+    @ObservationIgnored var onDismissLauncher: (() -> Void)?
+    private(set) var launcherVisible = false
+
+    private func showLauncher(toggle: Bool = false) {
+        guard forcedMode == nil, !island.context.locked, !island.context.presenting,
+              !systemContext.locked, !systemContext.presenting,
+              !notificationInbox.submitting else { return }
+        hoverOff?.cancel(); hoverOff = nil
+        setIdleHover(false)
+        send(.close)
+        if toggle { onToggleLauncher?() } else { onShowLauncher?() }
+    }
+
+    func launcherVisibilityChanged(_ visible: Bool) {
+        launcherVisible = visible
+        changed()
     }
 
     func presentationCard(player: CardSize) -> CardSize {
         if island.trayShows {
             switch tray.page {
             case .notifications: return CardSize(width: 420, height: 348, radius: 36)
-            case .launcher: return CardSize(width: 480, height: 250, radius: 36)
             case .usage: return CardSize(width: 480, height: 266, radius: 36)
             default: break
             }

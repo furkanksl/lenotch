@@ -11,7 +11,7 @@ struct TrayLayer: View {
     let card: CardSize
 
     var body: some View {
-        let inset: Double = [.launcher, .usage].contains(director.tray.page) ? 0 : 20
+        let inset: Double = director.tray.page == .usage ? 0 : 20
         CardPlacement(frame: frame, card: card) {
             ZStack(alignment: .topLeading) {
                 TrayPages(tray: director.tray, director: director)
@@ -42,7 +42,7 @@ private struct TrayPages: View {
                 case .today: DayPage(tray: tray, director: director)
                 case .prompter: PrompterPage(tray: tray, director: director)
                 case .launcher:
-                    LauncherView(model: director.launcher, onClose: { tray.go(.main) }, onConfigure: { LauncherEditor.shared.show() })
+                    EmptyView() // Launcher is an independent transparent fan, never a tray card.
                 case .usage:
                     UsageView(model: director.usage, onClose: { tray.go(.main) }, onOpenSettings: { director.onNeedsSetup?() })
                 case .notifications:
@@ -86,7 +86,7 @@ private struct TrayGrid: View {
                 Tool(icon: .timer, label: timer.map(clockText) ?? "Timer", tint: timer != nil ? IslandColor.orange : nil) { tray.go(.timer) }
                 Tool(icon: .prompter, label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
                 Tool(icon: .today, label: "Today") { tray.go(.today) }
-                Tool(icon: .launcher, label: "Launcher") { tray.go(.launcher) }
+                Tool(icon: .launcher, label: "Launcher") { director.showTool(.launcher) }
             }
             HStack(spacing: 0) {
                 Tool(icon: .clipboard, label: "Clipboard") { tray.go(.clipboard) }

@@ -324,14 +324,14 @@ final class LauncherTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: LauncherModel.defaultStorageKey), data)
     }
 
-    func testNativeLauncherCardShowsSevenTargetsAndConfigurationWithinItsBounds() throws {
+    func testNativeLauncherFanShowsFiveTargetsAndKeepsOverflowOnTheNextPage() throws {
         let model = LauncherModel(defaults: nil)
         for title in ["Browser", "Projects", "Docs", "Notes", "Mail", "Code", "Files"] {
             try model.addLink("https://example.com/\(title)", title: title)
         }
-        let view = LauncherView(model: model, onClose: {}, onConfigure: {})
-            .environment(\.islandMotion, IslandMotion(reduce: true, stills: true))
-            .frame(width: 480, height: 220)
+        let state = LauncherFanState(model: model)
+        state.presented = true
+        let view = LauncherView(state: state, reduceMotion: true, onClose: {}, onConfigure: {}, onLaunch: { _ in })
         let renderer = ImageRenderer(content: view)
         renderer.scale = 3
         let image = try XCTUnwrap(renderer.cgImage)
@@ -341,16 +341,19 @@ final class LauncherTests: XCTestCase {
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(cgImage: image).perform([request])
         let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
-        for title in ["Launcher", "Browser", "Projects", "Docs", "Notes", "Mail", "Code", "Files"] {
-            XCTAssertTrue(text.contains(title.lowercased()), "Missing \(title) in native 480×220 card: \(text)")
+        for title in ["Browser", "Projects", "Docs", "Notes", "Mail"] {
+            XCTAssertTrue(text.contains(title.lowercased()), "Missing \(title) in floating fan: \(text)")
         }
+        XCTAssertEqual(state.items.count, 5)
+        state.changePage(1)
+        XCTAssertEqual(state.items.map(\.title), ["Code", "Files"])
     }
 
     func testEmptyLauncherRendersWithoutInventingDefaultItems() throws {
         let model = LauncherModel(defaults: nil)
-        let view = LauncherView(model: model, onClose: {}, onConfigure: {})
-            .environment(\.islandMotion, IslandMotion(reduce: true, stills: true))
-            .frame(width: 480, height: 220)
+        let state = LauncherFanState(model: model)
+        state.presented = true
+        let view = LauncherView(state: state, reduceMotion: true, onClose: {}, onConfigure: {}, onLaunch: { _ in })
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         let image = try XCTUnwrap(renderer.cgImage)

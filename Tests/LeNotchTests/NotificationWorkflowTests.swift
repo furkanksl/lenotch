@@ -113,8 +113,7 @@ import XCTest
 
     func testEachNewToolHasAnIndependentCard() {
         let (d, _) = director()
-        for (page, size) in [(TrayModel.Page.launcher, CardSize(width: 480, height: 250, radius: 36)),
-                             (.usage, CardSize(width: 480, height: 266, radius: 36)),
+        for (page, size) in [(TrayModel.Page.usage, CardSize(width: 480, height: 266, radius: 36)),
                              (.notifications, CardSize(width: 420, height: 348, radius: 36))] {
             d.showTool(page)
             XCTAssertTrue(d.island.trayShows)
