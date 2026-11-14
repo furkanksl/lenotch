@@ -140,7 +140,7 @@ public struct ContentGroups: Equatable, Sendable {
     /// The activity's closed view in the ears.
     public var activityEars = false
     public var activityCard = false
-    /// The tray's tools (with the player beside them when `player` is on too).
+    /// The standalone tools menu, exclusive of the player card.
     public var tray = false
     /// Who each place shows: 0 right of the ears, 1 left, 2 the +N ball.
     public var balls: [Party?] = [nil, nil, nil]
@@ -269,12 +269,10 @@ public struct Island: Equatable, Sendable {
     public var hud: HUDKind?
     public var context = DesktopContext()
     public var pointerOnLiquid = false
-    /// The empty notch's tray is open (with media on, the tray is the player's card instead).
+    /// The tools own the entire open card, independently of music playback.
     public private(set) var trayOpen = false
     /// The quick-ask card is open, asking this provider.
     public private(set) var askOpen: AgentProvider?
-    /// The player's card shows the tray's tools beside it.
-    public private(set) var playerTools = false
     /// The tools are showing your day at the large size (`openDay`).
     public private(set) var dayLarge = false
     /// The tray is open over whatever holds the ears (an activity, Claude or Codex), which waits in a ball meanwhile: the
@@ -289,8 +287,7 @@ public struct Island: Equatable, Sendable {
     private var placeKeys: [PlaceKey?] = [nil, nil]
     private enum PlaceKey: Hashable, Sendable { case media, media2, activity(Int), agents(AgentProvider) }
 
-    /// The tools column beside the player in the tray (design 2026-11-01-idle-tray).
-    public static let trayColumn = 300.0
+    public static let trayOnly = CardSize(width: 372, height: 168, radius: 34)
 
     public init() {}
 
@@ -319,7 +316,7 @@ public struct Island: Equatable, Sendable {
             mediaOn = false
             mediaHidden = false
             // Stopping a song must not dismiss a script the user is currently reading.
-            if !(opened && instance(cardOwner)?.id == .prompter) {
+            if !trayOpen && !(opened && instance(cardOwner)?.id == .prompter) {
                 hovered = false
                 opened = false
                 hud = nil                  // an alert in flight must not reopen the island
@@ -390,6 +387,7 @@ public struct Island: Equatable, Sendable {
             questionOnly = true
         case .showCard(let party):
             guard live, party == .more || arrangement.all.contains(party) || arrangement.ears == party else { break }
+            trayOpen = false; trayOver = false
             cardFor = party
             opened = true
             hovered = true
@@ -412,28 +410,13 @@ public struct Island: Equatable, Sendable {
             guard mediaOn, !context.menuOpen, !context.fullscreen, hud == nil else { break }
             // The open card's player (the second one's, from its ball), else the main one.
             let own: Party = opened && cardOwner == .media2 && media2On ? .media2 : .media
-            cardFor = own; opened = true; hovered = true; playerTools = false; mediaFocus = true
+            trayOpen = false; trayOver = false
+            cardFor = own; opened = true; hovered = true; mediaFocus = true
         case .openTray:
-            guard !context.menuOpen, !context.fullscreen, hud == nil else { break }
-            mediaFocus = false
-            if opened {
-                if askOpen != nil || trayShows || context.locked { break }
-                if cardOwner == .media && mediaOn { playerTools = true; break }   // the open player gains the tools
-                // Another card is open (a ball's, Claude's chat, an activity's): the tools take its place.
-                trayOver = arrangement.ears != .media; cardFor = .media; questionOnly = false; peekBall = nil
-                if mediaOn { playerTools = true } else { trayOpen = true }
-                break
-            }
-            switch arrangement.ears {
-            case .media: cardFor = .media; opened = true; hovered = true; playerTools = true
-            case nil: if !context.locked { trayOpen = true; opened = true; hovered = true }
-            default:
-                // Over an activity, Claude or Codex: it waits in a ball while the tools are open (owner, 11-11: the
-                // double-click on the notch opens the tools whatever is in the ears).
-                guard !context.locked else { break }
-                trayOver = true; opened = true; hovered = true; cardFor = nil; questionOnly = false; peekBall = nil
-                if mediaOn { playerTools = true } else { trayOpen = true }
-            }
+            guard !context.menuOpen, !context.fullscreen, !context.locked, hud == nil, askOpen == nil else { break }
+            mediaFocus = false; focusVideo = false
+            trayOpen = true; trayOver = arrangement.ears != nil
+            opened = true; hovered = true; cardFor = .media; questionOnly = false; peekBall = nil
         case .context(let c):
             let wasPresenting = context.presenting
             context = c
@@ -455,16 +438,9 @@ public struct Island: Equatable, Sendable {
             pointerOnLiquid = on
         }
         if !opened { trayOver = false }
-        // The empty notch's tray closes with its card, and gives way to anything that arrives (not to the activity it
-        // was opened over).
-        // A player can still exist while hidden by its own app or the user's Hide action. Only visible media
-        // replaces the standalone tools; otherwise converting to playerTools would close the card over empty ears.
-        let visibleMedia = arrangement.ears == .media
-        if trayOpen && (!opened || visibleMedia || (arrangement.ears != nil && !trayOver)) {
-            trayOpen = false
-            if opened && visibleMedia { playerTools = true }    // a song appeared under the open tray: the tools stay
-        }
-        if playerTools && (!opened || cardOwner != .media || !mediaOn) { playerTools = false }
+        // A player appearing or disappearing never widens or replaces the tools menu.
+        if trayOpen && (!opened || askOpen != nil || mediaFocus) { trayOpen = false }
+        if trayOpen { trayOver = arrangement.ears != nil }
         if !trayShows { dayLarge = false }
         if mediaFocus && (!opened || !(cardOwner == .media || cardOwner == .media2 && media2On) || !mediaOn) { mediaFocus = false }
         if !mediaFocus { focusVideo = false }
@@ -474,7 +450,7 @@ public struct Island: Equatable, Sendable {
         // stays open over nothing drew the idle notch while presses there found no card (log 11-10 23:34).
         if trayOver && arrangement.ears == nil { trayOver = false }
         if opened && arrangement.ears == nil && !trayOpen && askOpen == nil {
-            opened = false; hovered = false; playerTools = false; mediaFocus = false; questionOnly = false
+            opened = false; hovered = false; mediaFocus = false; questionOnly = false
         }
         placeKeys = places(mode).keys
         // Closing a transient's card gives it two more seconds.
@@ -712,7 +688,7 @@ public struct Island: Equatable, Sendable {
         case .card:
             let own = cardOwner
             let others = ([a.ears].compactMap { $0 } + a.balls.filter { $0 != .more })
-                .filter { $0 != own && ($0 != a.ears || ballWorthy($0)) }
+                .filter { ($0 != own || trayShows) && ($0 != a.ears || ballWorthy($0) || (trayShows && $0 == .media)) }
             return Array(others.prefix(2)) + (others.count > 2 || !a.overflow.isEmpty ? [.more] : [])
         default: return []
         }
@@ -778,11 +754,15 @@ public struct Island: Equatable, Sendable {
         return CardSize(width: 320, height: 32 + Double(rows) * 44 + (a.hidden.isEmpty ? 0 : 26), radius: 30)
     }
 
-    /// The card that opens: an activity's own size (the ears' or a ball's), the +N list, the empty notch's tray (the
-    /// player's size), or the player with the tray's tools column beside it. `trayHeight`: the tray's page wants more
-    /// height (the Notification Center, or the tools' notifications row); the player stays centred in it.
-    public func cardSize(player: CardSize, trayColumn: Double = Island.trayColumn, trayHeight: Double? = nil) -> CardSize {
+    /// The explicitly selected card. Tools have their own size and never inherit a wider player's geometry.
+    public func cardSize(player: CardSize, trayHeight: Double? = nil) -> CardSize {
         if askOpen != nil { return Self.askCard }
+        if trayShows {
+            if dayLarge { return Self.dayCard }
+            var card = Self.trayOnly
+            if let trayHeight { card.height = max(card.height, trayHeight) }
+            return card
+        }
         let own = cardOwner
         if own == .more { return moreCard }
         if case .agents(let provider) = own {
@@ -790,11 +770,7 @@ public struct Island: Equatable, Sendable {
         }
         if let a = instance(own) { return a.spec.card }
         if mediaOn && mediaFocus && (own == .media || own == .media2) { return focusVideo ? Self.videoCard : Self.focusCard }
-        if trayShows && dayLarge { return Self.dayCard }
-        var p = player
-        if trayShows, let h = trayHeight { p.height = max(p.height, h) }
-        guard mediaOn, playerTools else { return p }
-        return CardSize(width: p.width + trayColumn, height: p.height, radius: p.radius)
+        return player
     }
 
     /// An agent provider's card is the chat (sim `agCardSize`): its sessions, the recent messages, what it needs from
@@ -843,7 +819,7 @@ public struct Island: Equatable, Sendable {
     public var cardActivity: ActivityInstance? { instance(cardOwner) }
 
     /// The tray is on the open card (the empty notch's, the tools beside the player, or over an activity).
-    public var trayShows: Bool { opened && askOpen == nil && cardOwner == .media && (trayOpen || (mediaOn && playerTools)) && !mediaFocus }
+    public var trayShows: Bool { opened && askOpen == nil && cardOwner == .media && trayOpen && !mediaFocus }
 
     /// Which content shows in `mode`.
     public func groups(_ mode: PresentationMode) -> ContentGroups {
@@ -871,7 +847,7 @@ public struct Island: Equatable, Sendable {
         g.hud = mode == .hud
         g.peek = showMusic && mode == .peek
         g.player = showMusic && (mode == .expanded || (mode == .card && !dayLarge))
-        g.tray = mode == .card && own == .media && (trayOpen || (mediaOn && playerTools))
+        g.tray = mode == .card && trayShows
         if g.player && mode == .card && mediaFocus {
             g.player = false; g.tray = false
             if focusVideo { g.videoFocus = true } else { g.playerFocus = true }

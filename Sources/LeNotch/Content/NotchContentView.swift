@@ -158,7 +158,7 @@ struct NotchContentView: View {
                     .reveal(g.playerFocus, motion)
                 VideoFocusLayer(frame: frame, director: director)
                     .reveal(g.videoFocus, motion)
-                TrayLayer(frame: frame, director: director, card: model.card, withPlayer: g.player, playerWidth: model.playerWidth)
+                TrayLayer(frame: frame, director: director, card: model.card)
                     .reveal(g.tray, motion)
                 HUDLayer(frame: frame, director: director)
                     .reveal(g.hud, motion)

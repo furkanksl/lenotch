@@ -1,11 +1,32 @@
 import XCTest
 import IslandCore
 
-/// The idle tray (sim probe `TRAY1`, design 2026-11-01-idle-tray): what a press on the notch opens.
+/// Tools always occupy their own card, even while media and other activities remain active.
 final class TrayTests: XCTestCase {
     private let player = CardSize(width: 372, height: 168, radius: 34)
 
-    func testEmptyNotchOpensTheToolsAtThePlayersSize() {
+    private func assertToolsOnly(_ i: Island, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(i.mode, .card, file: file, line: line)
+        XCTAssertTrue(i.opened, file: file, line: line)
+        XCTAssertTrue(i.trayOpen, file: file, line: line)
+        XCTAssertTrue(i.trayShows, file: file, line: line)
+        let g = i.groups(.card)
+        XCTAssertTrue(g.tray, file: file, line: line)
+        XCTAssertFalse(g.player, file: file, line: line)
+        XCTAssertFalse(g.musicEars, file: file, line: line)
+        XCTAssertFalse(g.playerFocus, file: file, line: line)
+        XCTAssertFalse(g.videoFocus, file: file, line: line)
+        XCTAssertFalse(g.activityCard, file: file, line: line)
+        XCTAssertFalse(g.moreList, file: file, line: line)
+        XCTAssertNil(g.agentsCard, file: file, line: line)
+        XCTAssertNil(g.agentsAsk, file: file, line: line)
+        // A wider custom player must not stretch the explicitly opened tools menu.
+        let size = i.cardSize(player: CardSize(width: 520, height: 240, radius: 32))
+        XCTAssertEqual(size.width, 372, file: file, line: line)
+        XCTAssertEqual(size.height, 168, file: file, line: line)
+    }
+
+    func testEmptyNotchOpensOnlyTheTools() {
         var i = Island()
         XCTAssertTrue(i.canOpenEmptyTray)
         i.apply(.openTray)
@@ -14,7 +35,7 @@ final class TrayTests: XCTestCase {
         let g = i.groups(.card)
         XCTAssertTrue(g.tray)
         XCTAssertFalse(g.player)
-        XCTAssertEqual(i.cardSize(player: player), player)
+        assertToolsOnly(i)
         i.apply(.close)
         XCTAssertFalse(i.trayOpen)
         XCTAssertEqual(i.mode, .idle)
@@ -33,40 +54,83 @@ final class TrayTests: XCTestCase {
         XCTAssertEqual(i.mode, .card)
         XCTAssertTrue(i.groups(i.mode).tray)
         XCTAssertFalse(i.groups(i.mode).player)
-        XCTAssertEqual(i.cardSize(player: player), player)
+        assertToolsOnly(i)
 
         i.apply(.context(DesktopContext(frontmostApp: BundleID.music)))
         XCTAssertTrue(i.trayShows, "a context refresh must leave the explicitly opened tools available")
         i.apply(.context(DesktopContext()))
         XCTAssertTrue(i.trayShows)
-        XCTAssertTrue(i.groups(i.mode).player, "when media becomes visible, the tools move beside the player")
+        assertToolsOnly(i)
     }
 
-    // One click for the music, two for the music and the tools (owner, 11-01).
-    func testOneClickOpensThePlayerAloneASecondAddsTheTools() {
+    func testOneClickOpensThePlayerAloneASecondReplacesItWithTools() {
         var i = Island()
         i.apply(.startMedia)
         i.apply(.open(.media))
         XCTAssertFalse(i.groups(.card).tray)
         XCTAssertEqual(i.cardSize(player: player), player)
         i.apply(.openTray)
-        XCTAssertTrue(i.groups(.card).tray && i.groups(.card).player)
-        XCTAssertEqual(i.cardSize(player: player).width, 372 + Island.trayColumn)
+        assertToolsOnly(i)
         i.apply(.close)
+        XCTAssertFalse(i.trayOpen)
         i.apply(.open(.media))             // it closes back to the player alone
         XCTAssertFalse(i.groups(.card).tray)
+        XCTAssertTrue(i.groups(.card).player)
     }
 
-    func testWithASongTheTrayIsThePlayersCardWithTheToolsBeside() {
+    func testPlayingAndPausedMusicKeepTheirPlaybackStateWhenToolsOpen() {
+        for playing in [false, true] {
+            var i = Island()
+            i.apply(.startMedia)
+            i.apply(.playback(playing))
+            XCTAssertFalse(i.canOpenEmptyTray)
+            i.apply(.openTray)
+            assertToolsOnly(i)
+            XCTAssertTrue(i.mediaOn)
+            XCTAssertEqual(i.mediaPlaying, playing)
+        }
+    }
+
+    func testLyricsAndVideoGiveWayToTheToolsWithoutStoppingMedia() {
+        for video in [false, true] {
+            var i = Island()
+            i.apply(.startMedia)
+            i.apply(.focusMedia)
+            i.focusVideo = video
+            XCTAssertEqual(i.groups(.card).videoFocus, video)
+            XCTAssertEqual(i.groups(.card).playerFocus, !video)
+            i.apply(.openTray)
+            assertToolsOnly(i)
+            XCTAssertFalse(i.mediaFocus)
+            XCTAssertTrue(i.mediaOn)
+            XCTAssertTrue(i.mediaPlaying)
+        }
+    }
+
+    func testMediaStoppingKeepsTheToolsOpenAtTheSameSize() {
         var i = Island()
         i.apply(.startMedia)
-        XCTAssertFalse(i.canOpenEmptyTray)
         i.apply(.openTray)
+        let before = i.cardSize(player: player)
+        i.apply(.stopMedia)
+        assertToolsOnly(i)
+        XCTAssertFalse(i.mediaOn)
+        XCTAssertEqual(i.cardSize(player: player), before)
+    }
+
+    func testSelectingTheMusicBubbleReturnsToThePlayer() {
+        var i = Island()
+        i.apply(.startMedia)
+        i.apply(.openTray)
+        XCTAssertTrue(i.trayOver)
+        XCTAssertTrue(i.bubbleParties(.card).contains(.media))
+        i.apply(.showCard(.media))
+        XCTAssertTrue(i.opened)
         XCTAssertFalse(i.trayOpen)
-        XCTAssertEqual(i.mode, .card)
-        let g = i.groups(.card)
-        XCTAssertTrue(g.tray && g.player)
-        XCTAssertEqual(i.cardSize(player: player).width, 372 + Island.trayColumn)
+        XCTAssertFalse(i.trayShows)
+        XCTAssertFalse(i.groups(.card).tray)
+        XCTAssertTrue(i.groups(.card).player)
+        XCTAssertEqual(i.cardSize(player: player), player)
     }
 
     // The double-click on the notch opens the tools whatever is in the ears (owner, 11-11); the activity waits in a ball.
@@ -75,7 +139,7 @@ final class TrayTests: XCTestCase {
         i.apply(.show(.timer))
         i.apply(.openTray)
         XCTAssertTrue(i.opened)
-        XCTAssertTrue(i.trayShows)
+        assertToolsOnly(i)
         XCTAssertTrue(i.trayOver)
         XCTAssertTrue(i.bubbleParties(.card).contains(.activity))
         i.apply(.close)
@@ -90,18 +154,37 @@ final class TrayTests: XCTestCase {
         i.apply(.open(.activity))
         XCTAssertFalse(i.trayShows)
         i.apply(.openTray)
-        XCTAssertTrue(i.trayShows)
+        assertToolsOnly(i)
 
-        var j = Island()                    // the player's card gains the tools beside it, as before
+        var j = Island()
         j.apply(.startMedia)
         j.apply(.show(.timer, opened: false))
         j.apply(.open(.activity))
         j.apply(.openTray)
-        XCTAssertTrue(j.groups(.card).tray && j.groups(.card).player)
+        assertToolsOnly(j)
     }
 
     // Bug 11-10: something running but hidden (here the meeting, with Calendar in front) left the notch looking empty,
     // and a press there did nothing because the tray asked `live` instead of what shows.
+    func testToolsReplaceAnAgentCardWithoutHidingTheRunningAgent() {
+        var i = Island()
+        i.apply(.agent(AgentHook(provider: .claude, event: "UserPromptSubmit", sessionID: "tray-agent", cwd: "/tmp/lenotch")))
+        i.apply(.open(.agents(.claude)))
+        XCTAssertEqual(i.groups(.card).agentsCard, .claude)
+
+        i.apply(.openTray)
+
+        assertToolsOnly(i)
+        XCTAssertTrue(i.trayOver)
+        XCTAssertEqual(i.bubbleParties(.card), [.agents(.claude)])
+        XCTAssertEqual(i.agents.sessions.count, 1)
+
+        i.apply(.showCard(.agents(.claude)))
+        XCTAssertFalse(i.trayShows)
+        XCTAssertFalse(i.trayOpen)
+        XCTAssertEqual(i.groups(.card).agentsCard, .claude)
+    }
+
     func testAHiddenActivityLeavesTheEmptyNotchPressable() {
         var i = Island()
         i.apply(.context(DesktopContext(frontmostApp: BundleID.calendar)))
@@ -125,7 +208,7 @@ final class TrayTests: XCTestCase {
         XCTAssertTrue(i.canOpenEmptyTray)
     }
 
-    func testAnythingArrivingTakesTheTraysPlace() {
+    func testAnActivityCanTakeTheToolsPlaceButMediaCannot() {
         var i = Island()
         i.apply(.openTray)
         i.apply(.show(.timer, opened: false))
@@ -134,10 +217,9 @@ final class TrayTests: XCTestCase {
 
         var j = Island()
         j.apply(.openTray)
-        j.apply(.startMedia)               // a song starting under the open tray: the tray gains the player
-        XCTAssertFalse(j.trayOpen)
-        XCTAssertEqual(j.mode, .card)
-        XCTAssertTrue(j.groups(.card).player && j.groups(.card).tray)
+        j.apply(.startMedia)
+        assertToolsOnly(j)
+        XCTAssertTrue(j.mediaOn)
     }
 
     func testNothingOpensOverAMenuOrFullscreen() {
@@ -147,6 +229,10 @@ final class TrayTests: XCTestCase {
             XCTAssertFalse(i.canOpenEmptyTray)
             i.apply(.openTray)
             XCTAssertEqual(i.mode, .idle)
+            i.apply(.startMedia)
+            i.apply(.openTray)
+            XCTAssertFalse(i.trayOpen)
+            XCTAssertFalse(i.trayShows)
         }
         var i = Island()
         i.apply(.openTray)
@@ -163,7 +249,7 @@ final class TrayTests: XCTestCase {
         XCTAssertEqual(i.cardSize(player: player), Island.dayCard)
         i.apply(.closeDay)
         XCTAssertFalse(i.dayLarge)
-        XCTAssertEqual(i.cardSize(player: player), player)
+        assertToolsOnly(i)
         i.apply(.close)
         XCTAssertFalse(i.dayLarge)
     }

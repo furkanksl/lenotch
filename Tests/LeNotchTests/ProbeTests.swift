@@ -236,8 +236,8 @@ final class ProbeTests: XCTestCase {
         XCTAssertEqual(d.mode, .card)
     }
 
-    // One click for the music, two for the music and the tools (owner, 11-01).
-    func testSecondPressSoonAfterAddsTheTools() {
+    // The second press replaces the player with the tools instead of widening it.
+    func testSecondPressSoonAfterReplacesThePlayerWithTools() {
         let (d, _) = director()
         d.realTime = { 0 }
         d.startMusic()
@@ -247,7 +247,8 @@ final class ProbeTests: XCTestCase {
         d.pointerDown(at: SIMD2(380, 18), hit: .ears)
         d.pointerUp(at: SIMD2(380, 18), hit: .ears, corridor: false)
         XCTAssertTrue(d.island.opened)
-        XCTAssertTrue(d.groups.tray && d.groups.player)
+        XCTAssertTrue(d.groups.tray)
+        XCTAssertFalse(d.groups.player)
     }
 
     // PT3: a swipe up on the card closes it.

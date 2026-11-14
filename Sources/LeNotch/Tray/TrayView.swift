@@ -4,28 +4,18 @@ import IslandCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The tray's tools on the open card (sim `#tray`): the whole card on the empty notch, or a column beside the
-/// player (a hairline between them, 12 pt past the player's 20 pt margin). The column is 128 pt tall between
-/// 20 pt margins; it lays out at the card's final size and rides the spring like every card.
+/// The standalone tools menu uses the entire card, whether music is playing or not.
 struct TrayLayer: View {
     let frame: FrameModel
     let director: IslandDirector
     let card: CardSize
-    let withPlayer: Bool
-    let playerWidth: Double
 
     var body: some View {
         CardPlacement(frame: frame, card: card) {
-            let left = withPlayer ? playerWidth + 4 : 20
             ZStack(alignment: .topLeading) {
-                if withPlayer {
-                    Rectangle().fill(.white.opacity(0.1))
-                        .frame(width: 1, height: card.height - 56)
-                        .offset(x: playerWidth - 8, y: 28)
-                }
                 TrayPages(tray: director.tray, director: director)
-                    .frame(width: max(card.width - left - 20, 0), height: card.height - 40, alignment: .topLeading)
-                    .offset(x: left, y: 20)
+                    .frame(width: max(card.width - 40, 0), height: card.height - 40, alignment: .topLeading)
+                    .offset(x: 20, y: 20)
             }
             .frame(width: card.width, height: card.height, alignment: .topLeading)
             .foregroundStyle(.white)
