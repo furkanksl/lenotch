@@ -74,18 +74,18 @@ private struct TrayGrid: View {
         VStack(spacing: 10) {
             HStack(spacing: 0) {
                 // Text-only Quick Ask (⌥Space).
-                Tool(symbol: "sparkles", label: "Ask") { director.openAsk() }
+                Tool(icon: .ask, label: "Ask") { director.openAsk() }
                     .help("Ask Claude or ChatGPT (⌥Space)")
-                Tool(symbol: "timer", label: timer.map(clockText) ?? "Timer", tint: timer != nil ? IslandColor.orange : nil) { tray.go(.timer) }
-                Tool(symbol: "text.alignleft", label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
-                Tool(symbol: "calendar", label: "Today") { tray.go(.today) }
+                Tool(icon: .timer, label: timer.map(clockText) ?? "Timer", tint: timer != nil ? IslandColor.orange : nil) { tray.go(.timer) }
+                Tool(icon: .prompter, label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
+                Tool(icon: .today, label: "Today") { tray.go(.today) }
             }
             HStack(spacing: 0) {
-                Tool(symbol: running ? "pause" : "play", label: running ? "Pause" : "Play") { director.trayPause() }
+                Tool(icon: running ? .pause : .play, label: running ? "Pause" : "Play") { director.trayPause() }
                     .disabled(!director.trayCanPause)
-                Tool(symbol: "clipboard", label: "Clipboard") { tray.go(.clipboard) }
-                Tool(symbol: "tray", label: "Shelf", badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
-                Tool(symbol: "square.on.square", label: "Shortcuts") { tray.go(.shortcuts) }
+                Tool(icon: .clipboard, label: "Clipboard") { tray.go(.clipboard) }
+                Tool(icon: .shelf, label: "Shelf", badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
+                Tool(icon: .shortcuts, label: "Shortcuts") { tray.go(.shortcuts) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -127,7 +127,7 @@ private struct PrompterPage: View {
 }
 
 private struct Tool: View {
-    let symbol: String
+    let icon: ToolIcon
     let label: String
     var tint: Color?
     var badge: Int?
@@ -137,8 +137,9 @@ private struct Tool: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .regular))
+                ToolIconView(icon: icon)
+                    .frame(width: 20, height: 20)
+                    .accessibilityHidden(true)
                     .foregroundStyle(tint ?? .white)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(tint.map { $0.opacity(0.3) } ?? .white.opacity(0.14)))
