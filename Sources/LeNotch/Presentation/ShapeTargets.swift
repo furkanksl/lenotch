@@ -34,6 +34,8 @@ struct TargetContext: Equatable, Sendable {
     var near = 0.0
     /// You're typing (sim CTX2): the ears make a little room, 6 pt narrower and dimmer, and come back when you stop.
     var typing = false
+    /// Dictation has something to say (a problem, what to do about it): its ears swell into a lip under the notch.
+    var dictationMessage = false
 }
 
 /// Turns a presentation mode into target shapes, including the staged poses the
@@ -123,6 +125,18 @@ struct ShapeTargets {
         case .hud:
             s = ears(t.hudExtent)
             s.glowIntensity = 0
+        case .dictation:
+            if context.dictationMessage {
+                // The ears swell and grow a lip under the notch for the words, the hover preview's own shape, so the
+                // message is the notch speaking rather than a card hung under it.
+                s = ShapeState(mainHalfWidth: notchHalfWidth + t.dictationExtent + t.peekExtra,
+                               mainHeight: notchHeight + t.dictationLip, mainRadius: t.peekRadius,
+                               kBezel: t.kBezelExpanded,
+                               glowIntensity: (t.glowCompact + t.glowExpanded) / 2,
+                               glowFalloff: (t.falloffCompact + t.falloffExpanded) / 2)
+            } else {
+                s = ears(t.dictationExtent)
+            }
         case .peek:
             // From the ears' own width: a song's, or Claude's and Codex's 96 pt (sim `AG.ear`), so they never shrink.
             let ear = context.activityHoldsEars ? (context.activityEar ?? t.earExtent) : t.earExtent
@@ -252,7 +266,7 @@ struct ShapeTargets {
             for k in Self.cardChannels { rise[keyPath: k] = seed[keyPath: k] }
             return (rise, [(t.budDelay * 2, final)])
         }
-        if from == .idle && (to == .compact || to == .hud) {
+        if from == .idle && (to == .compact || to == .hud || to == .dictation) {
             // Liquid opening: the notch first sags and spreads like a poured drop, then the
             // ears run out to their length and the sag springs back up.
             var pour = final

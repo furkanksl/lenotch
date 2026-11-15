@@ -179,10 +179,10 @@ struct NotchContentView: View {
                     .reveal(g.agentsAsk != nil, motion)
                 BallPeekLayer(frame: frame, director: director, party: g.peekPlace.flatMap { g.balls[$0] })
                     .reveal(g.peekPlace != nil, motion)
+                DictationLayer(frame: frame, director: director)
+                    .reveal(g.dictation, motion)
             }
             .mask(alignment: .topLeading) { ClipMask(frame: frame) }
-
-            DictationStatusLayer(frame: frame, reduceMotion: model.reduceMotion || model.stills)
 
             // The balls live outside the clip and each rides its own spring.
             ForEach(0..<3, id: \.self) { place in

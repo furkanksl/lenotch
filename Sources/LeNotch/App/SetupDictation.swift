@@ -99,7 +99,7 @@ private struct SetupDictationHero: View {
                     .foregroundStyle(SetupTheme.text)
                 Text(shortcutUnavailable
                      ? "⌥D is in use by another app. Start dictation from the notch menu instead."
-                     : "Speak, press it again, and your words are pasted where you’re typing.")
+                     : "Speak, press it again, and your words are pasted where you’re typing. Esc cancels.")
                     .setupDetail().frame(maxWidth: 270, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }

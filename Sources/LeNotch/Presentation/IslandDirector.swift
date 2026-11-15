@@ -228,6 +228,7 @@ final class IslandDirector {
         if let forcedMode {
             var g = ContentGroups()
             g.hud = forcedMode == .hud
+            g.dictation = forcedMode == .dictation
             return g
         }
         var g = island.groups(mode)
@@ -845,6 +846,33 @@ final class IslandDirector {
         } else {
             hudReadOnly = true
         }
+    }
+
+    // MARK: - Dictation
+
+    /// What dictation shows in the notch (`DictationCoordinator.indicator`), nil while it isn't there. It holds the ears,
+    /// as the HUD does for a moment (`Island.dictating`).
+    private(set) var dictation: DictationCoordinator.Indicator?
+
+    /// Dictation started, moved on (listening, working, done) or ended. Only starting, ending and a message coming or
+    /// going change the island; the rest is the content's.
+    func dictationChanged(_ indicator: DictationCoordinator.Indicator?) {
+        let hadMessage = dictationMessage
+        dictation = indicator
+        if island.dictating != (indicator != nil) {
+            send(.dictation(indicator != nil))
+        } else if dictationMessage != hadMessage {
+            changed()
+        }
+    }
+
+    /// Snapshots draw a voice instead of the mic's real levels (`SnapshotRunner`).
+    @ObservationIgnored var sampleDictationLevels: [Float]?
+
+    /// Dictation has words to show: the ears grow a lip under the notch for them.
+    var dictationMessage: Bool {
+        if case .problem? = dictation { return true }
+        return false
     }
 
     // MARK: - Activities
@@ -2093,6 +2121,7 @@ final class IslandDirector {
     func pointerMoved(hit: HitRegion?, corridor: Bool, buttonDown: Bool, settled: Bool = true) {
         guard forcedMode == nil else { return }
         if mode == .hud { hudHover(hit != nil); return }
+        if mode == .dictation { return }   // nothing previews or opens under dictation
         if hudHovered { hudHover(false) }
         // The empty notch only swells under the pointer; a press opens the tray.
         guard island.live else { setIdleHover(island.canOpenEmptyTray && hit != nil && !buttonDown); return }
@@ -2180,6 +2209,12 @@ final class IslandDirector {
             suppressClick = true
             return
         }
+        // Dictation's ears take a press (it belongs to the island, not the menu bar under it) and do nothing with it:
+        // ⌥D finishes, Esc cancels.
+        if forcedMode == nil, mode == .dictation, hit != nil {
+            suppressClick = true
+            return
+        }
         // Double-click (owner, 11-07 and 11-11): the second press on the notch itself opens the tools, whatever the first
         // press opened (the empty notch's tray, the player, Claude's chat, an activity's card); on the music anywhere
         // else it grows the player into the focused view with the lyrics. The second press never closes what the first
@@ -2201,7 +2236,7 @@ final class IslandDirector {
             suppressClick = true
             return
         }
-        guard forcedMode == nil, mode != .idle, mode != .hud, let hit else { return }
+        guard forcedMode == nil, mode != .idle, mode != .hud, mode != .dictation, let hit else { return }
         if island.live && !island.opened {
             // Opens on the press itself, so the liquid answers the instant the button goes down.
             // The click that ends this press belongs to it (the ears retract under the pointer).
@@ -2282,7 +2317,7 @@ final class IslandDirector {
             openFocus()
             return
         }
-        guard island.live, mode != .hud else { return }
+        guard island.live, mode != .hud, mode != .dictation else { return }
         if hit != nil && !island.opened {
             open(pickCard(hit))
         } else if hit == nil && island.opened {

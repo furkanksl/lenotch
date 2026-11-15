@@ -12,6 +12,9 @@ public enum PresentationMode: String, CaseIterable, Sendable {
     case duo
     /// Volume or brightness briefly takes over the ears.
     case hud
+    /// Dictation (⌥D) holds the ears while it listens and works: the mic and your voice's level; a message grows a lip
+    /// under the notch.
+    case dictation
     /// A droplet with no content. Debug only, for judging the drip.
     case split
     /// An open card below the notch.
@@ -137,6 +140,8 @@ public struct ContentGroups: Equatable, Sendable {
     /// The focused player (double-click on the music, owner 11-07): big cover, synced lyrics, controls.
     public var playerFocus = false
     public var hud = false
+    /// Dictation's mic and voice in the ears (`PresentationMode.dictation`).
+    public var dictation = false
     /// The activity's closed view in the ears.
     public var activityEars = false
     public var activityCard = false
@@ -220,6 +225,8 @@ public enum IslandEvent: Sendable, Equatable {
     case context(DesktopContext)
     case hud(HUDKind)
     case hudEnded
+    /// Dictation started (true) or is over (false): it holds the ears meanwhile, as the HUD does for a moment.
+    case dictation(Bool)
     case pointer(onLiquid: Bool)
 }
 
@@ -267,6 +274,8 @@ public struct Island: Equatable, Sendable {
     /// The open card shows only what a session asks (opened by a hover, `.openQuestion`).
     public private(set) var questionOnly = false
     public var hud: HUDKind?
+    /// Dictation is listening or turning speech into text (`DictationCoordinator`): it holds the ears until it's done.
+    public private(set) var dictating = false
     public var context = DesktopContext()
     public var pointerOnLiquid = false
     /// The tools own the entire open card, independently of music playback.
@@ -299,8 +308,11 @@ public struct Island: Equatable, Sendable {
     /// Asks what the notch shows, not `live`: a session or activity that's running but hidden (its own app is in front)
     /// leaves the notch looking empty, and a press there must still open the tools.
     public var canOpenEmptyTray: Bool {
-        arrangement.ears == nil && askOpen == nil && !trayOpen && hud == nil && !context.menuOpen && !context.fullscreen && !context.locked
+        arrangement.ears == nil && askOpen == nil && !trayOpen && !systemHolds && !context.menuOpen && !context.fullscreen && !context.locked
     }
+
+    /// The HUD or dictation holds the ears: nothing opens under them.
+    public var systemHolds: Bool { hud != nil || dictating }
 
     // MARK: - Reducer
 
@@ -394,7 +406,7 @@ public struct Island: Equatable, Sendable {
             questionOnly = false
             askOpen = nil
         case .openAsk(let p):
-            guard !context.menuOpen, !context.fullscreen, hud == nil else { break }
+            guard !context.menuOpen, !context.fullscreen, !systemHolds else { break }
             trayOpen = false
             askOpen = p
             opened = true
@@ -407,13 +419,13 @@ public struct Island: Equatable, Sendable {
         case .closeDay:
             dayLarge = false
         case .focusMedia:
-            guard mediaOn, !context.menuOpen, !context.fullscreen, hud == nil else { break }
+            guard mediaOn, !context.menuOpen, !context.fullscreen, !systemHolds else { break }
             // The open card's player (the second one's, from its ball), else the main one.
             let own: Party = opened && cardOwner == .media2 && media2On ? .media2 : .media
             trayOpen = false; trayOver = false
             cardFor = own; opened = true; hovered = true; mediaFocus = true
         case .openTray:
-            guard !context.menuOpen, !context.fullscreen, !context.locked, hud == nil, askOpen == nil else { break }
+            guard !context.menuOpen, !context.fullscreen, !context.locked, !systemHolds, askOpen == nil else { break }
             mediaFocus = false; focusVideo = false
             trayOpen = true; trayOver = arrangement.ears != nil
             opened = true; hovered = true; cardFor = .media; questionOnly = false; peekBall = nil
@@ -434,6 +446,9 @@ public struct Island: Equatable, Sendable {
             hud = kind
         case .hudEnded:
             hud = nil
+        case .dictation(let on):
+            // What was open stays open underneath and comes back when dictation is done, as it does after the HUD.
+            dictating = on
         case .pointer(let on):
             pointerOnLiquid = on
         }
@@ -657,6 +672,7 @@ public struct Island: Equatable, Sendable {
     /// What the liquid should be doing now.
     public var mode: PresentationMode {
         if hud != nil { return .hud }       // a system alert briefly takes over, then hands back
+        if dictating { return .dictation }  // you asked for it: over fullscreen and menus too, until it's done
         let alert = activity?.spec.tier == .alert
         if (context.fullscreen || context.menuOpen) && !alert { return .idle }
         let a = arrangement
@@ -834,7 +850,7 @@ public struct Island: Equatable, Sendable {
         let own: Party? = mode == .card ? cardOwner : nil
         let showMusic = !trayOpen && (mediaOn && (own.map { $0 == .media } ?? (a.ears == .media)) || media2On && own == .media2)
         var g = ContentGroups()
-        g.musicEars = showMusic && mode != .hud && mode != .idle
+        g.musicEars = showMusic && mode != .hud && mode != .dictation && mode != .idle
         g.activityEars = activity != nil && a.ears == .activity && (mode == .compact || mode == .duo)
         g.activityCard = mode == .card && own.flatMap(instance) != nil
         g.moreList = mode == .card && own == .more
@@ -845,6 +861,7 @@ public struct Island: Equatable, Sendable {
         // The +N ball only swells: its list opens on a press.
         if let p = peekBall, p != .more, mode == .duo || mode == .peek, let i = g.balls.firstIndex(of: p) { g.peekPlace = i }
         g.hud = mode == .hud
+        g.dictation = mode == .dictation
         g.peek = showMusic && mode == .peek
         g.player = showMusic && (mode == .expanded || (mode == .card && !dayLarge))
         g.tray = mode == .card && trayShows

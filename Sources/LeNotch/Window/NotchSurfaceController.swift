@@ -342,6 +342,7 @@ final class NotchSurfaceController {
         if d.forcedMode != nil { context.bubbleModes = [.split]; context.leftBallModes = []; context.moreModes = [] }
         context.activityHoldsEars = island.earsHeld
         context.activityEar = island.heldEar
+        context.dictationMessage = d.dictationMessage
         context.card = d.presentationCard(player: playerCard)
         context.idleHover = d.idleHover
         let peek = d.groups.peekPlace

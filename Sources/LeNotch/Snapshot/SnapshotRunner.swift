@@ -127,6 +127,8 @@ enum SnapshotRunner {
             ("card-to-compact", .card, .compact, [], Region(width: 520, height: 220)),
             ("duo-to-card", .duo, .card, [.duo, .card], Region(width: 520, height: 220)),
             ("compact-to-hud", .compact, .hud, [], Region(width: 520, height: 90)),
+            ("idle-to-dictation", .idle, .dictation, [], Region(width: 520, height: 90)),
+            ("dictation-to-idle", .dictation, .idle, [], Region(width: 520, height: 90)),
             ("card-to-idle", .card, .idle, [], Region(width: 520, height: 220)),
         ]
         for (name, from, to, bubbles, region) in scripts {
@@ -210,6 +212,20 @@ enum SnapshotRunner {
         static var all: [Scenario] {
             var list: [Scenario] = [
                 Scenario(name: "media · ears") { $0.startMusic() },
+                Scenario(name: "dictation · listening") { d in
+                    d.sampleDictationLevels = [0.08, 0.25, 0.55, 0.9, 0.7, 0.45, 0.8, 0.35, 0.6]
+                    d.dictationChanged(.listening)
+                },
+                Scenario(name: "dictation · listening over a song") { d in
+                    d.startMusic()
+                    d.sampleDictationLevels = [0.4, 0.6, 0.3, 0.75, 0.5, 0.2, 0.65, 0.85, 0.45]
+                    d.dictationChanged(.listening)
+                },
+                Scenario(name: "dictation · working") { d in d.dictationChanged(.working) },
+                Scenario(name: "dictation · pasted") { d in d.dictationChanged(.note(.pasted)) },
+                Scenario(name: "dictation · a problem's words") { d in
+                    d.dictationChanged(.problem("Copied to the clipboard. Allow Accessibility in Setup to paste it for you."))
+                },
                 Scenario(name: "prompter · ready to read") { d in
                     d.prompter.updateScript(title: "A clear beginning", text: "Look into the camera. Take a breath.\n\nToday, I want to share a simple idea: the best tools get out of the way.\n\nKeep your eyes here, speak naturally, and let the words follow your pace.")
                     d.openPrompter()
@@ -461,6 +477,7 @@ enum SnapshotRunner {
             c.moreModes = Set(PresentationMode.allCases.filter { island.balls($0)[2] != nil })
             c.activityHoldsEars = island.earsHeld
             c.activityEar = island.heldEar
+            c.dictationMessage = d.dictationMessage
             c.idleHover = d.idleHover
             c.peekPlace = d.groups.peekPlace
             c.peekCard = c.peekPlace.flatMap { d.groups.balls[$0] }.map(Island.peekCard)

@@ -16,6 +16,8 @@ struct Tuning: Codable, Equatable, Sendable {
     var earExtent = 60.0            // how far each ear reaches past the notch (70 felt a tad big live, 11-01)
     var earRadius = 18.0            // ~half the menu bar height: pill ends
     var hudExtent = 84.0            // 96 felt a tad big live (11-01)
+    var dictationExtent = 68.0      // dictation's ears: the mic left, nine bars of your voice right
+    var dictationLip = 44.0         // a dictation message: the lip under the notch holds two lines
     var expandedHalfWidth = 196.0
     var expandedHeight = 172.0
     var expandedRadius = 44.0

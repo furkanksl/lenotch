@@ -108,6 +108,8 @@ private struct DebugView: View {
                     TuneSlider("Ear extent", $store.tuning.earExtent, 10...200, "%.0f pt")
                     TuneSlider("Ear radius", $store.tuning.earRadius, 0...19, "%.1f pt")
                     TuneSlider("HUD extent", $store.tuning.hudExtent, 10...220, "%.0f pt")
+                    TuneSlider("Dictation extent", $store.tuning.dictationExtent, 10...200, "%.0f pt")
+                    TuneSlider("Dictation message lip", $store.tuning.dictationLip, 16...100, "%.0f pt")
                     TuneSlider("Expanded half width", $store.tuning.expandedHalfWidth, 110...360, "%.0f pt")
                     TuneSlider("Expanded height", $store.tuning.expandedHeight, 60...280, "%.0f pt")
                     TuneSlider("Expanded radius", $store.tuning.expandedRadius, 0...80, "%.0f pt")

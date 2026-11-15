@@ -90,6 +90,9 @@ final class DictationAudioRecorder {
         }
     }
 
+    /// How often the mic's level reaches the notch: each one scrolls the bars by one.
+    nonisolated static let meterInterval = 0.07
+
     private var engine: AVAudioEngine?
     private var capture: DictationAudioCapture?
     private var meter: Timer?
@@ -115,7 +118,7 @@ final class DictationAudioRecorder {
         self.capture = capture
         self.engine = engine
         readIndex = 0
-        meter = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak capture] _ in
+        meter = Timer.scheduledTimer(withTimeInterval: Self.meterInterval, repeats: true) { [weak capture] _ in
             let level = capture?.level() ?? 0
             Task { @MainActor in onLevel(level) }
         }

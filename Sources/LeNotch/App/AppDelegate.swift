@@ -48,6 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DictationCoordinator.shared.toggle()
             }
             DictationCoordinator.shared.shortcutUnavailable = dictationKey == nil
+            // Dictation is the notch's own: it takes the ears while it listens and works.
+            DictationCoordinator.shared.onIndicatorChange = { d.dictationChanged($0) }
             launcherShortcutObserver = NotificationCenter.default.addObserver(forName: .launcherShortcutChanged, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.configureLauncherShortcut() }
             }
@@ -109,8 +111,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                      action: #selector(toggleDictation), keyEquivalent: "")
         dictation.target = self
         dictation.subtitle = "⌥D"
-        if DictationCoordinator.shared.phase == .recording {
-            menu.addItem(withTitle: "Cancel Dictation", action: #selector(cancelDictation), keyEquivalent: "").target = self
+        if DictationCoordinator.shared.canCancel {
+            let cancel = menu.addItem(withTitle: "Cancel Dictation", action: #selector(cancelDictation), keyEquivalent: "")
+            cancel.target = self
+            cancel.subtitle = "esc"
         }
         if DictationCoordinator.shared.lastTranscript != nil {
             menu.addItem(withTitle: "Copy Last Dictation", action: #selector(copyLastDictation), keyEquivalent: "").target = self

@@ -196,6 +196,63 @@ final class IslandTests: XCTestCase {
         XCTAssertEqual(i.mode, .duo)
     }
 
+    // Dictation (⌥D) holds the ears like the HUD, for as long as it listens and works.
+    func testDictationHoldsTheEarsUntilItIsDone() {
+        var i = island()
+        XCTAssertEqual(i.mode, .compact)
+        i.apply(.dictation(true))
+        XCTAssertTrue(i.dictating)
+        XCTAssertEqual(i.mode, .dictation)
+        let g = i.groups(.dictation)
+        XCTAssertTrue(g.dictation)
+        XCTAssertFalse(g.musicEars, "the song's art and bars leave the ears to the mic and the voice")
+        XCTAssertFalse(g.hud)
+        i.apply(.dictation(false))
+        XCTAssertEqual(i.mode, .compact, "the song comes back")
+        XCTAssertFalse(i.groups(.compact).dictation)
+    }
+
+    func testDictationShowsOnAnEmptyNotchAndOverFullscreenAndMenus() {
+        var i = island(media: false)
+        XCTAssertEqual(i.mode, .idle)
+        i.apply(.dictation(true))
+        XCTAssertEqual(i.mode, .dictation, "you asked for it: it shows even with nothing else on the island")
+        i.apply(.context(DesktopContext(fullscreen: true)))
+        XCTAssertEqual(i.mode, .dictation, "a fullscreen video doesn't hide it")
+        i.apply(.context(DesktopContext(menuOpen: true)))
+        XCTAssertEqual(i.mode, .dictation)
+    }
+
+    func testTheHUDShowsOverDictationAndHandsItBack() {
+        var i = island()
+        i.apply(.dictation(true))
+        i.apply(.hud(.volume))
+        XCTAssertEqual(i.mode, .hud)
+        XCTAssertFalse(i.groups(.hud).dictation)
+        i.apply(.hudEnded)
+        XCTAssertEqual(i.mode, .dictation, "still dictating once the volume settles")
+    }
+
+    func testNothingOpensUnderDictationAndAnOpenCardComesBackAfter() {
+        var empty = island(media: false)
+        empty.apply(.dictation(true))
+        XCTAssertFalse(empty.canOpenEmptyTray)
+        empty.apply(.openTray)
+        empty.apply(.openAsk(.claude))
+        XCTAssertFalse(empty.opened, "the tray and the ask card wait until dictation is done")
+        XCTAssertEqual(empty.mode, .dictation)
+
+        var playing = island()
+        playing.apply(.open(.media))
+        XCTAssertEqual(playing.mode, .card)
+        playing.apply(.dictation(true))
+        XCTAssertEqual(playing.mode, .dictation, "dictation takes over the open player")
+        playing.apply(.focusMedia)
+        XCTAssertFalse(playing.mediaFocus)
+        playing.apply(.dictation(false))
+        XCTAssertEqual(playing.mode, .card, "and hands it back")
+    }
+
     func testStoppingMediaDropsAnAlertInFlight() {
         var i = island()
         i.apply(.hud(.volume))
