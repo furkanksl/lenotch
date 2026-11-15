@@ -191,8 +191,8 @@ enum SnapshotRunner {
             }
         }
         // The setup window, drawn offscreen through AppKit (its controls are AppKit views).
-        let setupHost = NSHostingView(rootView: SetupView {}.environment(\.colorScheme, .light))
-        setupHost.frame = NSRect(origin: .zero, size: setupHost.fittingSize)
+        let setupHost = NSHostingView(rootView: SetupView().environment(\.colorScheme, .light))
+        setupHost.frame = NSRect(origin: .zero, size: SetupWindowController.initialContentSize)
         setupHost.layoutSubtreeIfNeeded()
         if let rep = setupHost.bitmapImageRepForCachingDisplay(in: setupHost.bounds) {
             setupHost.cacheDisplay(in: setupHost.bounds, to: rep)

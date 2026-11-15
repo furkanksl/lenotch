@@ -2,61 +2,78 @@ import AppKit
 import SwiftUI
 
 enum SetupPage: String, CaseIterable, Identifiable {
-    case permissions, appearance, dictation, integrations
+    case permissions, appearance, dictation, notifications, agents, launcher
 
     var id: Self { self }
+
     var title: String {
         switch self {
         case .permissions: "Permissions"
         case .appearance: "Appearance"
         case .dictation: "Dictation"
-        case .integrations: "Integrations"
+        case .notifications: "Notifications"
+        case .agents: "AI & Agents"
+        case .launcher: "Launcher"
         }
     }
-    var symbol: String {
+
+    var icon: SetupIcon {
         switch self {
-        case .permissions: "checkmark.shield"
-        case .appearance: "paintpalette"
-        case .dictation: "mic"
-        case .integrations: "powerplug"
+        case .permissions: .shield
+        case .appearance: .palette
+        case .dictation: .mic
+        case .notifications: .bell
+        case .agents: .aiBrain
+        case .launcher: .grid
         }
     }
+
     var subtitle: String {
         switch self {
-        case .permissions: "Give LeNotch access to the features you use. Everything here is optional."
-        case .appearance: "Choose how album artwork and colors appear on your Mac."
-        case .dictation: "Choose an on-device speech model and optional transcript cleanup."
-        case .integrations: "Notifications and coding agents, connected to your notch."
+        case .permissions: "Allow only what you use. Every permission is optional, and macOS keeps track of each one."
+        case .appearance: "Bring your music to the lock screen and desktop. Your wallpaper always comes back."
+        case .dictation: "Speak in any app. Speech is recognized on this Mac with a model you choose."
+        case .notifications: "Show new notifications in the notch as they arrive."
+        case .agents: "Ask ChatGPT from the notch, and follow your Claude and Codex sessions."
+        case .launcher: "Open your apps, folders and websites straight from the notch."
         }
     }
 }
 
-/// A normal, resizable native window. Setup follows the Mac's appearance instead of the dark-only notch surface.
+/// Setup's window: KLOI's settings layout, with the traffic lights over the sidebar and no title bar of its own.
+/// Closing the window finishes setup; there is nothing to confirm.
 @MainActor
-final class SetupWindowController {
-    static let initialContentSize = NSSize(width: 900, height: 740)
-    static let minimumContentSize = NSSize(width: 760, height: 600)
+final class SetupWindowController: NSObject, NSWindowDelegate {
+    static let initialContentSize = NSSize(width: 1000, height: 720)
+    static let minimumContentSize = NSSize(width: 900, height: 640)
     private static let doneKey = "setup.v3.done"
     private var window: NSWindow?
 
     var needed: Bool { !UserDefaults.standard.bool(forKey: Self.doneKey) }
 
+    static func makeWindow(page: SetupPage = .permissions) -> NSWindow {
+        let w = NSWindow(contentRect: NSRect(origin: .zero, size: initialContentSize),
+                         styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                         backing: .buffered, defer: false)
+        w.title = "LeNotch Setup"
+        w.titleVisibility = .hidden
+        w.titlebarAppearsTransparent = true
+        w.isReleasedWhenClosed = false
+        w.contentMinSize = minimumContentSize
+        w.backgroundColor = NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .setupHex(0x111110) : .setupHex(0xF2F1EF)
+        }
+        w.contentView = ContentHostingView(rootView: SetupView(page: page))
+        return w
+    }
+
     func show() {
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(origin: .zero, size: Self.initialContentSize),
-                             styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                             backing: .buffered, defer: false)
-            w.title = "LeNotch — Setup"
-            w.titleVisibility = .hidden
-            w.titlebarAppearsTransparent = true
-            w.toolbarStyle = .unifiedCompact
-            w.backgroundColor = .windowBackgroundColor
-            w.isReleasedWhenClosed = false
-            w.contentMinSize = Self.minimumContentSize
-            w.contentView = ContentHostingView(rootView: SetupView { [weak self] in self?.finish() })
+            let w = Self.makeWindow()
+            w.delegate = self
             // Only the frame is persisted. Visiting Setup never changes a feature or requests access by itself.
-            w.setFrameAutosaveName("LeNotch.Setup")
-            if !w.setFrameUsingName("LeNotch.Setup") { w.center() }
+            w.setFrameAutosaveName("LeNotch.Setup.v4")
+            if !w.setFrameUsingName("LeNotch.Setup.v4") { w.center() }
             window = w
         }
         NSApp.activate(ignoringOtherApps: true)
@@ -64,119 +81,147 @@ final class SetupWindowController {
         window?.orderFrontRegardless()
     }
 
-    private func finish() {
+    func windowWillClose(_ notification: Notification) {
         UserDefaults.standard.set(true, forKey: Self.doneKey)
-        window?.close()
     }
 }
 
-struct SetupView: View {
-    private let done: () -> Void
-    @State private var page: SetupPage
-    @State private var reviewAccess = false
+/// Setup's own light or dark choice, from the theme pill. Empty follows the Mac.
+enum SetupThemeChoice {
+    static let key = "lenotch.setup.theme"
 
-    init(page: SetupPage = .permissions, done: @escaping () -> Void) {
-        self.done = done
+    static func scheme(_ stored: String) -> ColorScheme? {
+        switch stored {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
+    }
+
+    /// The pill flips whatever is showing now.
+    static func toggled(from showing: ColorScheme) -> String { showing == .dark ? "light" : "dark" }
+}
+
+struct SetupView: View {
+    @State private var page: SetupPage
+    @State private var revealFullDiskAccess = false
+    @AppStorage(SetupThemeChoice.key) private var theme = ""
+
+    init(page: SetupPage = .permissions) {
         _page = State(initialValue: page)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            navigation
-            ScrollViewReader { scroll in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(page.title).font(.system(size: 25, weight: .semibold))
-                                .tracking(-0.65).accessibilityAddTraits(.isHeader)
-                            Text(page.subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .id("page-top")
-                        Group {
-                            switch page {
-                            case .permissions: SetupPermissionsPage()
-                            case .appearance: SetupAppearancePage()
-                            case .dictation:
-                                SetupDictationPage { page = .permissions }
-                            case .integrations:
-                                SetupIntegrationsPage {
-                                    reviewAccess = true
-                                    page = .permissions
-                                }
-                            }
-                        }
-                    }
-                    .frame(maxWidth: 760, alignment: .topLeading)
-                    .padding(.horizontal, 32).padding(.top, 28).padding(.bottom, 32)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                }
-                .onChange(of: page) { scroll.scrollTo("page-top", anchor: .top) }
-                .task(id: page) {
-                    // The destination is inserted with its page; wait for that layout before scrolling to it.
-                    guard reviewAccess, page == .permissions else { return }
-                    await Task.yield()
-                    guard !Task.isCancelled else { return }
-                    scroll.scrollTo("full-disk-access", anchor: .bottom)
-                    reviewAccess = false
-                }
-            }
-            footer
+        let scheme = SetupThemeChoice.scheme(theme)
+        HStack(spacing: 0) {
+            SetupSidebar(page: $page) { revealFullDiskAccess = false }
+                .frame(width: 240)
+            content
+                .padding(.top, 20).padding(.trailing, 20).padding(.bottom, 20)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SetupTheme.canvas)
+        .ignoresSafeArea()
         .frame(minWidth: SetupWindowController.minimumContentSize.width,
                minHeight: SetupWindowController.minimumContentSize.height)
-        .tint(.accentColor)
+        .background(SetupWindowAppearance(scheme: scheme))
+        .modifier(SetupSchemeOverride(scheme: scheme))
+        .tint(SetupTheme.accent)
     }
 
-    private var navigation: some View {
-        HStack(spacing: 20) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("LeNotch").font(.system(size: 14, weight: .semibold)).tracking(-0.25)
-                    Text("Setup").font(.system(size: 11)).foregroundStyle(.secondary)
+    private var cardShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(cornerRadii: .init(topLeading: 48, bottomLeading: 48, bottomTrailing: 16, topTrailing: 16),
+                               style: .continuous)
+    }
+
+    private var content: some View {
+        ScrollViewReader { scroll in
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 40) {
+                    SetupPageHeader(title: page.title, subtitle: page.subtitle)
+                    pageBody(scroll)
                 }
+                .frame(maxWidth: 640, alignment: .topLeading)
+                .padding(.horizontal, 40).padding(.top, 40).padding(.bottom, 64)
+                .frame(maxWidth: .infinity)
             }
-            Spacer(minLength: 16)
-            HStack(spacing: 3) {
+            .scrollIndicators(.never)
+            // A new page starts at its top.
+            .id(page)
+        }
+        .background(SetupTheme.card)
+        .clipShape(cardShape)
+        .overlay(cardShape.strokeBorder(SetupTheme.ink(0.03, 0.08), lineWidth: 1))
+    }
+
+    @ViewBuilder private func pageBody(_ scroll: ScrollViewProxy) -> some View {
+        switch page {
+        case .permissions: SetupPermissionsPage(revealFullDiskAccess: $revealFullDiskAccess, scroll: scroll)
+        case .appearance: SetupAppearancePage()
+        case .dictation: SetupDictationPage { open(.permissions) }
+        case .notifications:
+            SetupNotificationsPage {
+                revealFullDiskAccess = true
+                page = .permissions
+            }
+        case .agents: SetupAgentsPage()
+        case .launcher: SetupLauncherPage()
+        }
+    }
+
+    private func open(_ item: SetupPage) {
+        revealFullDiskAccess = false
+        page = item
+    }
+}
+
+// MARK: - Sidebar
+
+private struct SetupSidebar: View {
+    @Binding var page: SetupPage
+    var onSelect: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Text("LeNotch").font(.system(size: 18, weight: .heavy)).tracking(-0.45)
+                    .foregroundStyle(SetupTheme.ink(1, 1))
+            }
+            .padding(.horizontal, 32).padding(.top, 48).padding(.bottom, 24)
+            .accessibilityElement(children: .combine)
+
+            VStack(spacing: 6) {
                 ForEach(Array(SetupPage.allCases.enumerated()), id: \.element) { index, item in
-                    SetupNavigationButton(page: item, selected: page == item) {
-                        reviewAccess = false
+                    SetupNavItem(page: item, selected: page == item) {
+                        onSelect()
                         page = item
                     }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
                 }
             }
-            .padding(4)
-            .background(SetupTheme.badge, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .padding(.horizontal, 16).padding(.top, 8)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Setup categories")
-        }
-        .padding(.horizontal, 32)
-        .frame(height: 72)
-        .overlay(alignment: .bottom) { SetupTheme.line.frame(height: 1).padding(.horizontal, 32) }
-    }
 
-    private var footer: some View {
-        HStack(spacing: 14) {
-            SetupInlineNote(symbol: page == .permissions ? "arrow.clockwise" : "checkmark",
-                            text: page == .permissions
-                                ? "Access updates when you return from System Settings."
-                                : "Preferences save automatically on this Mac.")
-            Spacer(minLength: 10)
-            Button("Done", action: done)
-                .buttonStyle(SetupActionStyle(primary: true))
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("setup-done")
+            Spacer(minLength: 16)
+
+            HStack {
+                Text("Theme").font(.system(size: 13, weight: .bold)).tracking(-0.3).foregroundStyle(SetupTheme.ink(0.75, 0.8))
+                Spacer(minLength: 8)
+                SetupThemeToggle()
+            }
+            .padding(8).padding(.leading, 8)
+            .background(SetupTheme.ink(0.025, 0.035), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(SetupTheme.ink(0.04, 0.06), lineWidth: 1))
+            .padding(.horizontal, 16).padding(.bottom, 20)
         }
-        .padding(.horizontal, 32)
-        .frame(height: 64)
-        .overlay(alignment: .top) { SetupTheme.line.frame(height: 1).padding(.horizontal, 32) }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(SetupWindowDragArea())
     }
 }
 
-private struct SetupNavigationButton: View {
+private struct SetupNavItem: View {
     let page: SetupPage
     let selected: Bool
     let action: () -> Void
@@ -184,22 +229,113 @@ private struct SetupNavigationButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: page.symbol).font(.system(size: 12))
-                    .frame(width: 15)
-                Text(page.title).font(.system(size: 12, weight: selected ? .semibold : .regular))
+            HStack(spacing: 12) {
+                SetupIconView(icon: page.icon, size: 22, lineWidth: 1.65)
+                    .foregroundStyle(selected ? SetupTheme.ink(0.8, 0.85)
+                                     : hovered ? SetupTheme.ink(0.6, 0.65) : SetupTheme.ink(0.4, 0.35))
+                Text(page.title).font(.system(size: 13, weight: .medium)).tracking(-0.3)
+                    .foregroundStyle(selected ? SetupTheme.ink(0.85, 0.9)
+                                     : hovered ? SetupTheme.ink(0.75, 0.75) : SetupTheme.ink(0.55, 0.45))
+                Spacer(minLength: 0)
             }
-            .foregroundStyle(selected ? .primary : .secondary)
-            .padding(.horizontal, 13).frame(height: 32)
-            .contentShape(RoundedRectangle(cornerRadius: 8))
-            .background(selected ? SetupTheme.surface : Color.primary.opacity(hovered ? 0.035 : 0),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? SetupTheme.line : .clear))
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? SetupTheme.ink(0.035, 0.06) : hovered ? SetupTheme.ink(0.025, 0.04) : .clear,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(alignment: .leading) {
+                if selected { Capsule().fill(SetupTheme.accent).frame(width: 2, height: 16) }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovered)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("setup-\(page.rawValue)")
     }
 }
 
+/// KLOI's theme pill: a sliding knob over a sun and a moon.
+private struct SetupThemeToggle: View {
+    @AppStorage(SetupThemeChoice.key) private var theme = ""
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let dark = scheme == .dark
+        let spring: Animation? = reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: 0.5)
+        Button {
+            withAnimation(spring) { theme = SetupThemeChoice.toggled(from: scheme) }
+        } label: {
+            ZStack(alignment: .leading) {
+                Circle()
+                    .fill(LinearGradient(colors: dark ? [.setupHex(0x222222), .setupHex(0x1A1A1A)] : [.white, .setupHex(0xF9F9F8)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .overlay(Circle().strokeBorder(dark ? Color.white.opacity(0.05) : Color.black.opacity(0.05), lineWidth: 1))
+                    .shadow(color: .black.opacity(dark ? 0.4 : 0.08), radius: 3, y: 2)
+                    .frame(width: 32, height: 32)
+                    .offset(x: dark ? 32 : 0)
+                HStack(spacing: 0) {
+                    SetupIconView(icon: .sun, size: 16, lineWidth: 1.5)
+                        .foregroundStyle(dark ? Color.white.opacity(0.5) : .black)
+                        .rotationEffect(.degrees(dark ? -90 : 0)).scaleEffect(dark ? 0.75 : 1).opacity(dark ? 0.7 : 1)
+                        .frame(width: 32, height: 32)
+                    SetupIconView(icon: .moon, size: 16, lineWidth: 1.5)
+                        .foregroundStyle(dark ? Color.white : .black.opacity(0.4))
+                        .rotationEffect(.degrees(dark ? 0 : 90)).scaleEffect(dark ? 1 : 0.75).opacity(dark ? 1 : 0.7)
+                        .frame(width: 32, height: 32)
+                }
+            }
+            .padding(4)
+            .background(dark ? Color.setupHex(0x1A1A1A) : Color.black.opacity(0.03), in: Capsule())
+            .overlay(Capsule().strokeBorder(dark ? Color.white.opacity(0.05) : Color.black.opacity(0.05), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(SetupPressScale())
+        .animation(spring, value: dark)
+        .accessibilityLabel("Toggle theme")
+        .accessibilityValue(dark ? "Dark" : "Light")
+    }
+}
+
+private struct SetupPressScale: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Window plumbing
+
+/// Lets the sidebar move the window, as KLOI's does, without taking clicks from its controls.
+private struct SetupWindowDragArea: NSViewRepresentable {
+    final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+        override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    }
+
+    func makeNSView(context: Context) -> NSView { DragView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+/// Applies Setup's own theme to its window, so AppKit-drawn parts and every dynamic color agree.
+/// Following the Mac leaves the window as it is.
+private struct SetupWindowAppearance: NSViewRepresentable {
+    let scheme: ColorScheme?
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let scheme else { return }
+        let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        DispatchQueue.main.async { nsView.window?.appearance = appearance }
+    }
+}
+
+private struct SetupSchemeOverride: ViewModifier {
+    let scheme: ColorScheme?
+
+    func body(content: Content) -> some View {
+        if let scheme { content.environment(\.colorScheme, scheme) } else { content }
+    }
+}

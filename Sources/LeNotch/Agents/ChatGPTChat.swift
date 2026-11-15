@@ -70,7 +70,7 @@ final class ChatGPTChat {
 
         var errorDescription: String? {
             switch self {
-            case .unauthorized: return "ChatGPT sign-in expired. Reconnect in Setup → Integrations."
+            case .unauthorized: return "ChatGPT sign-in expired. Reconnect in Setup → AI & Agents."
             case .http(let code, let detail): return detail.isEmpty ? "ChatGPT returned HTTP \(code)." : detail
             case .empty: return "ChatGPT returned an empty reply. Try again."
             case .tooLong: return "This reply is too long for Ask. Try a shorter question."

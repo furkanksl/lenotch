@@ -86,7 +86,7 @@ enum UsageFailure: Error, Equatable, Sendable {
         case .serverUnavailable:
             return "\(provider.title)’s usage service is unavailable. Try again later."
         case .sourceUnavailable:
-            return "The usage source is unavailable. Check the integration in Setup."
+            return "The usage source is unavailable. Check AI & Agents in Setup."
         }
     }
 }

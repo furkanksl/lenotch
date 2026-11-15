@@ -8,138 +8,76 @@ import NowPlaying
 import OSLog
 import SwiftUI
 
-enum SetupPermissionFilter: String, CaseIterable, Identifiable {
-    case all, notEnabled, allowed
-
-    var id: Self { self }
-    var title: String {
-        switch self {
-        case .all: "All"
-        case .notEnabled: "Not enabled"
-        case .allowed: "Allowed"
-        }
-    }
-
-    func includes(_ state: SetupAccessState) -> Bool {
-        switch self {
-        case .all: true
-        case .notEnabled: state != .allowed
-        case .allowed: state == .allowed
-        }
-    }
-}
-
 /// Checks access without asking. A system prompt is only started by one of this page's buttons.
 struct SetupPermissionsPage: View {
+    /// Set by another page's "Review access"; the page scrolls to Full Disk Access once, then clears it.
+    @Binding var revealFullDiskAccess: Bool
+    let scroll: ScrollViewProxy
     @StateObject private var access = SetupPermissionAccess()
     @State private var refreshID = UUID()
     @State private var requestID = UUID()
     @State private var request: SetupPermissionRequest?
-    @State private var filter: SetupPermissionFilter = .all
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack {
-                Label("Managed by macOS", systemImage: "lock.shield")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                Spacer(minLength: 16)
-                Picker("Show permissions", selection: $filter) {
-                    ForEach(SetupPermissionFilter.allCases) { item in Text(item.title).tag(item) }
-                }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 256)
-                .accessibilityIdentifier("setup-permission-filter")
+        VStack(alignment: .leading, spacing: 36) {
+            SetupGroup("Dictation") {
+                SetupPermissionRow(
+                    icon: .mic, title: "Microphone",
+                    detail: "Record your voice for on-device dictation.", state: access.microphone
+                ) { allow(.microphone, current: access.microphone, settings: "Privacy_Microphone") }
+                SetupPermissionRow(
+                    icon: .accessibility, title: "Accessibility",
+                    detail: "Paste dictated text, answer calls, show volume HUDs.", state: access.accessibility
+                ) { allow(.accessibility, current: access.accessibility, settings: "Privacy_Accessibility") }
             }
-            if hasAny([access.microphone, access.accessibility]) {
-                SetupSection(title: "Dictation", subtitle: "Requested only when you click Allow") {
-                    if filter.includes(access.microphone) {
-                        SetupPermissionRow(
-                            symbol: "mic", title: "Microphone",
-                            detail: "Record your voice for on-device dictation.", state: access.microphone
-                        ) { allow(.microphone, current: access.microphone, settings: "Privacy_Microphone") }
-                        if filter.includes(access.accessibility) { rowDivider }
-                    }
-                    if filter.includes(access.accessibility) {
-                        SetupPermissionRow(
-                            symbol: "accessibility", title: "Accessibility",
-                            detail: "Insert dictated text in other apps; also enables call controls and hardware-key HUDs.",
-                            state: access.accessibility
-                        ) { allow(.accessibility, current: access.accessibility, settings: "Privacy_Accessibility") }
-                    }
-                }
+            SetupGroup("Everyday") {
+                SetupPermissionRow(
+                    icon: .calendar, title: "Calendar",
+                    detail: "Upcoming meetings and your daily agenda.", state: access.calendar
+                ) { allow(.calendar, current: access.calendar, settings: "Privacy_Calendars") }
+                SetupPermissionRow(
+                    icon: .headphones, title: "Bluetooth",
+                    detail: "AirPods connections and battery levels.", state: access.bluetooth
+                ) { allow(.bluetooth, current: access.bluetooth, settings: "Privacy_Bluetooth") }
             }
-            if hasAny([access.calendar, access.bluetooth]) {
-                SetupSection(title: "Everyday essentials") {
-                    if filter.includes(access.calendar) {
-                        SetupPermissionRow(
-                            symbol: "calendar", title: "Calendar",
-                            detail: "Upcoming meetings and your daily agenda.", state: access.calendar
-                        ) { allow(.calendar, current: access.calendar, settings: "Privacy_Calendars") }
-                        if filter.includes(access.bluetooth) { rowDivider }
-                    }
-                    if filter.includes(access.bluetooth) {
-                        SetupPermissionRow(
-                            symbol: "headphones", title: "Bluetooth",
-                            detail: "AirPods connections and battery levels.", state: access.bluetooth
-                        ) { allow(.bluetooth, current: access.bluetooth, settings: "Privacy_Bluetooth") }
-                    }
+            SetupGroup("Music & media") {
+                if access.musicInstalled {
+                    SetupPermissionRow(
+                        icon: .musicNote, title: "Music automation",
+                        detail: "Playback controls when Now Playing is unavailable.", state: access.music
+                    ) { allow(.music, current: access.music, settings: "Privacy_Automation") }
                 }
-            }
-            if hasAny(mediaStates) {
-                SetupSection(title: "Music & media") {
-                    if access.musicInstalled && filter.includes(access.music) {
-                        SetupPermissionRow(
-                            symbol: "music.note", title: "Music automation",
-                            detail: "Playback controls when Now Playing is unavailable.", state: access.music
-                        ) { allow(.music, current: access.music, settings: "Privacy_Automation") }
-                        rowDivider
-                    }
-                    if access.spotifyInstalled && filter.includes(access.spotify) {
-                        SetupPermissionRow(
-                            symbol: "play.circle", title: "Spotify automation",
-                            detail: "Playback controls when Now Playing is unavailable.", state: access.spotify
-                        ) { allow(.spotify, current: access.spotify, settings: "Privacy_Automation") }
-                        rowDivider
-                    }
-                    if filter.includes(access.audio) {
-                        SetupPermissionRow(
-                            symbol: "waveform", title: "Music bars",
-                            detail: "Follow your Mac’s audio. Play music to test.", state: access.audio
-                        ) { allow(.audio, current: access.audio, settings: "Privacy_AudioCapture") }
-                        rowDivider
-                    }
-                    if filter.includes(access.screen) {
-                        SetupPermissionRow(
-                            symbol: "play.rectangle", title: SetupScreenCaptureAccess.title,
-                            detail: SetupScreenCaptureAccess.detail, state: access.screen
-                        ) { allow(.screen, current: access.screen, settings: "Privacy_ScreenCapture") }
-                    }
+                if access.spotifyInstalled {
+                    SetupPermissionRow(
+                        icon: .spotify, title: "Spotify automation",
+                        detail: "Playback controls when Now Playing is unavailable.", state: access.spotify
+                    ) { allow(.spotify, current: access.spotify, settings: "Privacy_Automation") }
                 }
+                SetupPermissionRow(
+                    icon: .audioWave, title: "Music bars",
+                    detail: "Follow your Mac’s audio. Play music to test.", state: access.audio
+                ) { allow(.audio, current: access.audio, settings: "Privacy_AudioCapture") }
+                SetupPermissionRow(
+                    icon: .video, title: SetupScreenCaptureAccess.title,
+                    detail: SetupScreenCaptureAccess.detail, state: access.screen
+                ) { allow(.screen, current: access.screen, settings: "Privacy_ScreenCapture") }
             }
-            if filter.includes(access.disk) {
-                VStack(alignment: .leading, spacing: 10) {
-                    SetupSection(title: "Messages & notifications") {
-                        SetupPermissionRow(
-                            symbol: "externaldrive", title: "Full Disk Access",
-                            detail: access.diskDetail, state: access.disk, actionLabel: "Open Settings"
-                        ) { setupOpenPrivacy("Privacy_AllFiles") }
-                        .id("full-disk-access")
-                    }
-                    Text("Enable LeNotch in Full Disk Access. Reopen the app if macOS asks.")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            SetupGroup("Messages & notifications") {
+                SetupPermissionRow(
+                    icon: .hardDrive, title: "Full Disk Access",
+                    detail: access.diskDetail, state: access.disk, actionLabel: "Open Settings"
+                ) { setupOpenPrivacy("Privacy_AllFiles") }
+                .id("full-disk-access")
             }
-            if !hasAny([access.microphone, access.accessibility, access.calendar, access.bluetooth, access.disk] + mediaStates) {
-                VStack(spacing: 10) {
-                    Image(systemName: filter == .allowed ? "lock.open" : "checkmark.circle")
-                        .font(.system(size: 24, weight: .light)).foregroundStyle(.secondary)
-                    Text(filter == .allowed ? "No permissions allowed yet" : "Nothing needs your attention")
-                        .font(.system(size: 14, weight: .medium))
-                    Text("You can use LeNotch without enabling every feature.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity).padding(.vertical, 40)
-            }
+            SetupNote(icon: .refresh, text: "Each permission is requested only when you click Allow, and rechecked when you come back from System Settings. For Full Disk Access, turn on LeNotch in the list; reopen the app if macOS asks.")
+        }
+        .task(id: revealFullDiskAccess) {
+            // The destination is inserted with its page; wait for that layout before scrolling to it.
+            guard revealFullDiskAccess else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) { scroll.scrollTo("full-disk-access", anchor: .center) }
+            revealFullDiskAccess = false
         }
         .task(id: refreshID) { await access.refresh() }
         .task(id: requestID) {
@@ -165,15 +103,6 @@ struct SetupPermissionsPage: View {
             access.stop()
         }
     }
-
-    private var mediaStates: [SetupAccessState] {
-        [access.audio, access.screen] + (access.musicInstalled ? [access.music] : [])
-            + (access.spotifyInstalled ? [access.spotify] : [])
-    }
-
-    private func hasAny(_ states: [SetupAccessState]) -> Bool { states.contains(where: filter.includes) }
-
-    private var rowDivider: some View { SetupTheme.line.frame(height: 0.5).padding(.leading, 62).padding(.trailing, 16) }
 
     private func allow(_ permission: SetupPermissionRequest, current: SetupAccessState, settings: String) {
         guard !access.isRequesting else { return }

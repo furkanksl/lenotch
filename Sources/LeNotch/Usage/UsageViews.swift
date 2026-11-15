@@ -210,53 +210,45 @@ private struct UsageLimitRing: View {
     }
 }
 
-/// Embed in Setup → Integrations. Turning off a source cancels work and clears its in-memory snapshots.
+/// Embed in Setup → Claude & Codex. Turning off a source cancels work and clears its in-memory snapshots.
 struct UsageSettingsSection: View {
     @Bindable var model: UsageModel
 
     init(model: UsageModel = .shared) { self.model = model }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SetupSection(title: "AI usage", subtitle: "Real limits · opt-in") {
-                VStack(alignment: .leading, spacing: 0) {
-                    providerRow(.claude)
-                    Divider().padding(.vertical, 14)
-                    providerRow(.codex)
-                }
-                .padding(16)
-            }
-            SetupInlineNote(symbol: "lock.shield",
-                            text: "Usage snapshots stay in memory. LeNotch never stores tokens, reads browser cookies, changes sign-in, or estimates quotas from token counts. Updates run every five minutes while enabled.")
+        SetupGroup("Usage limits") {
+            providerRow(.claude)
+            providerRow(.codex)
+            SetupNote(icon: .lock, text: "Real limits, opt-in. Snapshots stay in memory, refreshed every five minutes while enabled. LeNotch never stores tokens, reads browser cookies, changes your sign-in, or estimates quotas from token counts.")
         }
     }
 
     private func providerRow(_ provider: UsageProvider) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Toggle(isOn: Binding(get: { model.isEnabled(provider) }, set: { model.setEnabled($0, for: provider) })) {
-                Text(provider == .claude ? "Claude subscription usage" : "Codex local usage")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .toggleStyle(.switch).controlSize(.small)
-            .accessibilityHint(provider == .claude ? "Allows reading the existing Claude Code Keychain sign-in and requesting subscription usage from Anthropic."
-                : "Allows reading rate-limit snapshots in recent local Codex session files. No network requests.")
-            Text(provider == .claude
-                ? "By enabling, you allow LeNotch to read Claude Code’s existing sign-in from macOS Keychain and send it only to api.anthropic.com for usage. No conversations are sent. This private endpoint may change. Open Claude Code to renew an expired sign-in; LeNotch never refreshes tokens."
-                : "Reads provider-reported rate-limit events from a bounded set of recent local Codex session logs. No network access or credentials. Use a signed-in Codex session to update the snapshot. It may be old or from your previous account after switching accounts.")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if model.isEnabled(provider) {
-                HStack(spacing: 8) {
+        SetupToggleRow(icon: provider == .claude ? .claude : .chatGPT,
+                       title: provider == .claude ? "Claude subscription usage" : "Codex local usage",
+                       detail: provider == .claude ? "Your plan’s limits, from Anthropic." : "Rate limits from recent Codex sessions on this Mac.",
+                       isOn: Binding(get: { model.isEnabled(provider) }, set: { model.setEnabled($0, for: provider) })) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(provider == .claude
+                    ? "By enabling, you allow LeNotch to read Claude Code’s existing sign-in from macOS Keychain and send it only to api.anthropic.com for usage. No conversations are sent. This private endpoint may change. Open Claude Code to renew an expired sign-in; LeNotch never refreshes tokens."
+                    : "Reads provider-reported rate-limit events from a bounded set of recent local Codex session logs. No network access or credentials. Use a signed-in Codex session to update the snapshot. It may be old or from your previous account after switching accounts.")
+                    .font(.system(size: 12)).foregroundStyle(SetupTheme.textSecondary).lineSpacing(1.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                if model.isEnabled(provider) {
                     let state = model.state(for: provider)
-                    if state.isRefreshing { ProgressView().controlSize(.mini) }
-                    Text(state.error?.message(for: provider) ?? (state.snapshot == nil ? "Waiting for usage data" : "Connected"))
-                        .font(.system(size: 10)).foregroundStyle(state.error == nil ? Color.secondary : Color.orange)
-                        .lineLimit(2)
-                    Spacer(minLength: 0)
-                    Button("Refresh") { model.refresh(provider: provider) }
-                        .controlSize(.small)
-                        .disabled(state.isRefreshing || (state.retryAfter.map { $0 > Date() } ?? false))
+                    HStack(spacing: 10) {
+                        SetupStatusLine(kind: state.error != nil ? .failure : state.isRefreshing ? .progress : state.snapshot == nil ? .info : .success,
+                                        text: state.error?.message(for: provider) ?? (state.snapshot == nil ? "Waiting for usage data" : "Connected"))
+                        Spacer(minLength: 0)
+                        Button("Refresh") { model.refresh(provider: provider) }
+                            .buttonStyle(SetupButtonStyle(kind: .secondary))
+                            .disabled(state.isRefreshing || (state.retryAfter.map { $0 > Date() } ?? false))
+                    }
                 }
             }
         }
+        .accessibilityHint(provider == .claude ? "Allows reading the existing Claude Code Keychain sign-in and requesting subscription usage from Anthropic."
+            : "Allows reading rate-limit snapshots in recent local Codex session files. No network requests.")
     }
 }

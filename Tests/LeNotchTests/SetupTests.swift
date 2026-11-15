@@ -6,15 +6,15 @@ import XCTest
 
 @MainActor
 final class SetupTests: XCTestCase {
-    func testSetupPagesKeepTheirNamesAndStableIdentity() {
-        XCTAssertEqual(SetupPage.allCases, [.permissions, .appearance, .dictation, .integrations])
-        XCTAssertEqual(SetupPage.allCases.map(\.title), ["Permissions", "Appearance", "Dictation", "Integrations"])
+    // MARK: Structure
+
+    func testSetupPagesFormOneFlatSidebarWithTheirOwnIcons() {
+        XCTAssertEqual(SetupPage.allCases, [.permissions, .appearance, .dictation, .notifications, .agents, .launcher])
+        XCTAssertEqual(SetupPage.allCases.map(\.title),
+                       ["Permissions", "Appearance", "Dictation", "Notifications", "AI & Agents", "Launcher"])
         XCTAssertEqual(SetupPage.allCases.map(\.id), SetupPage.allCases)
-        XCTAssertEqual(Set(SetupPage.allCases.map(\.symbol)).count, 4)
-        for page in SetupPage.allCases {
-            XCTAssertFalse(page.symbol.isEmpty, page.rawValue)
-            XCTAssertFalse(page.subtitle.isEmpty, page.rawValue)
-        }
+        XCTAssertEqual(Set(SetupPage.allCases.map(\.icon)).count, SetupPage.allCases.count, "each page has its own icon")
+        for page in SetupPage.allCases { XCTAssertFalse(page.subtitle.isEmpty, page.rawValue) }
     }
 
     func testPermissionStatesOfferAnActionOnlyWhenAccessCanChange() {
@@ -29,278 +29,255 @@ final class SetupTests: XCTestCase {
         for state in states { XCTAssertFalse(state.label.isEmpty) }
     }
 
-    func testWindowSizesLeaveAUsableSettingsPane() {
-        XCTAssertEqual(SetupWindowController.initialContentSize, NSSize(width: 900, height: 740))
-        XCTAssertEqual(SetupWindowController.minimumContentSize, NSSize(width: 760, height: 600))
-        XCTAssertGreaterThan(SetupWindowController.initialContentSize.width,
-                             SetupWindowController.minimumContentSize.width)
-        XCTAssertGreaterThan(SetupWindowController.initialContentSize.height,
-                             SetupWindowController.minimumContentSize.height)
+    func testWindowRunsItsContentUnderAnInvisibleTitleBarAndFinishesSetupWhenClosed() {
+        XCTAssertEqual(SetupWindowController.initialContentSize, NSSize(width: 1000, height: 720))
+        XCTAssertEqual(SetupWindowController.minimumContentSize, NSSize(width: 900, height: 640))
+
+        let window = SetupWindowController.makeWindow()
+        defer { window.close() }
+        XCTAssertTrue(window.styleMask.contains(.resizable))
+        XCTAssertTrue(window.styleMask.contains(.fullSizeContentView), "the sidebar runs under the traffic lights, as in KLOI")
+        XCTAssertTrue(window.titlebarAppearsTransparent)
+        XCTAssertEqual(window.titleVisibility, .hidden)
+        XCTAssertEqual(window.title, "LeNotch Setup", "still named in the Window menu and Mission Control")
+        XCTAssertEqual(window.contentMinSize, SetupWindowController.minimumContentSize)
+
+        // No Done button: closing the window is how a settings window is finished.
+        let key = "setup.v3.done"
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(saved, forKey: key) }
+        UserDefaults.standard.removeObject(forKey: key)
+        let controller = SetupWindowController()
+        XCTAssertTrue(controller.needed)
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        XCTAssertFalse(controller.needed)
     }
 
-    func testDictationDownloadPercentageIsVisibleInTheModelRow() async throws {
-        for scheme in [ColorScheme.light, .dark] {
-            let indicator = DictationDownloadIndicator(
-                progress: 0.47, statusMessage: "Downloading Nemotron 3.5…"
-            )
-            .padding(18)
-            .frame(width: 548)
-            .background(SetupTheme.canvas)
-            .environment(\.colorScheme, scheme)
-            let height = NSHostingView(rootView: indicator).fittingSize.height
-            let (window, host) = makeWindow(indicator,
-                                            size: NSSize(width: 548, height: height), scheme: scheme)
-            defer { window.close() }
-            let rendered = try await render(host, name: "dictation-download-47-\(scheme == .dark ? "dark" : "light")")
-            let text = normalized(rendered.transcript)
-            // OCR normalization strips punctuation such as %, but still verifies the visible digits.
-            XCTAssertTrue(text.contains("47"), "The download percentage must be visible beside its model. Read: \(text)")
-            XCTAssertTrue(text.contains("nemotron"), "The model name must be visible with progress. Read: \(text)")
+    func testThemePillFlipsWhatIsShowingAndOtherwiseFollowsTheMac() {
+        XCTAssertNil(SetupThemeChoice.scheme(""), "until the pill is used, Setup follows the Mac")
+        XCTAssertEqual(SetupThemeChoice.scheme("dark"), .dark)
+        XCTAssertEqual(SetupThemeChoice.scheme("light"), .light)
+        XCTAssertEqual(SetupThemeChoice.toggled(from: .light), "dark")
+        XCTAssertEqual(SetupThemeChoice.toggled(from: .dark), "light")
+    }
+
+    // MARK: Icons
+
+    func testSVGPathDataFollowsAbsoluteRelativeAndImplicitCommands() {
+        XCTAssertEqual(SVGPathData.path("M5 14L8.5 17.5L19 6.5").boundingRect, CGRect(x: 5, y: 6.5, width: 14, height: 11))
+        XCTAssertEqual(SVGPathData.path("m2 2 3 0 0 3z").boundingRect, CGRect(x: 2, y: 2, width: 3, height: 3),
+                       "pairs after a move are relative line-tos")
+        XCTAssertEqual(SVGPathData.path("M0 0H10V4h-2v2").boundingRect, CGRect(x: 0, y: 0, width: 10, height: 6))
+        XCTAssertEqual(SVGPathData.path("M1.5.5L-1-2").boundingRect, CGRect(x: -1, y: -2, width: 2.5, height: 2.5),
+                       "numbers can run together, separated by a dot or a sign")
+        let curve = SVGPathData.path("M0 0C0 10 10 10 10 0S20 -10 20 0").boundingRect
+        XCTAssertEqual(curve.minX, 0, accuracy: 0.001)
+        XCTAssertEqual(curve.maxX, 20, accuracy: 0.001)
+        XCTAssertEqual(curve.maxY, 7.5, accuracy: 0.01, "the first curve peaks three quarters of the way to its controls")
+        XCTAssertEqual(curve.minY, -7.5, accuracy: 0.01, "the smooth curve mirrors the previous control point")
+        XCTAssertTrue(SVGPathData.path("").isEmpty)
+    }
+
+    func testEveryHugeiconDrawsInsideItsGrid() {
+        XCTAssertEqual(SetupIcon.allCases.count, 31)
+        for icon in SetupIcon.allCases {
+            let path = SetupIconShape(elements: icon.elements).path(in: CGRect(x: 0, y: 0, width: 24, height: 24))
+            XCTAssertFalse(path.isEmpty, "\(icon) drew nothing")
+            let bounds = path.boundingRect
+            XCTAssertGreaterThanOrEqual(bounds.minX, 0.5, "\(icon)")
+            XCTAssertGreaterThanOrEqual(bounds.minY, 0.5, "\(icon)")
+            XCTAssertLessThanOrEqual(bounds.maxX, 23.5, "\(icon)")
+            XCTAssertLessThanOrEqual(bounds.maxY, 23.5, "\(icon)")
+            XCTAssertGreaterThan(bounds.width * bounds.height, 30, "\(icon) is suspiciously small: a parse stopped early")
         }
+        let scaled = SetupIconShape(elements: SetupIcon.tick.elements).path(in: CGRect(x: 10, y: 20, width: 48, height: 48))
+        XCTAssertEqual(scaled.boundingRect, CGRect(x: 20, y: 33, width: 28, height: 22), "scaled to the frame and placed in it")
     }
 
-    func testPermissionFiltersDistinguishAllowedFromMissingAndPendingAccess() {
-        let states: [SetupAccessState] = [.notAsked, .allowed, .denied, .asking, .unavailable, .allowed]
-        XCTAssertEqual(SetupPermissionFilter.allCases.map(\.id), SetupPermissionFilter.allCases)
-        XCTAssertEqual(Set(SetupPermissionFilter.allCases.map(\.title)).count, 3)
-        XCTAssertEqual(states.filter { SetupPermissionFilter.all.includes($0) }, states)
-        XCTAssertEqual(states.filter { SetupPermissionFilter.notEnabled.includes($0) },
-                       [.notAsked, .denied, .asking, .unavailable])
-        XCTAssertEqual(states.filter { SetupPermissionFilter.allowed.includes($0) }, [.allowed, .allowed])
-        for state in [SetupAccessState.allowed, .notAsked, .denied, .asking, .unavailable] {
-            XCTAssertTrue(SetupPermissionFilter.all.includes(state), state.label)
-            XCTAssertNotEqual(SetupPermissionFilter.notEnabled.includes(state),
-                              SetupPermissionFilter.allowed.includes(state), state.label)
-        }
-    }
+    // MARK: KLOI's surfaces
 
-    func testLongPermissionRowsWrapInsideTheMinimumAndDefaultPaneWidths() {
-        let cases: [(String, String, String)] = [
-            ("calendar", "Calendar", "Your next meeting and its join link"),
-            ("phone.fill", "Calls and the volume HUD", "Answer call banners and replace the volume and brightness HUD."),
-            ("waveform", "Music bars", "System audio makes the bars move with what's playing. Nothing is recorded.")
+    func testSurfacesUseKLOIPaletteInBothAppearances() async throws {
+        let swatches: [(name: String, color: Color, light: UInt32, dark: UInt32)] = [
+            ("canvas", SetupTheme.canvas, 0xF2F1EF, 0x111110),
+            ("card", SetupTheme.card, 0xFFFFFF, 0x171716),
+            ("row", SetupTheme.row, 0xFAF9F7, 0x171716),
+            ("accent", SetupTheme.accent, 0xFB9049, 0xFB9049),
+            ("control: a plain sRGB color", Color(.sRGB, red: 251 / 255, green: 144 / 255, blue: 73 / 255), 0xFB9049, 0xFB9049),
         ]
-        for width in [548.0, 696.0, 760.0] {
-            for scheme in [ColorScheme.light, .dark] {
-                for (symbol, title, detail) in cases {
-                    let row = SetupPermissionRow(symbol: symbol, title: title, detail: detail,
-                                                 state: .denied, action: {})
-                        .frame(width: width)
-                        .fixedSize(horizontal: false, vertical: true)
-                    let host = NSHostingView(rootView: row.environment(\.colorScheme, scheme))
-                    let size = host.fittingSize
-                    XCTAssertEqual(size.width, width, accuracy: 0.5, title)
-                    XCTAssertGreaterThanOrEqual(size.height, 64, title)
-                    XCTAssertLessThanOrEqual(size.height, width == 548 ? 96 : 82,
-                                             "\(title) must fit the \(width)-point pane without oversized rows")
-                }
+        for scheme in [ColorScheme.light, .dark] {
+            let strip = HStack(spacing: 0) {
+                ForEach(swatches.indices, id: \.self) { swatches[$0].color.frame(width: 20, height: 20) }
+            }
+            .environment(\.colorScheme, scheme)
+            let (window, host) = makeWindow(strip, size: NSSize(width: 20 * swatches.count, height: 20), scheme: scheme)
+            defer { window.close() }
+            let image = try await render(host, name: "palette-\(scheme == .dark ? "dark" : "light")", requireText: false).image
+            for (index, swatch) in swatches.enumerated() {
+                assertPixel(image, x: CGFloat(index * 20 + 10), y: 10, in: host.bounds.size,
+                            is: scheme == .dark ? swatch.dark : swatch.light, "\(swatch.name), \(scheme)")
             }
         }
     }
 
-    func testGroupedPermissionsScrollAtTheirReadableNaturalHeight() async throws {
-        // Layout fixture: both optional players are present and all nine rows are allowed.
-        // It must scroll, not squeeze every permission above the footer by reducing row heights.
-        for width in [696.0, 760.0] {
-            for scheme in [ColorScheme.light, .dark] {
-                let content = permissionGroups.frame(width: width)
-                    .fixedSize(horizontal: false, vertical: true)
-                let naturalHeight = NSHostingView(rootView: content.environment(\.colorScheme, scheme)).fittingSize.height
-                XCTAssertGreaterThanOrEqual(naturalHeight, 9 * 64)
-                XCTAssertLessThanOrEqual(naturalHeight, 940)
-                let (fixtureWindow, fixtureHost) = makeWindow(content,
-                    size: NSSize(width: width, height: naturalHeight), scheme: scheme)
-                defer { fixtureWindow.close() }
-                let fixture = try await render(fixtureHost,
-                    name: "permission-groups-\(Int(width))-\(scheme == .dark ? "dark" : "light")")
-                let fixtureText = normalized(fixture.transcript)
-                XCTAssertFalse(fixtureText.contains("focus status"),
-                               "The removed Focus permission must not appear in Setup")
-                XCTAssertTrue(fixtureText.contains(normalized(SetupScreenCaptureAccess.title)),
-                              "Video's Screen Recording permission must remain visible")
-                XCTAssertTrue(fixtureText.contains("music bars"),
-                              "System audio access for music bars must remain visible")
-                let viewportHeight = SetupWindowController.minimumContentSize.height - 72 - 64
-                let viewport = ScrollView { content }.frame(width: width, height: viewportHeight)
-                let (window, host) = makeWindow(viewport,
-                                              size: NSSize(width: width, height: viewportHeight), scheme: scheme)
-                defer { window.close() }
-                let scroll = try XCTUnwrap(descendant(of: host, matching: NSScrollView.self))
-                let document = try XCTUnwrap(scroll.documentView)
-                XCTAssertGreaterThan(document.bounds.height, scroll.contentView.bounds.height,
-                                     "The permission list must retain readable rows and allow scrolling")
-                XCTAssertEqual(document.bounds.height, naturalHeight, accuracy: 2)
+    func testSwitchFillsOrangeOnlyWhenOn() async throws {
+        for on in [false, true] {
+            let toggle = Toggle("Feature", isOn: .constant(on)).labelsHidden().toggleStyle(SetupSwitchStyle())
+                .padding(4).background(SetupTheme.card)
+            let (window, host) = makeWindow(toggle, size: NSSize(width: 62, height: 40), scheme: .light)
+            defer { window.close() }
+            let image = try await render(host, name: "switch-\(on ? "on" : "off")", requireText: false).image
+            let orange = countPixels(image) { r, g, b in r > 230 && (120...170).contains(g) && b < 110 }
+            if on {
+                XCTAssertGreaterThan(orange, 400, "an on switch is KLOI's orange")
+            } else {
+                XCTAssertEqual(orange, 0, "an off switch has no orange")
             }
         }
     }
 
-    func testPermissionRowRendersItsDescriptionAndSettingsActionWithoutOverlap() async throws {
+    // MARK: Rows and cards
+
+    func testDictationProgressCardShowsThePercentage() async throws {
+        for scheme in [ColorScheme.light, .dark] {
+            let card = SetupProgressCard(status: "Downloading Nemotron 3.5…", progress: 0.47)
+                .frame(width: 520).padding(16).background(SetupTheme.card)
+                .environment(\.colorScheme, scheme)
+            let size = NSHostingView(rootView: card).fittingSize
+            let (window, host) = makeWindow(card, size: size, scheme: scheme)
+            defer { window.close() }
+            let text = normalized(try await render(host, name: "progress-47-\(scheme == .dark ? "dark" : "light")").transcript)
+            XCTAssertTrue(text.contains("47"), "The download percentage must be visible. Read: \(text)")
+            XCTAssertTrue(text.contains("nemotron"), "What's downloading must be visible. Read: \(text)")
+        }
+    }
+
+    func testPermissionRowShowsItsTextStateAndActionWithoutOverlap() async throws {
         let title = "Calls and the volume HUD"
-        let detail = "Accessibility lets LeNotch answer call banners and replace volume and brightness controls."
-        for width in [548.0, 696.0] {
+        let detail = "Answer call banners and replace the volume and brightness controls."
+        for width in [560.0, 640.0] {
             for scheme in [ColorScheme.light, .dark] {
-                let row = SetupPermissionRow(symbol: "phone.fill", title: title, detail: detail,
-                                             state: .denied, action: {})
+                let row = SetupPermissionRow(icon: .accessibility, title: title, detail: detail, state: .denied, action: {})
                     .frame(width: width)
                     .fixedSize(horizontal: false, vertical: true)
-                    .background(SetupTheme.canvas)
+                    .background(SetupTheme.card)
                     .environment(\.colorScheme, scheme)
                 let size = NSHostingView(rootView: row).fittingSize
+                XCTAssertGreaterThanOrEqual(size.height, 70, "a row keeps KLOI's roomy padding")
+                XCTAssertLessThanOrEqual(size.height, 110, "no oversized rows at \(width) pt")
                 let (window, host) = makeWindow(row, size: size, scheme: scheme)
                 defer { window.close() }
                 let rendered = try await render(host, name: "permission-row-\(Int(width))-\(scheme == .dark ? "dark" : "light")")
-                // Read each column separately so Vision cannot merge the detail and action into one line.
-                let accessoryBounds = NSRect(x: width - 128, y: 0, width: 128, height: size.height)
-                let accessory = try recognize(rendered.image, bounds: host.bounds, region: accessoryBounds)
-                let action = try XCTUnwrap(accessory.first { normalized($0.value) == "open settings" },
-                                          "Settings action is not visible. Read: \(rendered.transcript)")
-                let copyBounds = NSRect(x: 0, y: 0, width: width - 128, height: size.height)
-                let description = try recognize(rendered.image, bounds: host.bounds, region: copyBounds)
-                let copy = normalized(description.map(\.value).joined(separator: " "))
-                XCTAssertTrue(copy.contains(normalized(title)), "Row title is clipped. Read: \(copy)")
-                XCTAssertTrue(copy.contains(normalized(detail)), "Row detail is clipped. Read: \(copy)")
-                XCTAssertTrue(copy.contains(normalized(SetupAccessState.denied.label)),
-                              "Permission status must remain visible near its title. Read: \(copy)")
-                XCTAssertTrue(description.allSatisfy { $0.frame.maxX < action.frame.minX },
-                              "Row copy overlaps its Settings action")
-                XCTAssertGreaterThan(action.frame.minX, width - 128)
+                let actionBounds = NSRect(x: width - 150, y: 0, width: 150, height: size.height)
+                let action = try XCTUnwrap(try recognize(rendered.image, bounds: host.bounds, region: actionBounds)
+                    .first { normalized($0.value) == "open settings" }, "Settings action is not visible. Read: \(rendered.transcript)")
+                let copy = try recognize(rendered.image, bounds: host.bounds, region: NSRect(x: 0, y: 0, width: width - 150, height: size.height))
+                let words = normalized(copy.map(\.value).joined(separator: " "))
+                XCTAssertTrue(words.contains(normalized(title)), "Row title is clipped. Read: \(words)")
+                XCTAssertTrue(words.contains(normalized(detail)), "Row detail is clipped. Read: \(words)")
+                XCTAssertTrue(words.contains("needs access"), "A denied permission says so beside its name. Read: \(words)")
+                XCTAssertTrue(copy.allSatisfy { $0.frame.maxX < action.frame.minX }, "Row copy overlaps its action")
                 XCTAssertLessThan(action.frame.maxX, width - 8)
-                XCTAssertGreaterThan(action.frame.minY, 0)
-                XCTAssertLessThan(action.frame.maxY, size.height)
             }
         }
     }
 
-    func testRemainingPagesRenderWithoutSportsNavigationInBothSizesAndThemes() async throws {
+    // MARK: The window
+
+    /// What each page must show without scrolling at the initial size (and the least it may show at the minimum).
+    private func expectations(for page: SetupPage) -> (always: [String], initialOnly: [String]) {
+        switch page {
+        case .permissions: (["microphone", "accessibility"], ["everyday", "calendar", "bluetooth"])
+        case .appearance: (["lock screen artwork", "album colors"], ["original wallpaper"])
+        case .dictation: (["anywhere", "speech model", "fluid speech pro"], ["nemotron", "cleanup"])
+        case .notifications: (["notifications in the notch"], ["full disk access", "notification settings"])
+        case .agents: (["chatgpt"], ["coding agents", "agent sessions"])
+        case .launcher: (["notch preview", "configure"], ["open with"])
+        }
+    }
+
+    func testEveryPageRendersOnKLOICanvasWithTheWholeSidebarInBothSizesAndThemes() async throws {
         for page in SetupPage.allCases {
             for size in [SetupWindowController.minimumContentSize, SetupWindowController.initialContentSize] {
                 for scheme in [ColorScheme.light, .dark] {
-                    let view = SetupView(page: page, done: {})
+                    let view = SetupView(page: page)
                         .environment(\.colorScheme, scheme)
                         .frame(width: size.width, height: size.height)
                     let (window, host) = makeWindow(view, size: size, scheme: scheme)
                     defer { window.close() }
                     let name = "\(page.rawValue)-\(Int(size.width))-\(scheme == .dark ? "dark" : "light")"
-                    let rendered = try await render(host, name: name, footerHeight: 64)
-                    let text = rendered.text
-                    try assertWindowChrome(rendered, page: page, size: size, name: name)
-                    let header = try XCTUnwrap(text.first {
-                        normalized($0.value) == normalized(page.title)
-                            && $0.frame.maxY < size.height - 72 && $0.frame.minY > size.height - 160
-                    }, "The active page heading is missing or scrolled away in \(name). Read: \(rendered.transcript)")
-                    // Vision includes glyph overhang outside the text layout's 32-point inset.
-                    XCTAssertGreaterThanOrEqual(header.frame.minX, 28,
-                                                "Page heading must remain within the content padding in \(name)")
-                    let content = normalized(text.filter {
-                        $0.frame.maxY < size.height - 72 && $0.frame.minY > 64
-                    }.map(\.value).joined(separator: " "))
-                    switch page {
-                    case .permissions:
-                        XCTAssertFalse(content.contains("focus status"), name)
-                        for title in ["Everyday essentials", "Calendar", "Bluetooth"] {
-                            let row = try XCTUnwrap(text.first { normalized($0.value).contains(normalized(title)) },
-                                                   "Priority permission \(title) is missing in \(name). Read: \(content)")
-                            XCTAssertLessThan(row.frame.maxY, header.frame.minY, name)
-                            XCTAssertGreaterThan(row.frame.minY, 64, "Priority content is under the footer in \(name)")
-                        }
-                        let scroll = try XCTUnwrap(descendant(of: host, matching: NSScrollView.self))
-                        let document = try XCTUnwrap(scroll.documentView)
-                        let bottom = document.isFlipped
-                            ? max(document.bounds.minY, document.bounds.maxY - scroll.contentView.bounds.height)
-                            : document.bounds.minY
-                        scroll.contentView.scroll(to: NSPoint(x: scroll.contentView.bounds.minX, y: bottom))
-                        scroll.reflectScrolledClipView(scroll.contentView)
-                        let scrolled = try await render(host, name: name + "-bottom", footerHeight: 64)
-                        XCTAssertFalse(normalized(scrolled.transcript).contains("focus status"), name)
-                        let disk = try XCTUnwrap(scrolled.text.first { normalized($0.value).contains("full disk access") },
-                                                "Full Disk Access must be reachable by scrolling in \(name). Read: \(scrolled.transcript)")
-                        XCTAssertGreaterThan(disk.frame.minY, 64, "Last permission is covered by the footer in \(name)")
-                        XCTAssertLessThan(disk.frame.maxY, size.height - 72, name)
-                        try assertWindowChrome(scrolled, page: page, size: size, name: name + "-bottom")
-                    case .appearance:
-                        XCTAssertTrue(content.contains("lock screen"), "Lock-screen preference is clipped in \(name). Read: \(content)")
-                        XCTAssertTrue(content.contains("desktop"), "Desktop preference is clipped in \(name). Read: \(content)")
-                    case .dictation:
-                        XCTAssertTrue(content.contains("fluid speech pro"), "The default speech model is missing in \(name). Read: \(content)")
-                        XCTAssertTrue(content.contains("nemotron"), "The streaming speech model is missing in \(name). Read: \(content)")
-                    case .integrations:
-                        XCTAssertTrue(content.contains("notifications"), "Notifications are clipped in \(name). Read: \(content)")
-                        XCTAssertTrue(content.contains("agent sessions"), "Agent sessions are clipped in \(name). Read: \(content)")
-                        let scroll = try XCTUnwrap(descendant(of: host, matching: NSScrollView.self))
-                        let document = try XCTUnwrap(scroll.documentView)
-                        let offset = min(380, max(0, document.bounds.height - scroll.contentView.bounds.height))
-                        let y = document.isFlipped ? offset : document.bounds.maxY - offset - scroll.contentView.bounds.height
-                        scroll.contentView.scroll(to: NSPoint(x: scroll.contentView.bounds.minX, y: y))
-                        scroll.reflectScrolledClipView(scroll.contentView)
-                        let account = try await render(host, name: name + "-ask")
-                        let visible = normalized(account.transcript)
-                        XCTAssertTrue(visible.contains("chatgpt account"),
-                                      "ChatGPT connection must be reachable in \(name). Read: \(visible)")
-                        XCTAssertTrue(visible.contains("connect chatgpt") || visible.contains("connected"),
-                                      "ChatGPT connection state/action must be visible in \(name). Read: \(visible)")
+                    let rendered = try await render(host, name: name)
+                    let sidebar = rendered.text.filter { $0.frame.maxX < 240 }
+                    let sidebarWords = normalized(sidebar.map(\.value).joined(separator: " "))
+                    // Every destination, the selected one included, stays readable in the sidebar.
+                    for item in SetupPage.allCases {
+                        // Vision reads the "I" of "AI" as an "l"; the rest of the name is enough to find it.
+                        let key = item == .agents ? "agents" : normalized(item.title)
+                        XCTAssertTrue(sidebarWords.contains(key),
+                                      "Sidebar is missing \(item.title) in \(name). Read: \(sidebarWords)")
                     }
-                    XCTAssertEqual(host.fittingSize.width, size.width, accuracy: 0.5)
-                    XCTAssertEqual(host.fittingSize.height, size.height, accuracy: 0.5)
+                    XCTAssertTrue(sidebarWords.contains("lenotch"), "The brand sits atop the sidebar in \(name)")
+                    XCTAssertTrue(sidebarWords.contains("theme"), "The theme pill sits at its foot in \(name)")
+
+                    let detail = normalized(rendered.text.filter { $0.frame.minX > 250 }.map(\.value).joined(separator: " "))
+                    let heading = page == .agents ? "agents" : normalized(page.title)
+                    XCTAssertTrue(detail.contains(heading), "\(page.title) heading is missing in \(name). Read: \(detail)")
+                    let expected = expectations(for: page)
+                    for phrase in expected.always + (size == SetupWindowController.initialContentSize ? expected.initialOnly : []) {
+                        XCTAssertTrue(detail.contains(phrase), "\(page.title) is missing \"\(phrase)\" in \(name). Read: \(detail)")
+                    }
+                    let words = " " + normalized(rendered.transcript) + " "
+                    for removed in ["sports", "focus status", "done"] {
+                        XCTAssertFalse(words.contains(" \(removed) "), "\(removed) must stay out of Setup in \(name)")
+                    }
+
+                    // KLOI's surfaces: the canvas around the sidebar, the white (or #171716) card for the page.
+                    assertPixel(rendered.image, x: 120, y: size.height - 150, in: size,
+                                is: scheme == .dark ? 0x111110 : 0xF2F1EF, "sidebar canvas in \(name)")
+                    assertPixel(rendered.image, x: size.width - 30, y: size.height / 2, in: size,
+                                is: scheme == .dark ? 0x171716 : 0xFFFFFF, "page card in \(name)")
+                    assertPixel(rendered.image, x: size.width - 8, y: size.height / 2, in: size,
+                                is: scheme == .dark ? 0x111110 : 0xF2F1EF, "canvas margin right of the card in \(name)")
                 }
             }
         }
     }
 
-    private var permissionGroups: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            SetupSection(title: "Everyday essentials") {
-                permission("calendar", "Calendar", "Upcoming meetings and your daily agenda.")
-                permission("headphones", "Bluetooth", "AirPods connections and battery levels.")
-            }
-            SetupSection(title: "Dictation") {
-                permission("mic", "Microphone", "Record speech while dictation is active.")
-                permission("accessibility", "Accessibility", "Insert text in your focused app.")
-            }
-            SetupSection(title: "Media & capture") {
-                permission("music.note", "Music automation", "Fallback playback controls for Music.")
-                permission("play.circle", "Spotify automation", "Fallback playback controls for Spotify.")
-                permission("waveform", "Music bars", "Live waveform from system audio. Play music to test.")
-                permission("play.rectangle", SetupScreenCaptureAccess.title, SetupScreenCaptureAccess.detail)
-            }
-            SetupSection(title: "Messages & notifications") {
-                permission("externaldrive", "Full Disk Access", "Local Messages and stored macOS notifications.")
-            }
-        }
+    // MARK: Pixels
+
+    /// Checks one pixel against a hex color. `x` and `y` are in points from the top-left. The capture is color-matched
+    /// into sRGB first: the offscreen bitmap is tagged with the display's space, so its raw numbers aren't sRGB.
+    private func assertPixel(_ image: CGImage, x: CGFloat, y: CGFloat, in size: NSSize, is hex: UInt32, _ message: String,
+                             file: StaticString = #filePath, line: UInt = #line) {
+        let pixels = srgbPixels(image)
+        let scale = CGFloat(image.width) / size.width
+        let px = min(Int(x * scale), image.width - 1), py = min(Int(y * scale), image.height - 1)
+        let offset = (py * image.width + px) * 4
+        let actual = [Int(pixels[offset]), Int(pixels[offset + 1]), Int(pixels[offset + 2])]
+        let wanted = [Int(hex >> 16 & 0xFF), Int(hex >> 8 & 0xFF), Int(hex & 0xFF)]
+        XCTAssertTrue(zip(actual, wanted).allSatisfy { abs($0 - $1) <= 3 },
+                      "\(message): got \(actual), wanted \(wanted)", file: file, line: line)
     }
 
-    private func permission(_ symbol: String, _ title: String, _ detail: String) -> some View {
-        SetupPermissionRow(symbol: symbol, title: title, detail: detail, state: .allowed)
+    /// RGBA bytes, top row first, color-matched into sRGB.
+    private func srgbPixels(_ image: CGImage) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        bytes.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8,
+                                    bytesPerRow: image.width * 4, space: space,
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        return bytes
     }
 
-    private func assertWindowChrome(_ rendered: RenderedView, page: SetupPage, size: NSSize, name: String,
-                                    file: StaticString = #filePath, line: UInt = #line) throws {
-        for category in SetupPage.allCases {
-            let title = normalized(category.title)
-            let label = try XCTUnwrap(rendered.text.first {
-                // Vision can merge adjacent tab labels in the compact four-tab navigation.
-                normalized($0.value).contains(title)
-                    && $0.frame.minY > size.height - 72 && $0.frame.minX > size.width * 0.35
-            }, "Missing top navigation item \(category.title) in \(name). Read: \(rendered.transcript)",
-                                     file: file, line: line)
-            XCTAssertLessThan(label.frame.maxY, size.height - 8, name, file: file, line: line)
-            XCTAssertLessThan(label.frame.maxX, size.width - 16, name, file: file, line: line)
-        }
-        XCTAssertFalse(rendered.text.contains { normalized($0.value).split(separator: " ").contains("sports") },
-                       "Sports must stay removed from Setup in \(name)", file: file, line: line)
-        let done = try XCTUnwrap(rendered.footerText.first { normalized($0.value) == "done" },
-                                "Done is missing in \(name). Footer: \(rendered.footerText.map(\.value))", file: file, line: line)
-        XCTAssertLessThan(done.frame.maxY, 64, "Done must stay inside the fixed footer in \(name)", file: file, line: line)
-        XCTAssertGreaterThan(done.frame.minY, 8, "Done is clipped against the footer in \(name)", file: file, line: line)
-        XCTAssertGreaterThan(done.frame.minX, size.width - 140, name, file: file, line: line)
-        XCTAssertLessThan(done.frame.maxX, size.width - 20, name, file: file, line: line)
-        let note = try XCTUnwrap(rendered.footerText.first {
-            normalized($0.value).contains(page == .permissions ? "access updates" : "preferences save")
-        }, "Footer note is missing in \(name). Footer: \(rendered.footerText.map(\.value))", file: file, line: line)
-        XCTAssertGreaterThan(note.frame.minX, 24, name, file: file, line: line)
-        XCTAssertGreaterThan(note.frame.minY, 8, name, file: file, line: line)
-        XCTAssertLessThan(note.frame.maxX, done.frame.minX - 8,
-                          "Footer note overlaps Done in \(name)", file: file, line: line)
+    private func countPixels(_ image: CGImage, where test: (Int, Int, Int) -> Bool) -> Int {
+        let pixels = srgbPixels(image)
+        return stride(from: 0, to: pixels.count, by: 4).filter {
+            test(Int(pixels[$0]), Int(pixels[$0 + 1]), Int(pixels[$0 + 2]))
+        }.count
     }
+
 
     private func descendant<T: NSView>(of view: NSView, matching type: T.Type) -> T? {
         if let match = view as? T { return match }
@@ -331,7 +308,6 @@ final class SetupTests: XCTestCase {
     private struct RenderedView {
         let image: CGImage
         let text: [RenderedText]
-        let footerText: [RenderedText]
         var transcript: String { text.map(\.value).joined(separator: " | ") }
     }
 
@@ -340,8 +316,7 @@ final class SetupTests: XCTestCase {
             .filter { !$0.isEmpty }.joined(separator: " ")
     }
 
-    private func render<V: View>(_ host: NSHostingView<V>, name: String,
-                                footerHeight: CGFloat? = nil) async throws -> RenderedView {
+    private func render<V: View>(_ host: NSHostingView<V>, name: String, requireText: Bool = true) async throws -> RenderedView {
         for _ in 0..<4 {
             await Task.yield()
             host.layoutSubtreeIfNeeded()
@@ -361,18 +336,8 @@ final class SetupTests: XCTestCase {
         }
         let size = host.bounds.size
         let text = try recognize(image, in: NSRect(origin: .zero, size: size))
-        var footerText: [RenderedText] = []
-        if let footerHeight {
-            // Whole-window OCR can miss a small button amid a dense permissions page. Recognize
-            // the actual footer pixels separately, preserving their coordinates for clipping checks.
-            let scale = CGFloat(image.height) / size.height
-            let pixelHeight = ceil(footerHeight * scale)
-            let footer = try XCTUnwrap(image.cropping(to: CGRect(
-                x: 0, y: CGFloat(image.height) - pixelHeight, width: CGFloat(image.width), height: pixelHeight)))
-            footerText = try recognize(footer, in: NSRect(x: 0, y: 0, width: size.width, height: pixelHeight / scale))
-        }
-        XCTAssertFalse(text.isEmpty, "\(name) native capture contains no readable text")
-        return RenderedView(image: image, text: text, footerText: footerText)
+        if requireText { XCTAssertFalse(text.isEmpty, "\(name) native capture contains no readable text") }
+        return RenderedView(image: image, text: text)
     }
 
     private func recognize(_ image: CGImage, bounds: NSRect, region: NSRect) throws -> [RenderedText] {
