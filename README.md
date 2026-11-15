@@ -22,17 +22,20 @@ After code changes, quit the app, rebuild, and launch it again. To build a unive
 
 ### Local dictation (Apple silicon)
 
-In **Setup → Dictation**, select **Fluid Speech Pro** (final transcription after recording) or
-**Nemotron 3.5 Streaming 320 ms** (live partial transcript). Download the chosen model explicitly
+In **Setup → Dictation**, select **Fluid Speech Pro** (live previews, finalized when you stop) or
+**Nemotron 3.5 Streaming 320 ms** (native streaming). Download the chosen model explicitly
 before first use (roughly 650–700 MB). Grant **Microphone** and **Accessibility** under
 **Setup → Permissions**. Press **⌥D** to start, then press it again to finish; the result is inserted
 into the app that remained focused, or copied to the clipboard if insertion is unavailable.
-Recording is limited to 90 seconds and held only in memory. Fn-only push-to-talk is not implemented.
-Use **Cancel Dictation** from the notch menu to discard an active recording.
+Recording is limited to 90 seconds and held only in memory. Enable **Hold Fn to talk** in Dictation
+settings to record while holding Fn / Globe, then release to finish and paste. Push-to-talk is off by
+default; **⌥D** has its own switch and stays enabled unless you turn it off. Fn-key combinations cancel
+the hold and pass through normally. Fn needs Accessibility access. If macOS also opens Emoji or Dictation,
+set **Press 🌐 key to → Do Nothing** in macOS Keyboard settings; LeNotch doesn't change that preference.
+Press **Esc** or use **Cancel Dictation** from the notch menu to discard an active recording.
 
-Optional on-device cleanup uses **Qwen3.5-0.8B 4-bit** (an additional ~650 MB download).
-Enable it and download it separately in Dictation settings. Cleanup defaults to off and falls back
-to the raw transcript on failure. After models are downloaded, dictation and cleanup run locally;
+On-device cleanup using **Qwen3.5-0.8B 4-bit** is temporarily hidden and disabled pending a better model.
+Its implementation, saved preference, and any downloaded model are retained. After models are downloaded, dictation runs locally;
 the app does not upload recordings, transcripts, or analytics. Model downloads use Hugging Face.
 The model files are downloaded by the user, not bundled with the app. Fluid Speech Pro requires
 CC BY 4.0 attribution; check each model's terms before redistributing its weights. See the model terms:

@@ -81,6 +81,8 @@ final class DictationCoordinator {
     private(set) var liveText = "" { didSet { stateChanged() } }
     private(set) var lastTranscript: String?
     var shortcutUnavailable = false
+    var pushToTalkUnavailable = false
+    private(set) var pushToTalkHold = DictationHold()
     var indicator: Indicator? { Self.indicator(phase: phase, running: running, notice: notice) }
     var display: Display { Self.display(indicator: indicator, liveText: liveText) }
 
@@ -149,7 +151,7 @@ final class DictationCoordinator {
             downloadProgress = nil
             phase = .done
             notice = .note(.ready)
-            statusMessage = "\(selected.name) is ready. Press ⌥D to dictate."
+            statusMessage = "\(selected.name) is ready."
             hideAfterDelay(1.6)
         } catch {
             guard id == session else { return }
@@ -204,16 +206,7 @@ final class DictationCoordinator {
     func toggle() {
         switch phase {
         case .idle, .done, .failed:
-            session += 1
-            let id = session
-            lastTranscript = nil
-            meter = .silent
-            liveText = ""
-            running = true
-            // Straight from the last run's note into this one's work: the notch never closes in between.
-            phase = .preparing
-            notice = nil
-            currentTask = Task { await start(id: id) }
+            beginRun()
         case .recording:
             finish()
         case .preparing, .transcribing, .cleaning:
@@ -221,8 +214,38 @@ final class DictationCoordinator {
         }
     }
 
+    func fnKey(_ action: FnPushToTalk.Action) {
+        switch action {
+        case .pressed(let id):
+            guard phase == .idle || phase == .done || phase == .failed else { return }
+            pushToTalkHold.begin(id)
+            beginRun()
+        case .released(let id):
+            guard pushToTalkHold.end(id) else { return }
+            if phase == .recording { finish() }
+            else if phase == .preparing { cancel() }   // don't open the mic after Fn was released during warmup
+        case .cancelled(let id):
+            guard pushToTalkHold.end(id) else { return }
+            cancel()
+        }
+    }
+
+    private func beginRun() {
+        session += 1
+        let id = session
+        lastTranscript = nil
+        meter = .silent
+        liveText = ""
+        running = true
+        // Straight from the last run's note into this one's work: the notch never closes in between.
+        phase = .preparing
+        notice = nil
+        currentTask = Task { await start(id: id) }
+    }
+
     func cancel() {
         session += 1
+        pushToTalkHold.clear()
         recordingTimer?.invalidate()
         recordingTimer = nil
         let previous = cancelledWork, pendingStream = streamTask, pendingRun = currentTask
@@ -283,6 +306,7 @@ final class DictationCoordinator {
             } else {
                 allowed = access == .authorized
             }
+            guard id == session else { return }
             guard allowed else {
                 fail("Allow microphone access in Dictation settings first.")
                 return
@@ -294,7 +318,7 @@ final class DictationCoordinator {
             try audio.start { [weak self] reading in self?.heard(reading) }
             startedAt = Date()
             phase = .recording
-            statusMessage = "Press ⌥D again to finish"
+            statusMessage = pushToTalkHold.id == nil ? "Finish from the shortcut or notch menu · Esc cancels" : "Release Fn to finish · Esc cancels"
             recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.30, repeats: true) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.tickRecording() }
             }
@@ -341,6 +365,7 @@ final class DictationCoordinator {
     }
 
     private func finish() {
+        pushToTalkHold.clear()
         recordingTimer?.invalidate()
         recordingTimer = nil
         let recording: (all: [Float], unread: [Float])

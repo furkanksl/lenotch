@@ -44,6 +44,44 @@ final class DictationLayerTests: XCTestCase {
 
     // MARK: Esc
 
+    func testReleasingFnDuringWarmupCancelsBeforeTheMicrophoneCanOpen() async {
+        let c = Coordinator.shared
+        c.cancel()
+        let hold = UUID()
+        c.fnKey(.pressed(hold))
+        XCTAssertEqual(c.phase, .preparing)
+        XCTAssertEqual(c.pushToTalkHold.id, hold)
+        c.fnKey(.released(hold))
+        XCTAssertEqual(c.phase, .idle)
+        XCTAssertFalse(c.running)
+        XCTAssertNil(c.pushToTalkHold.id)
+        await Task.yield()
+        XCTAssertEqual(c.phase, .idle, "A cancelled startup must not open the microphone after Fn came up")
+    }
+
+    func testFnReleaseCannotFinishAToggleRunOrANewerHold() {
+        let c = Coordinator.shared
+        c.cancel()
+        defer { c.cancel() }
+        let old = UUID(), next = UUID()
+        c.toggle()
+        c.fnKey(.pressed(old))
+        XCTAssertNil(c.pushToTalkHold.id, "Fn cannot adopt a run started from the menu or ⌥D")
+        c.fnKey(.released(old))
+        XCTAssertEqual(c.phase, .preparing)
+        c.cancel()
+        c.fnKey(.pressed(old))
+        c.cancel()   // Esc discards this hold
+        c.fnKey(.pressed(next))
+        c.fnKey(.released(old))
+        XCTAssertEqual(c.pushToTalkHold.id, next)
+        XCTAssertEqual(c.phase, .preparing)
+        c.fnKey(.cancelled(next))
+        XCTAssertEqual(c.phase, .idle)
+        c.fnKey(.released(next))
+        XCTAssertEqual(c.phase, .idle, "A cancelled hold's release must not start or finish anything")
+    }
+
     func testEscCancelsOnlyWhileARunIsListeningOrWorking() {
         for phase in [Phase.preparing, .recording, .transcribing, .cleaning] {
             XCTAssertTrue(Coordinator.escapeCancels(phase: phase, running: true), "\(phase)")

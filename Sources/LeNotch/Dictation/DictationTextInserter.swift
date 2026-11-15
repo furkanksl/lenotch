@@ -103,7 +103,7 @@ enum DictationTextInserter {
 
     /// The transcript is ready a few hundred milliseconds after ⌥D, so ⌥ is often still down. Give it up to 0.6 s.
     private static func waitForModifierRelease() async {
-        let held: CGEventFlags = [.maskAlternate, .maskShift, .maskControl, .maskCommand]
+        let held: CGEventFlags = [.maskAlternate, .maskShift, .maskControl, .maskCommand, .maskSecondaryFn]
         for _ in 0..<12 {
             if CGEventSource.flagsState(.combinedSessionState).intersection(held).isEmpty { return }
             try? await Task.sleep(for: .milliseconds(50))

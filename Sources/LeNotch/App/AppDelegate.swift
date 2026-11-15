@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var askKey: HotKey?
     private var launcherKey: HotKey?
     private var launcherShortcutObserver: NSObjectProtocol?
+    private var dictationShortcutObserver: NSObjectProtocol?
     private let notificationReplies = NotificationReplyService()
     private let agentSocket = AgentSocket()
     private var dictationKey: HotKey?
@@ -44,10 +45,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Quick ask (phase 3): ⌥Space (the key tap, `MediaKeyTap.onAskKey`), and ⌃⌥⌘A as a backup that needs no permission.
             askKey = HotKey(keyCode: kVK_ANSI_A, modifiers: controlKey | optionKey | cmdKey) { d.toggleAsk() }
             configureLauncherShortcut()
-            dictationKey = HotKey(keyCode: kVK_ANSI_D, modifiers: optionKey) {
-                DictationCoordinator.shared.toggle()
+            surface?.keys.onFnKey = { [weak self] action in
+                if case .pressed = action, self?.surface?.director.island.context.locked == true { return }
+                DictationCoordinator.shared.fnKey(action)
             }
-            DictationCoordinator.shared.shortcutUnavailable = dictationKey == nil
+            surface?.keys.onFnAvailability = { available in
+                DictationCoordinator.shared.pushToTalkUnavailable = DictationInputSettings().pushToTalk && !available
+            }
+            configureDictationShortcuts()
+            dictationShortcutObserver = NotificationCenter.default.addObserver(forName: .dictationShortcutsChanged, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.configureDictationShortcuts() }
+            }
             // Dictation is the notch's own: it takes the ears while it listens and works.
             DictationCoordinator.shared.onDisplayChange = { d.dictationChanged($0.indicator, transcript: $0.transcript) }
             launcherShortcutObserver = NotificationCenter.default.addObserver(forName: .launcherShortcutChanged, object: nil, queue: .main) { [weak self] _ in
@@ -110,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dictation = menu.addItem(withTitle: DictationCoordinator.shared.phase == .recording ? "Finish Dictation" : "Start Dictation",
                                      action: #selector(toggleDictation), keyEquivalent: "")
         dictation.target = self
-        dictation.subtitle = "⌥D"
+        if DictationInputSettings().toggleShortcut { dictation.subtitle = "⌥D" }
         if DictationCoordinator.shared.canCancel {
             let cancel = menu.addItem(withTitle: "Cancel Dictation", action: #selector(cancelDictation), keyEquivalent: "")
             cancel.target = self
@@ -182,10 +190,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UsageModel.shared.stop()
         launcherKey?.unregister()
         askKey?.unregister()
+        dictationKey?.unregister()
+        DictationCoordinator.shared.cancel()
         if let launcherShortcutObserver { NotificationCenter.default.removeObserver(launcherShortcutObserver) }
+        if let dictationShortcutObserver { NotificationCenter.default.removeObserver(dictationShortcutObserver) }
         LockWallpaper.shared.restoreOnQuit()   // never leave someone's wallpaper behind
         agentSocket.stop()
         surface?.stop()
+    }
+
+    private func configureDictationShortcuts() {
+        let settings = DictationInputSettings()
+        dictationKey?.unregister()
+        dictationKey = nil
+        DictationCoordinator.shared.shortcutUnavailable = false
+        if settings.toggleShortcut {
+            dictationKey = HotKey(keyCode: kVK_ANSI_D, modifiers: optionKey) { DictationCoordinator.shared.toggle() }
+            DictationCoordinator.shared.shortcutUnavailable = dictationKey == nil
+        }
+        surface?.keys.fnPushToTalkEnabled = settings.pushToTalk
     }
 
     private func configureLauncherShortcut() {

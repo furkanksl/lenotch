@@ -157,6 +157,7 @@ final class NotchSurfaceController {
             return (CGDisplayBounds(g.displayID), Double(g.notchHeight))
         }
         desktop.onChange = { [weak self] c in
+            if c.locked { self?.keys.cancelFnHold() }
             Self.log.info("context: \(c.frontmostApp, privacy: .public) fullscreen \(c.fullscreen) menu \(c.menuOpen) locked \(c.locked) mic \(c.micInUse) camera \(c.cameraInUse)")
             self?.director.systemContextChanged(c)
         }
@@ -732,6 +733,11 @@ final class NotchSurfaceController {
 
         let nc = NotificationCenter.default
         let wc = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
+            observers.append(wc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.keys.cancelFnHold() }
+            })
+        }
         // The bloom's tint follows the wallpaper (each Space can have its own).
         readWallpaperTint()
         for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.screensDidWakeNotification] {

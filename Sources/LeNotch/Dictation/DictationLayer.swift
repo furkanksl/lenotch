@@ -260,7 +260,7 @@ struct DictationNoteLabel: View {
 extension DictationCoordinator.Indicator {
     var accessibilityText: String {
         switch self {
-        case .listening: "Dictation is listening. Press Option D to finish, or Escape to cancel."
+        case .listening: "Dictation is listening. Release Fn for push-to-talk, or use your toggle shortcut to finish. Escape cancels."
         case .working: "Dictation is turning your speech into text"
         case .note(let note):
             switch note {

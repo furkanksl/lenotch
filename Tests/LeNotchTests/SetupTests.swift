@@ -188,7 +188,7 @@ final class SetupTests: XCTestCase {
         switch page {
         case .permissions: (["microphone", "accessibility"], ["everyday", "calendar", "bluetooth"])
         case .appearance: (["lock screen artwork", "album colors"], ["original wallpaper"])
-        case .dictation: (["anywhere", "speech model", "fluid speech pro"], ["nemotron", "microphone", "accessibility"])
+        case .dictation: (["anywhere", "speech model", "fluid speech pro"], ["nemotron", "hold fn to talk", "toggle dictation"])
         case .notifications: (["notifications in the notch"], ["full disk access", "notification settings"])
         case .agents: (["chatgpt"], ["coding agents", "agent sessions"])
         case .launcher: (["notch preview", "configure"], ["open with"])
@@ -196,10 +196,14 @@ final class SetupTests: XCTestCase {
     }
 
     func testEveryPageRendersOnKLOICanvasWithTheWholeSidebarInBothSizesAndThemes() async throws {
+        let suite = "lenotch.test.setup.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         for page in SetupPage.allCases {
             for size in [SetupWindowController.minimumContentSize, SetupWindowController.initialContentSize] {
                 for scheme in [ColorScheme.light, .dark] {
                     let view = SetupView(page: page)
+                        .defaultAppStorage(defaults)
                         .environment(\.colorScheme, scheme)
                         .frame(width: size.width, height: size.height)
                     let (window, host) = makeWindow(view, size: size, scheme: scheme)
@@ -243,6 +247,31 @@ final class SetupTests: XCTestCase {
                     assertPixel(rendered.image, x: size.width - 8, y: size.height / 2, in: size,
                                 is: scheme == .dark ? 0x111110 : 0xF2F1EF, "canvas margin right of the card in \(name)")
                 }
+            }
+        }
+    }
+
+    func testDictationExplainsFnModeAndMenuOnlyModeInBothThemes() async throws {
+        let suite = "lenotch.test.setup.shortcuts.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: DictationInputSettings.toggleShortcutKey)
+        for pushToTalk in [false, true] {
+            defaults.set(pushToTalk, forKey: DictationInputSettings.pushToTalkKey)
+            for scheme in [ColorScheme.light, .dark] {
+                let size = SetupWindowController.minimumContentSize
+                let view = SetupView(page: .dictation)
+                    .defaultAppStorage(defaults)
+                    .environment(\.colorScheme, scheme)
+                    .frame(width: size.width, height: size.height)
+                let (window, host) = makeWindow(view, size: size, scheme: scheme)
+                defer { window.close() }
+                let rendered = try await render(host, name: "dictation-fn-\(pushToTalk)-\(scheme)")
+                let words = normalized(rendered.transcript)
+                XCTAssertTrue(words.contains(pushToTalk ? "hold fn to talk" : "dictate from the notch"), words)
+                XCTAssertTrue(words.contains(pushToTalk ? "release to paste" : "notch menu"), words)
+                XCTAssertTrue(words.contains("esc cancels"), words)
+                XCTAssertFalse(words.contains("cleanup"), "Cleanup remains hidden in both shortcut modes")
             }
         }
     }

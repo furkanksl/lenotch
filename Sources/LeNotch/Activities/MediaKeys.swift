@@ -118,9 +118,19 @@ final class MediaKeyTap {
     /// ⌥Space: quick ask (owner, 11-07: "give a better shortcut for asking, or override claude current shortcut"). The
     /// tap sees it before the apps do and swallows it, so Claude's own quick entry doesn't open as well.
     var onAskKey: (() -> Void)?
+    var onFnKey: ((FnPushToTalk.Action) -> Void)?
+    var onFnAvailability: ((Bool) -> Void)?
+    var fnPushToTalkEnabled = false {
+        didSet {
+            if !fnPushToTalkEnabled { cancelFnHold() }
+            input?.setFnEnabled(fnPushToTalkEnabled)
+            onFnAvailability?(fnPushToTalkEnabled && running)
+        }
+    }
     private(set) var running = false
     private var input: HardwareKeyEventTap?
     private var generation = UUID()
+    private var activeFnHold: UUID?
     private static let log = Logger(subsystem: "com.lenotch.app", category: "keys")
 
     deinit { input?.stop() }
@@ -170,21 +180,51 @@ final class MediaKeyTap {
                 }
             }
         }
-        let input = HardwareKeyEventTap(onLevel: level, onAsk: ask)
+        let fn: @Sendable (FnPushToTalk.Action) -> Void = { [weak self] action in
+            // A serial queue preserves press/release order. A press that was already released (or disabled) while
+            // the UI thread was busy must never start recording late.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.running, self.generation == session else { return }
+                switch action {
+                case .pressed(let id):
+                    guard self.fnPushToTalkEnabled, self.input?.isFnHeld(id) == true else { return }
+                    self.activeFnHold = id
+                case .released(let id), .cancelled(let id):
+                    guard self.activeFnHold == id else { return }
+                    self.activeFnHold = nil
+                }
+                self.onFnKey?(action)
+            }
+        }
+        let input = HardwareKeyEventTap(onLevel: level, onAsk: ask, onFn: fn)
+        input.setFnEnabled(fnPushToTalkEnabled)
         guard input.start() else {
             Self.log.notice("key tap unavailable")
             return
         }
         self.input = input
         running = true
+        onFnAvailability?(fnPushToTalkEnabled)
         Self.log.notice("key tap running on dedicated input thread; playback keys pass through")
     }
 
     func stop() {
+        cancelFnHold()
         running = false
         generation = UUID()
         input?.stop()
         input = nil
+        onFnAvailability?(false)
+    }
+
+    func cancelFnHold() {
+        _ = input?.interruptFn()
+        // The physical release may already be queued for the main thread. Disabling or locking cancels the delivered
+        // hold synchronously, so that queued release can no longer finish it.
+        if let id = activeFnHold {
+            activeFnHold = nil
+            onFnKey?(.cancelled(id))
+        }
     }
 }
 
@@ -196,6 +236,8 @@ final class MediaKeyTap {
 final class HardwareKeyEventTap: @unchecked Sendable {
     private let onLevel: @Sendable (MediaKeyTap.HUDLevel) -> Void
     private let onAsk: (@Sendable () -> Void)?
+    private let onFn: (@Sendable (FnPushToTalk.Action) -> Void)?
+    private let fn = Mutex(FnPushToTalk())
     private var swallowSpaceUp = false
     private let lifecycle = NSCondition()
     private var thread: Thread?
@@ -205,10 +247,20 @@ final class HardwareKeyEventTap: @unchecked Sendable {
     private var finished = true
 
     init(onLevel: @escaping @Sendable (MediaKeyTap.HUDLevel) -> Void,
-         onAsk: (@Sendable () -> Void)? = nil) {
+         onAsk: (@Sendable () -> Void)? = nil,
+         onFn: (@Sendable (FnPushToTalk.Action) -> Void)? = nil) {
         self.onLevel = onLevel
         self.onAsk = onAsk
+        self.onFn = onFn
     }
+
+    func setFnEnabled(_ enabled: Bool) {
+        if let action = fn.withLock({ $0.setEnabled(enabled && onFn != nil) }) { onFn?(action) }
+    }
+
+    func isFnHeld(_ id: UUID) -> Bool { fn.withLock { $0.enabled && $0.hold == id } }
+
+    func interruptFn() -> FnPushToTalk.Action? { fn.withLock { $0.interrupt() } }
 
     func start() -> Bool {
         lifecycle.lock()
@@ -235,8 +287,9 @@ final class HardwareKeyEventTap: @unchecked Sendable {
     }
 
     private func run() {
-        // NX_SYSDEFINED for volume/brightness; normal key events only for the explicit ⌥Space shortcut.
-        let mask = CGEventMask(1 << 14) | CGEventMask(1 << CGEventType.keyDown.rawValue) | CGEventMask(1 << CGEventType.keyUp.rawValue)
+        // Fn flags are observed for opt-in push-to-talk. Other key events remain unchanged.
+        let mask = CGEventMask(1 << 14) | CGEventMask(1 << CGEventType.keyDown.rawValue) |
+            CGEventMask(1 << CGEventType.keyUp.rawValue) | CGEventMask(1 << CGEventType.flagsChanged.rawValue)
         let me = Unmanaged.passUnretained(self).toOpaque()
         guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
                                            eventsOfInterest: mask, callback: { _, type, event, info in
@@ -287,9 +340,13 @@ final class HardwareKeyEventTap: @unchecked Sendable {
     /// True when the key was handled here (and must not reach the system).
     private func handle(_ type: CGEventType, _ event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let action = interruptFn() { onFn?(action) }
             if let port { CGEvent.tapEnable(tap: port, enable: true) }
             return false
         }
+        let result = fn.withLock { $0.route(type, keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags) }
+        if let action = result.action { onFn?(action) }
+        if result.consume { return true }
         if type == .keyDown || type == .keyUp {
             guard event.getIntegerValueField(.keyboardEventKeycode) == 49 else { return false }   // Space
             if type == .keyUp { defer { swallowSpaceUp = false }; return swallowSpaceUp }

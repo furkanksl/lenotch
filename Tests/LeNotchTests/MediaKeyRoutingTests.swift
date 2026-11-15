@@ -136,6 +136,46 @@ final class MediaKeyRoutingTests: XCTestCase {
 
     private var systemDefined: CGEventType { CGEventType(rawValue: 14)! }
 
+    func testFnPushToTalkUsesTheExistingTapAndDoesNotChangePlaybackEvents() throws {
+        let actions = Mutex<[FnPushToTalk.Action]>([])
+        let tap = HardwareKeyEventTap(onLevel: { _ in }, onFn: { action in actions.withLock { $0.append(action) } })
+        let fnDown = try keyboardEvent(key: 63, down: true, flags: .maskSecondaryFn)
+        let fnUp = try keyboardEvent(key: 63, down: false)
+        try assertPassesThrough(tap, type: .flagsChanged, event: fnDown)
+        try assertPassesThrough(tap, type: .flagsChanged, event: fnUp)
+        XCTAssertTrue(actions.withLock { $0.isEmpty }, "Off by default, Fn is macOS's")
+        tap.setFnEnabled(true)
+        XCTAssertNil(tap.route(.flagsChanged, event: fnDown))
+        guard case .pressed(let id) = try XCTUnwrap(actions.withLock { $0.last }) else { return XCTFail("No Fn press") }
+        XCTAssertTrue(tap.isFnHeld(id))
+        let play = try mediaEvent(key: 16, state: 0x0A)
+        try assertPassesThrough(tap, type: systemDefined, event: play)
+        XCTAssertEqual(actions.withLock { $0.last }, .cancelled(id), "A chord cancels, not pastes")
+        XCTAssertNil(tap.route(.flagsChanged, event: fnUp))
+        XCTAssertEqual(actions.withLock { $0.count }, 2, "No finish after the chord cancelled")
+        XCTAssertNil(tap.route(.flagsChanged, event: fnDown))
+        guard case .pressed(let next) = try XCTUnwrap(actions.withLock { $0.last }) else { return XCTFail("No next press") }
+        XCTAssertNil(tap.route(.flagsChanged, event: fnUp))
+        XCTAssertEqual(actions.withLock { $0.last }, .released(next))
+        // Playback is still returned byte-for-byte with the feature on, both between holds and during one.
+        try assertPassesThrough(tap, type: systemDefined, event: play)
+    }
+
+    func testLosingTheTapCancelsFnAndAnUnconfiguredTapNeverClaimsIt() throws {
+        let fnDown = try keyboardEvent(key: 63, down: true, flags: .maskSecondaryFn)
+        let noHandler = HardwareKeyEventTap(onLevel: { _ in })
+        noHandler.setFnEnabled(true)
+        try assertPassesThrough(noHandler, type: .flagsChanged, event: fnDown)
+        let actions = Mutex<[FnPushToTalk.Action]>([])
+        let tap = HardwareKeyEventTap(onLevel: { _ in }, onFn: { action in actions.withLock { $0.append(action) } })
+        tap.setFnEnabled(true)
+        XCTAssertNil(tap.route(.flagsChanged, event: fnDown))
+        guard case .pressed(let id) = try XCTUnwrap(actions.withLock { $0.last }) else { return XCTFail("No Fn press") }
+        try assertPassesThrough(tap, type: .tapDisabledByTimeout, event: fnDown)
+        XCTAssertEqual(actions.withLock { $0.last }, .cancelled(id))
+        XCTAssertFalse(tap.isFnHeld(id))
+    }
+
     private func mediaEvent(key: Int, state: Int, subtype: Int16 = 8, repeating: Bool = false) throws -> CGEvent {
         let data1 = (key << 16) | (state << 8) | (repeating ? 1 : 0)
         let event = try XCTUnwrap(NSEvent.otherEvent(with: .systemDefined, location: .zero, modifierFlags: [],
