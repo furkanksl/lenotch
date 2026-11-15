@@ -11,6 +11,7 @@ import Carbon.HIToolbox
 enum DictationTextInserter {
     enum Result: Equatable {
         case pasted
+        case cancelled
         /// Left on the clipboard only, for the stated reason.
         case copied(Reason)
     }
@@ -43,6 +44,7 @@ enum DictationTextInserter {
 
     static func deliver(_ text: String, pasteboard: NSPasteboard = .general,
                         environment: Environment = .live) async -> Result {
+        guard !Task.isCancelled else { return .cancelled }
         let blocker = environment.blocker()
         // Only a paste needs the old clipboard back; when we can't paste, the transcript stays for you to paste.
         let previous = blocker == nil ? snapshot(of: pasteboard) : nil
@@ -51,6 +53,15 @@ enum DictationTextInserter {
 
         let changeCount = pasteboard.changeCount
         await environment.settle()
+        guard !Task.isCancelled else {
+            if let previous, previous.restorable, pasteboard.changeCount == changeCount {
+                pasteboard.clearContents()
+                if !previous.items.isEmpty { pasteboard.writeObjects(previous.items) }
+            }
+            return .cancelled
+        }
+        // A copy while the modifiers settle must not turn into an unrelated paste.
+        guard pasteboard.changeCount == changeCount else { return .cancelled }
         // The frontmost app can change while we wait.
         if let blocker = environment.blocker() { return .copied(blocker) }
         guard environment.pressPaste() else { return .copied(.needsAccessibility) }

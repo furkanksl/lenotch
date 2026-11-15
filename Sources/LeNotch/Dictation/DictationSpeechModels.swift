@@ -62,6 +62,8 @@ final class DictationSpeechModels {
     /// Fluid Speech Pro's live session for one recording: previews of everything heard so far, and a final text equal
     /// to transcribing the whole recording at once (FluidAudio's own guarantee), without redoing the finished windows.
     private var incremental: ParakeetIncrementalSession?
+    /// Invalidates suspended previews when a run is cancelled or replaced.
+    private var streamingGeneration = UUID()
     private let logger = Logger(subsystem: "LeNotch", category: "Dictation")
 
     /// Parakeet needs a second of audio before it says anything (`ASRError.invalidAudioData` below that).
@@ -140,13 +142,19 @@ final class DictationSpeechModels {
 
     /// A new recording starts: both models show what they hear as you speak.
     func beginStreaming() async throws {
+        let generation = UUID()
+        streamingGeneration = generation
+        incremental = nil
         switch loaded {
         case .nemotronStreaming?:
             guard let streamer else { throw ModelError.notLoaded }
             await streamer.reset()
+            try checkStreaming(generation)
         case .fluidSpeechPro?:
             guard let asr else { throw ModelError.notLoaded }
-            incremental = try await asr.makeIncrementalSession()
+            let session = try await asr.makeIncrementalSession()
+            try checkStreaming(generation)
+            incremental = session
         case nil:
             throw ModelError.notLoaded
         }
@@ -156,22 +164,30 @@ final class DictationSpeechModels {
     /// yet. Nemotron's text is the transcription itself, so its errors end the run. Fluid's previews are only a
     /// preview: if one fails the recording carries on, and the final text comes from the whole recording.
     func stream(_ samples: [Float]) async throws -> String? {
+        let generation = streamingGeneration
+        try checkStreaming(generation)
         switch loaded {
         case .nemotronStreaming?:
             guard let streamer else { throw ModelError.notLoaded }
             if let audio = Self.buffer(for: samples) {
                 _ = try await streamer.process(audioBuffer: audio)
             }
-            return await streamer.getPartialTranscript()
+            let text = await streamer.getPartialTranscript()
+            try checkStreaming(generation)
+            return text
         case .fluidSpeechPro?:
             guard let session = incremental else { return nil }
             do {
                 try await session.append(samples)
+                try checkStreaming(generation)
                 guard await session.acceptedSampleCount >= Self.minimumSamples else { return nil }
-                return try await session.preview().text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let text = try await session.preview().text.trimmingCharacters(in: .whitespacesAndNewlines)
+                try checkStreaming(generation)
+                return text
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
+                try checkStreaming(generation)
                 logger.notice("Live preview stopped; the recording continues: \(error.localizedDescription, privacy: .public)")
                 incremental = nil
                 return nil
@@ -183,14 +199,19 @@ final class DictationSpeechModels {
 
     /// The recording ended: `unread` is what `stream` hasn't seen, `all` the whole recording.
     func finishStreaming(unread: [Float], all: [Float]) async throws -> String {
+        let generation = streamingGeneration
+        try checkStreaming(generation)
         switch loaded {
         case .nemotronStreaming?:
             guard let streamer else { throw ModelError.notLoaded }
             if let audio = Self.buffer(for: unread) {
                 _ = try await streamer.process(audioBuffer: audio)
             }
+            try checkStreaming(generation)
             let text = try await streamer.finish().trimmingCharacters(in: .whitespacesAndNewlines)
+            try checkStreaming(generation)
             await streamer.reset()
+            try checkStreaming(generation)
             guard !text.isEmpty else { throw ModelError.emptyTranscript }
             return text
         case .fluidSpeechPro?:
@@ -198,17 +219,22 @@ final class DictationSpeechModels {
                 incremental = nil
                 do {
                     try await session.append(unread)
+                    try checkStreaming(generation)
                     if await session.acceptedSampleCount >= Self.minimumSamples {
                         let text = try await session.finish().text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        try checkStreaming(generation)
                         if !text.isEmpty { return text }
                     }
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
+                    try checkStreaming(generation)
                     logger.notice("Live session couldn't finish; transcribing the recording: \(error.localizedDescription, privacy: .public)")
                 }
             }
-            return try await transcribe(all)
+            let text = try await transcribe(all)
+            try checkStreaming(generation)
+            return text
         case nil:
             throw ModelError.notLoaded
         }
@@ -216,7 +242,13 @@ final class DictationSpeechModels {
 
     /// A cancelled recording: nothing of it is kept.
     func discardStreaming() {
+        streamingGeneration = UUID()
         incremental = nil
+    }
+
+    private func checkStreaming(_ generation: UUID) throws {
+        try Task.checkCancellation()
+        guard generation == streamingGeneration else { throw CancellationError() }
     }
 
     func transcribe(_ samples: [Float]) async throws -> String {

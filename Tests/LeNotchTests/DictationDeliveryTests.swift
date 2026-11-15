@@ -92,4 +92,33 @@ final class DictationDeliveryTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertEqual(pasteboard.string(forType: .string), "dictated")
     }
+
+    func testCancellingWhileModifiersSettleDoesNotPasteAndRestoresTheClipboard() async {
+        pasteboard.clearContents()
+        pasteboard.setString("previous copy", forType: .string)
+        var presses = 0
+        var delivery: Task<DictationTextInserter.Result, Never>?
+        var env = environment(pressed: { _ in presses += 1 })
+        env.settle = { delivery?.cancel() }
+        let board = pasteboard!
+        delivery = Task { await DictationTextInserter.deliver("discard me", pasteboard: board, environment: env) }
+        let result = await delivery!.value
+        XCTAssertEqual(result, .cancelled)
+        XCTAssertEqual(presses, 0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "previous copy")
+    }
+
+    func testCopyingWhileModifiersSettleNeverPastesTheNewClipboard() async {
+        var presses = 0
+        let board = pasteboard!
+        var env = environment(pressed: { _ in presses += 1 })
+        env.settle = {
+            board.clearContents()
+            board.setString("a new copy", forType: .string)
+        }
+        let result = await DictationTextInserter.deliver("dictation", pasteboard: board, environment: env)
+        XCTAssertEqual(result, .cancelled)
+        XCTAssertEqual(presses, 0)
+        XCTAssertEqual(board.string(forType: .string), "a new copy")
+    }
 }

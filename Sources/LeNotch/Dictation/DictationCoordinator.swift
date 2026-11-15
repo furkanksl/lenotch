@@ -113,6 +113,8 @@ final class DictationCoordinator {
     private var model: DictationModel = .fluidSpeechPro
     private var recordingTimer: Timer?
     private var streamTask: Task<Void, Never>?
+    /// Core ML may finish a suspended inference after cancellation. Wait before resetting the reused models.
+    private var cancelledWork: Task<Void, Never>?
     private var currentTask: Task<Void, Never>?
     private var session = 0
     private var startedAt = Date()
@@ -223,8 +225,14 @@ final class DictationCoordinator {
         session += 1
         recordingTimer?.invalidate()
         recordingTimer = nil
+        let previous = cancelledWork, pendingStream = streamTask, pendingRun = currentTask
         streamTask?.cancel()
         currentTask?.cancel()
+        cancelledWork = Task {
+            await previous?.value
+            await pendingStream?.value
+            await pendingRun?.value
+        }
         audio.cancel()
         speech.discardStreaming()
         streamTask = nil
@@ -255,6 +263,10 @@ final class DictationCoordinator {
     }
 
     private func start(id: Int) async {
+        guard id == session, !Task.isCancelled else { return }
+        await cancelledWork?.value
+        guard id == session, !Task.isCancelled else { return }
+        cancelledWork = nil
         model = selectedModel
         phase = .preparing
         downloadProgress = nil
@@ -374,6 +386,9 @@ final class DictationCoordinator {
                 liveText = ""
                 running = false
                 switch result {
+                case .cancelled:
+                    cancel()
+                    return
                 case .pasted:
                     // A beat of the check as the text lands, then the ears go back into the notch.
                     statusMessage = "Pasted"

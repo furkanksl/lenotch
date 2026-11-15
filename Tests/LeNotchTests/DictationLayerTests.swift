@@ -302,7 +302,8 @@ final class DictationLayerTests: XCTestCase {
 
     // Points. The island spans 216…544 (the ears 60 pt past the 104 pt half notch); the notch is 276…484. The mic sits
     // where the music's cover does (227…249), the bars where the music's bars do (515…533).
-    private let mic = 225...251, bars = 513...535, row = 2...35, overNotch = 290...470
+    // Stop before the rounded ear's bottom corner, where the light wallpaper is visible.
+    private let mic = 225...251, bars = 514...533, row = 2...35, overNotch = 290...470
     private let white: (Int, Int, Int) -> Bool = { r, g, b in r > 200 && g > 200 && b > 200 }
     private let red: (Int, Int, Int) -> Bool = { r, g, b in r > 200 && g < 120 && b < 120 }
 
