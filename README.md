@@ -4,7 +4,8 @@ A native macOS notch app. Source: [LeNotch](https://github.com/furkanksl/lenotch
 
 ## Run locally
 
-Requires macOS 15 or later and Xcode with Swift 6.2 or later (plus the Xcode Metal Toolchain component).
+Requires macOS 15 or later and full Xcode 26 or later with Swift 6.2 or later (plus the Xcode Metal Toolchain component).
+The Icon Composer build step needs Xcode's asset compiler; Command Line Tools alone aren't sufficient.
 
 From the project directory:
 
@@ -15,6 +16,10 @@ open dist/LeNotch.app
 ```
 
 The first build downloads the Sparkle dependency. The app bundle is `dist/LeNotch.app`, its executable is `LeNotch`, and its bundle identifier is `com.lenotch.app`. Existing settings and helper paths keep their lowercase `lenotch` names.
+
+The app icon is the root `lenotch.icon` document. Packaging compiles it directly with Apple's `actool`, preserving its
+light, dark and tinted appearances in `Assets.car` and generating a full-size `.icns` fallback for older macOS versions.
+Edit that document in Icon Composer rather than exporting a flat PNG. The dev watcher rebuilds when its contents change.
 
 There is no Dock or menu bar icon. Right-click the notch to open Setup or quit. Grant the permissions you want LeNotch to use in Setup.
 

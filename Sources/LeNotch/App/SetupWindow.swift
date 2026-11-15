@@ -184,6 +184,7 @@ private struct SetupSidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
+                SetupAppIcon()
                 Text("LeNotch").font(.system(size: 18, weight: .heavy)).tracking(-0.45)
                     .foregroundStyle(SetupTheme.ink(1, 1))
             }
@@ -302,6 +303,21 @@ private struct SetupPressScale: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.scaleEffect(configuration.isPressed ? 0.95 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+/// Ask macOS to render the bundled Icon Composer icon rather than copying its artwork or drawing a second logo.
+/// Keep its original colors, shape and native icon representation; the header already supplies the accessible name.
+struct SetupAppIcon: View {
+    var bundle: Bundle = .main
+
+    var body: some View {
+        Image(nsImage: NSWorkspace.shared.icon(forFile: bundle.bundlePath))
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: 40, height: 40)
+            .accessibilityHidden(true)
     }
 }
 

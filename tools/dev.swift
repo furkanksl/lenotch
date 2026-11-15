@@ -120,7 +120,7 @@ final class DevRunner {
 
     private func inputSnapshot() -> [String: Fingerprint] {
         var result: [String: Fingerprint] = [:]
-        for directory in ["Sources", "Resources"] {
+        for directory in ["Sources", "Resources", "lenotch.icon"] {
             guard let entries = files.enumerator(at: root.appendingPathComponent(directory),
                                                 includingPropertiesForKeys: nil,
                                                 options: [.skipsHiddenFiles]) else { continue }
@@ -133,7 +133,7 @@ final class DevRunner {
                 result[relative] = Fingerprint(url)
             }
         }
-        for path in ["Package.swift", "Package.resolved", "build_app.sh", "tools/build_adapter.sh"] {
+        for path in ["Package.swift", "Package.resolved", "build_app.sh", "tools/build_adapter.sh", "tools/build_icon.sh"] {
             result[path] = Fingerprint(root.appendingPathComponent(path))
         }
         return result

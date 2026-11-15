@@ -20,6 +20,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/LeNotch"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+zsh tools/build_icon.sh "$APP/Contents/Resources" "$APP/Contents/Info.plist"
 # Public release builds move themselves into Applications on first launch (ApplicationInstaller); your own don't.
 [[ -n "${LN_ADHOC:-}" ]] && /usr/libexec/PlistBuddy -c "Add :LNMovesToApplications bool true" "$APP/Contents/Info.plist"
 # LiquidRenderer compiles this at launch; MLX's shaders require Xcode's Metal Toolchain at build time.
