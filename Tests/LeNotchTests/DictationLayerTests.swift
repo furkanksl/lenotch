@@ -14,6 +14,16 @@ final class DictationLayerTests: XCTestCase {
 
     // MARK: What the notch shows
 
+    func testHiddenCleanupIgnoresOldOptInsWithoutDeletingThePreference() throws {
+        let name = "lenotch.test.cleanup.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        XCTAssertFalse(DictationCleanup.isEnabled(in: defaults))
+        defaults.set(true, forKey: "lenotch.dictation.cleanup")
+        XCTAssertFalse(DictationCleanup.isEnabled(in: defaults), "Hidden cleanup must not run after an old opt-in")
+        XCTAssertTrue(defaults.bool(forKey: "lenotch.dictation.cleanup"), "Keep the preference for a future model")
+    }
+
     func testOnlyARunShowsInTheNotch() {
         func shown(_ phase: Phase, running: Bool = true, _ notice: Coordinator.Notice? = nil) -> Indicator? {
             Coordinator.indicator(phase: phase, running: running, notice: notice)

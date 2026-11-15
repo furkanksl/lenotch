@@ -188,7 +188,7 @@ final class SetupTests: XCTestCase {
         switch page {
         case .permissions: (["microphone", "accessibility"], ["everyday", "calendar", "bluetooth"])
         case .appearance: (["lock screen artwork", "album colors"], ["original wallpaper"])
-        case .dictation: (["anywhere", "speech model", "fluid speech pro"], ["nemotron", "cleanup"])
+        case .dictation: (["anywhere", "speech model", "fluid speech pro"], ["nemotron", "microphone", "accessibility"])
         case .notifications: (["notifications in the notch"], ["full disk access", "notification settings"])
         case .agents: (["chatgpt"], ["coding agents", "agent sessions"])
         case .launcher: (["notch preview", "configure"], ["open with"])
@@ -228,6 +228,11 @@ final class SetupTests: XCTestCase {
                     let words = " " + normalized(rendered.transcript) + " "
                     for removed in ["sports", "focus status", "done"] {
                         XCTAssertFalse(words.contains(" \(removed) "), "\(removed) must stay out of Setup in \(name)")
+                    }
+                    if page == .dictation {
+                        for hidden in ["cleanup", "clean up dictated text", "qwen"] {
+                            XCTAssertFalse(words.contains(hidden), "\(hidden) must stay hidden in \(name)")
+                        }
                     }
 
                     // KLOI's surfaces: the canvas around the sidebar, the white (or #171716) card for the page.

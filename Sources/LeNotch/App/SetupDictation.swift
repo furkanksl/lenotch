@@ -49,28 +49,30 @@ struct SetupDictationPage: View {
                 }
             }
 
-            SetupGroup("Cleanup") {
-                SetupToggleRow(icon: .magicWand, title: "Clean up dictated text",
-                               detail: "A separate on-device Qwen 0.8B model fixes punctuation and wording.",
-                               isOn: $cleanupEnabled)
-                SetupRow(icon: .download, active: dictation.cleanupModelReady, title: "Cleanup model",
-                         detail: "About 650 MB. Turning cleanup on doesn’t download it.",
-                         badge: dictation.cleanupModelReady ? SetupBadge(text: "Ready", icon: .tick) : nil) {
-                    if !dictation.cleanupModelReady {
-                        Button(cleanupIsPreparing ? (dictation.downloadProgress == nil ? "Loading…" : "Downloading…")
-                               : dictation.cleanupModelInstalled ? "Load" : "Download") {
-                            Task { await dictation.prepareCleanupModel() }
+            if DictationCleanup.isAvailable {
+                SetupGroup("Cleanup") {
+                    SetupToggleRow(icon: .magicWand, title: "Clean up dictated text",
+                                   detail: "A separate on-device Qwen 0.8B model fixes punctuation and wording.",
+                                   isOn: $cleanupEnabled)
+                    SetupRow(icon: .download, active: dictation.cleanupModelReady, title: "Cleanup model",
+                             detail: "About 650 MB. Turning cleanup on doesn’t download it.",
+                             badge: dictation.cleanupModelReady ? SetupBadge(text: "Ready", icon: .tick) : nil) {
+                        if !dictation.cleanupModelReady {
+                            Button(cleanupIsPreparing ? (dictation.downloadProgress == nil ? "Loading…" : "Downloading…")
+                                   : dictation.cleanupModelInstalled ? "Load" : "Download") {
+                                Task { await dictation.prepareCleanupModel() }
+                            }
+                            .buttonStyle(SetupButtonStyle(kind: .secondary))
+                            .disabled(dictation.phase == .preparing)
                         }
-                        .buttonStyle(SetupButtonStyle(kind: .secondary))
-                        .disabled(dictation.phase == .preparing)
+                    } below: {
+                        if dictation.preparingCleanup && dictation.phase == .failed {
+                            SetupStatusLine(kind: .failure, text: dictation.statusMessage)
+                        }
                     }
-                } below: {
-                    if dictation.preparingCleanup && dictation.phase == .failed {
-                        SetupStatusLine(kind: .failure, text: dictation.statusMessage)
+                    if cleanupIsPreparing {
+                        SetupProgressCard(status: dictation.statusMessage, progress: dictation.downloadProgress)
                     }
-                }
-                if cleanupIsPreparing {
-                    SetupProgressCard(status: dictation.statusMessage, progress: dictation.downloadProgress)
                 }
             }
 
@@ -81,7 +83,7 @@ struct SetupDictationPage: View {
                 }
             }
 
-            SetupNote(icon: .lock, text: "Speech recognition and cleanup run on your Mac. No analytics or audio uploads are added by these settings.")
+            SetupNote(icon: .lock, text: "Speech recognition runs on your Mac. No analytics or audio uploads are added by these settings.")
         }
     }
 }

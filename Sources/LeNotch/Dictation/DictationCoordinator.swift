@@ -364,7 +364,7 @@ final class DictationCoordinator {
                 var text = try await speech.finishStreaming(unread: recording.unread, all: recording.all)
                 guard activeSession == session else { return }
                 logger.info("Recognized \(text.count, privacy: .public) characters")
-                if UserDefaults.standard.bool(forKey: "lenotch.dictation.cleanup"), cleanup.isInstalled() {
+                if DictationCleanup.isEnabled(), cleanup.isInstalled() {
                     phase = .cleaning
                     statusMessage = "Polishing transcript on this Mac…"
                     do {

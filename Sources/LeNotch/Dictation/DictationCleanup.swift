@@ -9,6 +9,15 @@ import Tokenizers
 /// Optional, local-only transcript polishing. The raw transcription is always the fallback.
 @MainActor
 final class DictationCleanup {
+    // Temporarily hidden: Qwen 0.8B cleanup quality isn't reliable enough. Keep the controls, model and saved
+    // preference for a future model replacement; re-enable this flag after validating its output quality.
+    static let isAvailable = false
+
+    /// Old opt-ins must not silently polish text while the cleanup controls are hidden. Keep the saved value intact.
+    static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
+        isAvailable && defaults.bool(forKey: "lenotch.dictation.cleanup")
+    }
+
     private static let repository = "mlx-community/Qwen3.5-0.8B-4bit"
     private static let revision = "da28692b5f139cb0ec58a356b437486b7dac7462"
     private var model: ModelContainer?
