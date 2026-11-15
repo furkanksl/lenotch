@@ -182,6 +182,8 @@ struct NotchContentView: View {
             }
             .mask(alignment: .topLeading) { ClipMask(frame: frame) }
 
+            DictationStatusLayer(frame: frame, reduceMotion: model.reduceMotion || model.stills)
+
             // The balls live outside the clip and each rides its own spring.
             ForEach(0..<3, id: \.self) { place in
                 BubbleLayer(frame: frame, director: director, party: g.balls[place], place: place)

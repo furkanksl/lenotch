@@ -8,11 +8,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 CONFIG=${CONFIG:-release}
 
-# Release builds are universal (Apple silicon + Intel); debug builds only this Mac's architecture, for speed.
+# Release builds are universal (Apple silicon + Intel); dictation models run only on Apple silicon.
 ARCH_FLAGS=()
 [[ $CONFIG == release ]] && ARCH_FLAGS=(--arch arm64 --arch x86_64)
 swift build -c "$CONFIG" "${ARCH_FLAGS[@]}"
-BIN=$(swift build -c "$CONFIG" "${ARCH_FLAGS[@]}" --show-bin-path)/LeNotch
+BIN_DIR=$(swift build -c "$CONFIG" "${ARCH_FLAGS[@]}" --show-bin-path)
+BIN=$BIN_DIR/LeNotch
 
 APP="${APP_OUTPUT_DIR:-dist}/LeNotch.app"
 rm -rf "$APP"
@@ -21,9 +22,13 @@ cp "$BIN" "$APP/Contents/MacOS/LeNotch"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 # Public release builds move themselves into Applications on first launch (ApplicationInstaller); your own don't.
 [[ -n "${LN_ADHOC:-}" ]] && /usr/libexec/PlistBuddy -c "Add :LNMovesToApplications bool true" "$APP/Contents/Info.plist"
-# Compiled at launch by LiquidRenderer (no Metal Toolchain needed to build).
+# LiquidRenderer compiles this at launch; MLX's shaders require Xcode's Metal Toolchain at build time.
 cp Sources/LeNotch/Render/LiquidShape.metal "$APP/Contents/Resources/"
 cp Resources/Hugeicons-LICENSE.txt "$APP/Contents/Resources/"
+# SwiftPM dependency resources, including MLX's compiled Metal shaders and Hub tokenizer files.
+for bundle in "$BIN_DIR"/*.bundle(N); do
+  ditto "$bundle" "$APP/Contents/Resources/${bundle:t}"
+done
 # The AirPods buds for the AirPods activity: the 3D model (AirPods 4 by Falah3D, CC BY 4.0) and the studio
 # light (Poly Haven, CC0) for BudsStage, and the 2D cutout that stands in until the model has loaded.
 cp Resources/airpods-4.usdz Resources/studio.hdr Resources/airpods-buds.png "$APP/Contents/Resources/"
@@ -57,6 +62,9 @@ sign_frameworks() {
   codesign --force "$@" "$S/Autoupdate"
   codesign --force "$@" "$S/Updater.app"
   codesign --force "$@" "$APP"/Contents/Frameworks/*
+  for bundle in "$APP"/Contents/Resources/*.bundle(N); do
+    codesign --force "$@" "$bundle"
+  done
 }
 DEV_ID=$(security find-identity -p codesigning -v 2>/dev/null | sed -nE 's/.*"(Apple Development: [^"]+)".*/\1/p' | head -1)
 if [[ -n "${LN_ADHOC:-}" ]]; then

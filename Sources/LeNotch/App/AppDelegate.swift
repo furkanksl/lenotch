@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launcherShortcutObserver: NSObjectProtocol?
     private let notificationReplies = NotificationReplyService()
     private let agentSocket = AgentSocket()
+    private var dictationKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -43,6 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Quick ask (phase 3): ⌥Space (the key tap, `MediaKeyTap.onAskKey`), and ⌃⌥⌘A as a backup that needs no permission.
             askKey = HotKey(keyCode: kVK_ANSI_A, modifiers: controlKey | optionKey | cmdKey) { d.toggleAsk() }
             configureLauncherShortcut()
+            dictationKey = HotKey(keyCode: kVK_ANSI_D, modifiers: optionKey) {
+                DictationCoordinator.shared.toggle()
+            }
+            DictationCoordinator.shared.shortcutUnavailable = dictationKey == nil
             launcherShortcutObserver = NotificationCenter.default.addObserver(forName: .launcherShortcutChanged, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.configureLauncherShortcut() }
             }
@@ -100,6 +105,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(withTitle: "Timer", action: nil, keyEquivalent: "").submenu = timer
         menu.addItem(withTitle: "Prompter…", action: #selector(showPrompter), keyEquivalent: "").target = self
+        let dictation = menu.addItem(withTitle: DictationCoordinator.shared.phase == .recording ? "Finish Dictation" : "Start Dictation",
+                                     action: #selector(toggleDictation), keyEquivalent: "")
+        dictation.target = self
+        dictation.subtitle = "⌥D"
+        if DictationCoordinator.shared.phase == .recording {
+            menu.addItem(withTitle: "Cancel Dictation", action: #selector(cancelDictation), keyEquivalent: "").target = self
+        }
+        if DictationCoordinator.shared.lastTranscript != nil {
+            menu.addItem(withTitle: "Copy Last Dictation", action: #selector(copyLastDictation), keyEquivalent: "").target = self
+        }
         // Which calendars show (the event, its ball and your day), by account; only once Calendar is allowed.
         if let watcher = MeetingWatcher.shared {
             let choices = watcher.calendarChoices()
@@ -186,6 +201,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showSetup() { setup.show() }
 
     @objc private func showPrompter() { surface?.director.editPrompter() }
+
+    @objc private func toggleDictation() { DictationCoordinator.shared.toggle() }
+    @objc private func cancelDictation() { DictationCoordinator.shared.cancel() }
+    @objc private func copyLastDictation() { DictationCoordinator.shared.copyLastTranscript() }
 
     @objc private func uninstall() { Uninstaller.confirmAndRun() }
 

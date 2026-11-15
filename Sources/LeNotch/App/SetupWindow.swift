@@ -2,13 +2,14 @@ import AppKit
 import SwiftUI
 
 enum SetupPage: String, CaseIterable, Identifiable {
-    case permissions, appearance, integrations
+    case permissions, appearance, dictation, integrations
 
     var id: Self { self }
     var title: String {
         switch self {
         case .permissions: "Permissions"
         case .appearance: "Appearance"
+        case .dictation: "Dictation"
         case .integrations: "Integrations"
         }
     }
@@ -16,6 +17,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         switch self {
         case .permissions: "checkmark.shield"
         case .appearance: "paintpalette"
+        case .dictation: "mic"
         case .integrations: "powerplug"
         }
     }
@@ -23,6 +25,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         switch self {
         case .permissions: "Give LeNotch access to the features you use. Everything here is optional."
         case .appearance: "Choose how album artwork and colors appear on your Mac."
+        case .dictation: "Choose an on-device speech model and optional transcript cleanup."
         case .integrations: "Notifications and coding agents, connected to your notch."
         }
     }
@@ -95,6 +98,8 @@ struct SetupView: View {
                             switch page {
                             case .permissions: SetupPermissionsPage()
                             case .appearance: SetupAppearancePage()
+                            case .dictation:
+                                SetupDictationPage { page = .permissions }
                             case .integrations:
                                 SetupIntegrationsPage {
                                     reviewAccess = true

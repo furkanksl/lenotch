@@ -1,12 +1,18 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "LeNotch",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "LeNotch", targets: ["Lenotch"])],
-    // Sparkle: updates for copies already installed (1.1). Its framework is copied into the app by build_app.sh.
-    dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0")],
+    // Sparkle is copied into the app by build_app.sh. Models are downloaded only on request.
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+        .package(url: "https://github.com/altic-dev/FluidAudio.git", revision: "386f7195670b77f2954c7ee143ec63fcb50b6c3b"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.32.3", traits: []),
+        .package(url: "https://github.com/huggingface/swift-huggingface", from: "0.9.0"),
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.0"),
+    ],
     targets: [
         // The island's state model: who holds the ears, the bubble and the card, from the
         // activities and where you are on the Mac. Pure (no AppKit), so it can be unit-tested
@@ -25,7 +31,16 @@ let package = Package(
         ),
         .executableTarget(
             name: "Lenotch",
-            dependencies: ["IslandCore", "NowPlaying", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: [
+                "IslandCore", "NowPlaying", .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ],
             path: "Sources/LeNotch",
             // The shader is compiled at runtime from source (see LiquidRenderer),
             // so SwiftPM must not try to build it.

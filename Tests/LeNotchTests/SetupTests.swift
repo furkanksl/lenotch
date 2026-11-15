@@ -7,10 +7,10 @@ import XCTest
 @MainActor
 final class SetupTests: XCTestCase {
     func testSetupPagesKeepTheirNamesAndStableIdentity() {
-        XCTAssertEqual(SetupPage.allCases, [.permissions, .appearance, .integrations])
-        XCTAssertEqual(SetupPage.allCases.map(\.title), ["Permissions", "Appearance", "Integrations"])
+        XCTAssertEqual(SetupPage.allCases, [.permissions, .appearance, .dictation, .integrations])
+        XCTAssertEqual(SetupPage.allCases.map(\.title), ["Permissions", "Appearance", "Dictation", "Integrations"])
         XCTAssertEqual(SetupPage.allCases.map(\.id), SetupPage.allCases)
-        XCTAssertEqual(Set(SetupPage.allCases.map(\.symbol)).count, 3)
+        XCTAssertEqual(Set(SetupPage.allCases.map(\.symbol)).count, 4)
         for page in SetupPage.allCases {
             XCTAssertFalse(page.symbol.isEmpty, page.rawValue)
             XCTAssertFalse(page.subtitle.isEmpty, page.rawValue)
@@ -36,6 +36,27 @@ final class SetupTests: XCTestCase {
                              SetupWindowController.minimumContentSize.width)
         XCTAssertGreaterThan(SetupWindowController.initialContentSize.height,
                              SetupWindowController.minimumContentSize.height)
+    }
+
+    func testDictationDownloadPercentageIsVisibleInTheModelRow() async throws {
+        for scheme in [ColorScheme.light, .dark] {
+            let indicator = DictationDownloadIndicator(
+                progress: 0.47, statusMessage: "Downloading Nemotron 3.5…"
+            )
+            .padding(18)
+            .frame(width: 548)
+            .background(SetupTheme.canvas)
+            .environment(\.colorScheme, scheme)
+            let height = NSHostingView(rootView: indicator).fittingSize.height
+            let (window, host) = makeWindow(indicator,
+                                            size: NSSize(width: 548, height: height), scheme: scheme)
+            defer { window.close() }
+            let rendered = try await render(host, name: "dictation-download-47-\(scheme == .dark ? "dark" : "light")")
+            let text = normalized(rendered.transcript)
+            // OCR normalization strips punctuation such as %, but still verifies the visible digits.
+            XCTAssertTrue(text.contains("47"), "The download percentage must be visible beside its model. Read: \(text)")
+            XCTAssertTrue(text.contains("nemotron"), "The model name must be visible with progress. Read: \(text)")
+        }
     }
 
     func testPermissionFiltersDistinguishAllowedFromMissingAndPendingAccess() {
@@ -78,15 +99,15 @@ final class SetupTests: XCTestCase {
     }
 
     func testGroupedPermissionsScrollAtTheirReadableNaturalHeight() async throws {
-        // Layout fixture: both optional players are present and all eight rows are allowed.
+        // Layout fixture: both optional players are present and all nine rows are allowed.
         // It must scroll, not squeeze every permission above the footer by reducing row heights.
         for width in [696.0, 760.0] {
             for scheme in [ColorScheme.light, .dark] {
                 let content = permissionGroups.frame(width: width)
                     .fixedSize(horizontal: false, vertical: true)
                 let naturalHeight = NSHostingView(rootView: content.environment(\.colorScheme, scheme)).fittingSize.height
-                XCTAssertGreaterThanOrEqual(naturalHeight, 8 * 64)
-                XCTAssertLessThanOrEqual(naturalHeight, 776)
+                XCTAssertGreaterThanOrEqual(naturalHeight, 9 * 64)
+                XCTAssertLessThanOrEqual(naturalHeight, 940)
                 let (fixtureWindow, fixtureHost) = makeWindow(content,
                     size: NSSize(width: width, height: naturalHeight), scheme: scheme)
                 defer { fixtureWindow.close() }
@@ -151,7 +172,7 @@ final class SetupTests: XCTestCase {
     }
 
     func testRemainingPagesRenderWithoutSportsNavigationInBothSizesAndThemes() async throws {
-        for page in [SetupPage.permissions, .appearance, .integrations] {
+        for page in SetupPage.allCases {
             for size in [SetupWindowController.minimumContentSize, SetupWindowController.initialContentSize] {
                 for scheme in [ColorScheme.light, .dark] {
                     let view = SetupView(page: page, done: {})
@@ -176,7 +197,7 @@ final class SetupTests: XCTestCase {
                     switch page {
                     case .permissions:
                         XCTAssertFalse(content.contains("focus status"), name)
-                        for title in ["Everyday essentials", "Accessibility", "Calendar"] {
+                        for title in ["Everyday essentials", "Calendar", "Bluetooth"] {
                             let row = try XCTUnwrap(text.first { normalized($0.value).contains(normalized(title)) },
                                                    "Priority permission \(title) is missing in \(name). Read: \(content)")
                             XCTAssertLessThan(row.frame.maxY, header.frame.minY, name)
@@ -199,6 +220,9 @@ final class SetupTests: XCTestCase {
                     case .appearance:
                         XCTAssertTrue(content.contains("lock screen"), "Lock-screen preference is clipped in \(name). Read: \(content)")
                         XCTAssertTrue(content.contains("desktop"), "Desktop preference is clipped in \(name). Read: \(content)")
+                    case .dictation:
+                        XCTAssertTrue(content.contains("fluid speech pro"), "The default speech model is missing in \(name). Read: \(content)")
+                        XCTAssertTrue(content.contains("nemotron"), "The streaming speech model is missing in \(name). Read: \(content)")
                     case .integrations:
                         XCTAssertTrue(content.contains("notifications"), "Notifications are clipped in \(name). Read: \(content)")
                         XCTAssertTrue(content.contains("agent sessions"), "Agent sessions are clipped in \(name). Read: \(content)")
@@ -225,9 +249,12 @@ final class SetupTests: XCTestCase {
     private var permissionGroups: some View {
         VStack(alignment: .leading, spacing: 24) {
             SetupSection(title: "Everyday essentials") {
-                permission("accessibility", "Accessibility", "Call controls and volume and brightness HUDs.")
                 permission("calendar", "Calendar", "Upcoming meetings and your daily agenda.")
                 permission("headphones", "Bluetooth", "AirPods connections and battery levels.")
+            }
+            SetupSection(title: "Dictation") {
+                permission("mic", "Microphone", "Record speech while dictation is active.")
+                permission("accessibility", "Accessibility", "Insert text in your focused app.")
             }
             SetupSection(title: "Media & capture") {
                 permission("music.note", "Music automation", "Fallback playback controls for Music.")
@@ -248,10 +275,10 @@ final class SetupTests: XCTestCase {
     private func assertWindowChrome(_ rendered: RenderedView, page: SetupPage, size: NSSize, name: String,
                                     file: StaticString = #filePath, line: UInt = #line) throws {
         for category in SetupPage.allCases {
-            let title = normalized(category.title).split(separator: " ")
+            let title = normalized(category.title)
             let label = try XCTUnwrap(rendered.text.first {
-                // SF Symbols may become a prefix, but each complete title must be in the top-right navigation.
-                normalized($0.value).split(separator: " ").suffix(title.count).elementsEqual(title)
+                // Vision can merge adjacent tab labels in the compact four-tab navigation.
+                normalized($0.value).contains(title)
                     && $0.frame.minY > size.height - 72 && $0.frame.minX > size.width * 0.35
             }, "Missing top navigation item \(category.title) in \(name). Read: \(rendered.transcript)",
                                      file: file, line: line)

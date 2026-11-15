@@ -4,7 +4,7 @@ A native macOS notch app. Source: [LeNotch](https://github.com/furkanksl/lenotch
 
 ## Run locally
 
-Requires macOS 15 or later and Xcode 16 or later with Swift 6.
+Requires macOS 15 or later and Xcode with Swift 6.2 or later (plus the Xcode Metal Toolchain component).
 
 From the project directory:
 
@@ -19,6 +19,26 @@ The first build downloads the Sparkle dependency. The app bundle is `dist/LeNotc
 There is no Dock or menu bar icon. Right-click the notch to open Setup or quit. Grant the permissions you want LeNotch to use in Setup.
 
 After code changes, quit the app, rebuild, and launch it again. To build a universal release for Apple silicon and Intel, run `./build_app.sh` without `CONFIG=debug`.
+
+### Local dictation (Apple silicon)
+
+In **Setup → Dictation**, select **Fluid Speech Pro** (final transcription after recording) or
+**Nemotron 3.5 Streaming 320 ms** (live partial transcript). Download the chosen model explicitly
+before first use (roughly 650–700 MB). Grant **Microphone** and **Accessibility** under
+**Setup → Permissions**. Press **⌥D** to start, then press it again to finish; the result is inserted
+into the app that remained focused, or copied to the clipboard if insertion is unavailable.
+Recording is limited to 90 seconds and held only in memory. Fn-only push-to-talk is not implemented.
+Use **Cancel Dictation** from the notch menu to discard an active recording.
+
+Optional on-device cleanup uses **Qwen3.5-0.8B 4-bit** (an additional ~650 MB download).
+Enable it and download it separately in Dictation settings. Cleanup defaults to off and falls back
+to the raw transcript on failure. After models are downloaded, dictation and cleanup run locally;
+the app does not upload recordings, transcripts, or analytics. Model downloads use Hugging Face.
+The model files are downloaded by the user, not bundled with the app. Fluid Speech Pro requires
+CC BY 4.0 attribution; check each model's terms before redistributing its weights. See the model terms:
+[Fluid Speech Pro](https://huggingface.co/FluidVoice-Labs/fluid-speech-pro-coreml),
+[Nemotron 3.5](https://huggingface.co/BarathwajAnandan/nemotron-3.5-asr-streaming320-int8-CoreML),
+and [Qwen3.5](https://huggingface.co/mlx-community/Qwen3.5-0.8B-4bit).
 
 ## Development mode
 
@@ -41,7 +61,7 @@ swift tools/dev.swift --once
 
 Press **Ctrl-C** to stop the watcher and any build it started. The last launched app stays open. Do not run a separate build or `swift test` while the watcher is running, since both use this checkout's `.build/` directory. Ad-hoc signing can require granting macOS permissions again after a rebuild; the existing `LN_SIGN_IDENTITY` build option can use a stable signing identity.
 
-For Setup-window work, use `swift tools/dev.swift --setup` to reopen Setup after each rebuild. Setup has separate Permissions, Appearance, and Integrations pages and follows your Mac’s light or dark appearance.
+For Setup-window work, use `swift tools/dev.swift --setup` to reopen Setup after each rebuild. Setup has separate Permissions, Appearance, Dictation, and Integrations pages and follows your Mac’s light or dark appearance.
 
 ## Video in the notch
 

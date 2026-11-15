@@ -76,14 +76,18 @@ private struct TrayGrid: View {
     let director: IslandDirector
 
     var body: some View {
-        let timer = director.trayTimerLeft
         // Five tools per row, independent of playback state.
         VStack(spacing: 10) {
             HStack(spacing: 0) {
                 // Text-only Quick Ask (⌥Space).
                 Tool(icon: .ask, label: "Ask") { director.openAsk() }
                     .help("Ask Claude or ChatGPT (⌥Space)")
-                Tool(icon: .timer, label: timer.map(clockText) ?? "Timer", tint: timer != nil ? IslandColor.orange : nil) { tray.go(.timer) }
+                Tool(icon: .dictation, label: "Dictation",
+                     tint: DictationCoordinator.shared.phase == .recording ? .red : nil) {
+                    DictationCoordinator.shared.toggle()
+                    director.dismissTrayForDictation()
+                }
+                .help("Start or finish dictation (⌥D)")
                 Tool(icon: .prompter, label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
                 Tool(icon: .today, label: "Today") { tray.go(.today) }
                 Tool(icon: .launcher, label: "Launcher") { director.showTool(.launcher) }

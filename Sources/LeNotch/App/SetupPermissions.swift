@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import AVFoundation
 import CoreBluetooth
 import CoreGraphics
 import EventKit
@@ -48,22 +49,32 @@ struct SetupPermissionsPage: View {
                 .pickerStyle(.segmented).labelsHidden().frame(width: 256)
                 .accessibilityIdentifier("setup-permission-filter")
             }
-            if hasAny([access.accessibility, access.calendar, access.bluetooth]) {
-                SetupSection(title: "Everyday essentials") {
+            if hasAny([access.microphone, access.accessibility]) {
+                SetupSection(title: "Dictation", subtitle: "Requested only when you click Allow") {
+                    if filter.includes(access.microphone) {
+                        SetupPermissionRow(
+                            symbol: "mic", title: "Microphone",
+                            detail: "Record your voice for on-device dictation.", state: access.microphone
+                        ) { allow(.microphone, current: access.microphone, settings: "Privacy_Microphone") }
+                        if filter.includes(access.accessibility) { rowDivider }
+                    }
                     if filter.includes(access.accessibility) {
                         SetupPermissionRow(
                             symbol: "accessibility", title: "Accessibility",
-                            detail: "Call controls and hardware-key HUDs.",
-                            state: access.accessibility, actionLabel: "Open Settings"
-                        ) { setupOpenPrivacy("Privacy_Accessibility") }
-                        rowDivider
+                            detail: "Insert dictated text in other apps; also enables call controls and hardware-key HUDs.",
+                            state: access.accessibility
+                        ) { allow(.accessibility, current: access.accessibility, settings: "Privacy_Accessibility") }
                     }
+                }
+            }
+            if hasAny([access.calendar, access.bluetooth]) {
+                SetupSection(title: "Everyday essentials") {
                     if filter.includes(access.calendar) {
                         SetupPermissionRow(
                             symbol: "calendar", title: "Calendar",
                             detail: "Upcoming meetings and your daily agenda.", state: access.calendar
                         ) { allow(.calendar, current: access.calendar, settings: "Privacy_Calendars") }
-                        rowDivider
+                        if filter.includes(access.bluetooth) { rowDivider }
                     }
                     if filter.includes(access.bluetooth) {
                         SetupPermissionRow(
@@ -118,7 +129,7 @@ struct SetupPermissionsPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if !hasAny([access.accessibility, access.calendar, access.bluetooth, access.disk] + mediaStates) {
+            if !hasAny([access.microphone, access.accessibility, access.calendar, access.bluetooth, access.disk] + mediaStates) {
                 VStack(spacing: 10) {
                     Image(systemName: filter == .allowed ? "lock.open" : "checkmark.circle")
                         .font(.system(size: 24, weight: .light)).foregroundStyle(.secondary)
@@ -183,7 +194,7 @@ func setupOpenPrivacy(_ anchor: String) {
 }
 
 private enum SetupPermissionRequest: Equatable {
-    case calendar, bluetooth, music, spotify, audio, screen
+    case microphone, accessibility, calendar, bluetooth, music, spotify, audio, screen
 }
 
 /// macOS names the permission Screen Recording even when the app only displays captured frames, as VideoMirror does.
@@ -212,6 +223,7 @@ struct SetupScreenCaptureAccess {
 
 @MainActor
 private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentralManagerDelegate {
+    @Published private(set) var microphone: SetupAccessState = .notAsked
     @Published private(set) var accessibility: SetupAccessState = .notAsked
     @Published private(set) var calendar: SetupAccessState = .notAsked
     @Published private(set) var bluetooth: SetupAccessState = .notAsked
@@ -232,6 +244,7 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
     private var asking: SetupPermissionRequest?
     private var audioCheckFinished = false
     private var screenAccess = SetupScreenCaptureAccess()
+    private var accessibilityRequested = false
     private var refreshGeneration: UInt64 = 0
 
     func stop() {
@@ -248,7 +261,10 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
         guard !Task.isCancelled else { return }
         refreshGeneration &+= 1
         let generation = refreshGeneration
-        accessibility = AXIsProcessTrusted() ? .allowed : .denied
+        if asking != .microphone { microphone = Self.microphoneState() }
+        if asking != .accessibility {
+            accessibility = AXIsProcessTrusted() ? .allowed : accessibilityRequested ? .denied : .notAsked
+        }
         if asking != .calendar { calendar = Self.calendarState() }
         if asking != .bluetooth { bluetooth = Self.bluetoothState() }
         if asking != .audio {
@@ -295,6 +311,12 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
         }
 
         switch permission {
+        case .microphone:
+            _ = await AVCaptureDevice.requestAccess(for: .audio)
+        case .accessibility:
+            accessibilityRequested = true
+            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
         case .calendar:
             if let watcher = MeetingWatcher.shared {
                 await withCheckedContinuation { continuation in
@@ -342,12 +364,23 @@ private final class SetupPermissionAccess: NSObject, ObservableObject, CBCentral
 
     private func setAsking(_ permission: SetupPermissionRequest) {
         switch permission {
+        case .microphone: microphone = .asking
+        case .accessibility: accessibility = .asking
         case .calendar: calendar = .asking
         case .bluetooth: bluetooth = .asking
         case .music: music = .asking
         case .spotify: spotify = .asking
         case .audio: audio = .asking
         case .screen: screen = .asking
+        }
+    }
+
+    private static func microphoneState() -> SetupAccessState {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: .allowed
+        case .notDetermined: .notAsked
+        case .denied, .restricted: .denied
+        @unknown default: .unavailable
         }
     }
 

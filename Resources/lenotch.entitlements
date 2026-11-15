@@ -6,5 +6,7 @@
 	<key>com.apple.security.automation.apple-events</key><true/>
 	<!-- Hardened runtime: the next meeting (EventKit). -->
 	<key>com.apple.security.personal-information.calendars</key><true/>
+	<!-- Hardened runtime: microphone input during explicit dictation sessions. -->
+	<key>com.apple.security.device.audio-input</key><true/>
 </dict>
 </plist>

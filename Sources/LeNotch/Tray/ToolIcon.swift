@@ -1,12 +1,12 @@
 // Hugeicons Free Stroke Rounded, @hugeicons/core-free-icons v4.4.0.
 // Copyright (c) 2026 Hugeicons. MIT License.
 // Source: https://cdn.jsdelivr.net/npm/@hugeicons/core-free-icons@4.4.0/dist/esm/
-// Each case below names its original asset. Geometry is preserved on the 24-point grid.
+// Existing icon cases name their original asset. Dictation uses a matching microphone outline.
 
 import SwiftUI
 
 enum ToolIcon: CaseIterable {
-    case ask, timer, prompter, today, launcher, clipboard, shelf, shortcuts, usage, inbox
+    case ask, dictation, timer, prompter, today, launcher, clipboard, shelf, shortcuts, usage, inbox
 }
 
 struct ToolIconView: View {
@@ -80,6 +80,25 @@ struct ToolIconShape: Shape {
             path.curve(20.0274, 5.41789, 20.4179, 5.02737, 20.9156, 4.86148)
             path.line(22, 4.5)
             path.closeSubpath()
+
+        case .dictation: // Microphone outline on the 24-point grid.
+            path.move(12, 15)
+            path.curve(13.6569, 15, 15, 13.6569, 15, 12)
+            path.line(15, 5)
+            path.curve(15, 3.3431, 13.6569, 2, 12, 2)
+            path.curve(10.3431, 2, 9, 3.3431, 9, 5)
+            path.line(9, 12)
+            path.curve(9, 13.6569, 10.3431, 15, 12, 15)
+            path.closeSubpath()
+            path.move(5, 10)
+            path.line(5, 12)
+            path.curve(5, 15.866, 8.134, 19, 12, 19)
+            path.curve(15.866, 19, 19, 15.866, 19, 12)
+            path.line(19, 10)
+            path.move(12, 19)
+            path.line(12, 22)
+            path.move(8, 22)
+            path.line(16, 22)
 
         case .timer: // Timer01Icon.js
             path.move(11.0809, 13.152)

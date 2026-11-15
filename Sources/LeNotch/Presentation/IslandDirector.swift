@@ -1448,7 +1448,7 @@ final class IslandDirector {
 
     // MARK: - Tray
 
-    /// The running timer's time left, for the tray's Timer tool (nil: no timer).
+    /// The running timer's time left (nil: no timer).
     var trayTimerLeft: Double? {
         let _ = now
         return island.activity?.id == .timer || island.background.contains { $0.id == .timer } ? samples.timerLeft : nil
@@ -1465,6 +1465,10 @@ final class IslandDirector {
         setIdleHover(false)
         send(.openTray)
         if groups.tray { onPulse?(island.mediaOn ? eventColor : "#FFFFFF") } else { tray.nextPage = .main }
+    }
+
+    func dismissTrayForDictation() {
+        if groups.tray { send(.close) }
     }
 
     /// Files dragged onto the notch: the tray opens at the Shelf. True when it can take them.

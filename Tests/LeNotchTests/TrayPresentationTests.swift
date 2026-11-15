@@ -157,7 +157,7 @@ final class TrayPresentationTests: XCTestCase {
             recognizedLabels += (labelRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         }
         let labels = recognizedLabels.joined(separator: " ").lowercased()
-        for label in ["Ask", "Timer", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "Inbox"] {
+        for label in ["Ask", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "Inbox"] {
             XCTAssertTrue(labels.contains(label.lowercased()), "Missing tools label \(label): \(labels)")
         }
         let words = Set(labels.split(whereSeparator: \.isWhitespace))

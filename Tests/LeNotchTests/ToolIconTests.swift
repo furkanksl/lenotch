@@ -7,7 +7,7 @@ import XCTest
 final class ToolIconTests: XCTestCase {
     func testEveryToolHasANonemptyVector() {
         XCTAssertEqual(ToolIcon.allCases, [
-            .ask, .timer, .prompter, .today, .launcher,
+            .ask, .dictation, .timer, .prompter, .today, .launcher,
             .clipboard, .shelf, .shortcuts, .usage, .inbox,
         ], "Every tool must have a Hugeicons vector, including newly added tools")
         for icon in ToolIcon.allCases {
@@ -81,7 +81,7 @@ final class ToolIconTests: XCTestCase {
         frame.cardTop = 80
         frame.cardRadius = card.radius
         let labels = [
-            ["Ask", "Timer", "Prompter", "Today", "Launcher"],
+            ["Ask", "Dictation", "Prompter", "Today", "Launcher"],
             ["Clipboard", "Shelf", "Shortcuts", "Usage", "Inbox"],
         ]
         let view = TrayLayer(frame: frame, director: director, card: card)
@@ -114,7 +114,7 @@ final class ToolIconTests: XCTestCase {
     }
 
     func testIconsInheritActiveToolTint() throws {
-        let renderer = ImageRenderer(content: ToolIconView(icon: .timer)
+        let renderer = ImageRenderer(content: ToolIconView(icon: .dictation)
             .foregroundStyle(Color.green).frame(width: 24, height: 24))
         let image = try XCTUnwrap(renderer.cgImage)
         let pixels = try rgba(image)
