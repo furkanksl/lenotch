@@ -34,8 +34,9 @@ struct TargetContext: Equatable, Sendable {
     var near = 0.0
     /// You're typing (sim CTX2): the ears make a little room, 6 pt narrower and dimmer, and come back when you stop.
     var typing = false
-    /// Dictation has something to say (a problem, what to do about it): its ears swell into a lip under the notch.
-    var dictationMessage = false
+    /// Dictation has words to show (yours as they're heard, or a problem's): its ears swell into a lip under the notch
+    /// this many lines tall. 0: just the ears.
+    var dictationLipLines = 0
 }
 
 /// Turns a presentation mode into target shapes, including the staged poses the
@@ -126,11 +127,13 @@ struct ShapeTargets {
             s = ears(t.hudExtent)
             s.glowIntensity = 0
         case .dictation:
-            if context.dictationMessage {
+            if context.dictationLipLines > 0 {
                 // The ears swell and grow a lip under the notch for the words, the hover preview's own shape, so the
-                // message is the notch speaking rather than a card hung under it.
+                // text is the notch's rather than a card hung under it. `dictationLip` holds two lines; one line, less.
+                let lines = min(context.dictationLipLines, DictationText.maxLines)
+                let lip = t.dictationLip - Double(DictationText.maxLines - lines) * DictationText.lineHeight
                 s = ShapeState(mainHalfWidth: notchHalfWidth + t.dictationExtent + t.peekExtra,
-                               mainHeight: notchHeight + t.dictationLip, mainRadius: t.peekRadius,
+                               mainHeight: notchHeight + lip, mainRadius: t.peekRadius,
                                kBezel: t.kBezelExpanded,
                                glowIntensity: (t.glowCompact + t.glowExpanded) / 2,
                                glowFalloff: (t.falloffCompact + t.falloffExpanded) / 2)

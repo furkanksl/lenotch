@@ -853,26 +853,44 @@ final class IslandDirector {
     /// What dictation shows in the notch (`DictationCoordinator.indicator`), nil while it isn't there. It holds the ears,
     /// as the HUD does for a moment (`Island.dictating`).
     private(set) var dictation: DictationCoordinator.Indicator?
+    /// The words heard so far, while dictation listens and works (`DictationCoordinator.liveText`).
+    private(set) var dictationTranscript = ""
 
-    /// Dictation started, moved on (listening, working, done) or ended. Only starting, ending and a message coming or
-    /// going change the island; the rest is the content's.
-    func dictationChanged(_ indicator: DictationCoordinator.Indicator?) {
-        let hadMessage = dictationMessage
+    /// Dictation started, moved on (listening, working, done), heard more, or ended. Starting and ending change the
+    /// island; new words change what the lip under the notch holds; the rest is the content's.
+    func dictationChanged(_ indicator: DictationCoordinator.Indicator?, transcript: String = "") {
+        let lipBefore = dictationLipText
         dictation = indicator
+        dictationTranscript = indicator == nil ? "" : transcript
         if island.dictating != (indicator != nil) {
             send(.dictation(indicator != nil))
-        } else if dictationMessage != hadMessage {
-            changed()
+        } else if dictationLipText != lipBefore {
+            changed()   // the lip may grow a line, or go
         }
     }
 
-    /// Snapshots draw a voice instead of the mic's real levels (`SnapshotRunner`).
-    @ObservationIgnored var sampleDictationLevels: [Float]?
+    /// The lip's text column: the dictation ears' resting width, less its margins.
+    var dictationTextWidth: Double {
+        let t = tuning()
+        return 2 * (notchHalfWidth() + t.dictationExtent + t.peekExtra) - 2 * DictationText.inset
+    }
 
-    /// Dictation has words to show: the ears grow a lip under the notch for them.
-    var dictationMessage: Bool {
-        if case .problem? = dictation { return true }
-        return false
+    /// How many lines the lip holds (0 with no lip): the shape grows to fit them.
+    var dictationLipLines: Int { dictationLipText.map { DictationText.lines($0, width: dictationTextWidth) } ?? 0 }
+
+    /// Snapshots draw a voice instead of the mic's real meter (`SnapshotRunner`).
+    @ObservationIgnored var sampleDictationMeter: DictationMeter?
+
+    /// The words under the notch: what you're saying as it's heard, or a problem's message. Your words stay off the
+    /// notch while you're presenting, like a notification's.
+    var dictationLipText: String? {
+        switch dictation {
+        case .problem(let message)?: return message
+        case .listening?, .working?:
+            guard !dictationTranscript.isEmpty, !island.context.presenting else { return nil }
+            return dictationTranscript
+        default: return nil
+        }
     }
 
     // MARK: - Activities

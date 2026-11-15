@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             DictationCoordinator.shared.shortcutUnavailable = dictationKey == nil
             // Dictation is the notch's own: it takes the ears while it listens and works.
-            DictationCoordinator.shared.onIndicatorChange = { d.dictationChanged($0) }
+            DictationCoordinator.shared.onDisplayChange = { d.dictationChanged($0.indicator, transcript: $0.transcript) }
             launcherShortcutObserver = NotificationCenter.default.addObserver(forName: .launcherShortcutChanged, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.configureLauncherShortcut() }
             }

@@ -1,6 +1,18 @@
 import AVFoundation
 import Foundation
 
+/// What the mic hears right now: its loudness, and the same four bands the music bars show (`AudioSpectrum`), so the
+/// notch's voice bars move the way its music bars do.
+struct DictationMeter: Equatable, Sendable {
+    /// Loudness, 0…1 (RMS with a gain that puts speech near the top).
+    var level: Float
+    /// One per bar, 0…1, each normalized against the voice's own loudness.
+    var bands: [Float]
+
+    static let bandCount = 4
+    static let silent = DictationMeter(level: 0, bands: [Float](repeating: 0, count: bandCount))
+}
+
 /// The input tap runs on AVAudio's realtime queue, not the main actor.
 /// Owns only audio buffers and guards the samples shared with the UI thread.
 final class DictationAudioCapture: @unchecked Sendable {
@@ -10,6 +22,9 @@ final class DictationAudioCapture: @unchecked Sendable {
     private let sourceRate: Double
     private var samples: [Float] = []
     private var currentLevel: Float = 0
+    private var currentBands = DictationMeter.silent.bands
+    /// The voice's four bands, 100 Hz to 6 kHz: where speech is. Only the tap's thread touches it.
+    private var spectrum = AudioSpectrum(sampleRate: 16_000, bars: DictationMeter.bandCount, low: 100, high: 6_000)
 
     init?(inputFormat: AVAudioFormat) {
         guard let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1),
@@ -45,6 +60,12 @@ final class DictationAudioCapture: @unchecked Sendable {
         lock.lock()
         samples.append(contentsOf: UnsafeBufferPointer(start: channel, count: count))
         currentLevel = min(1, sqrt(sum / Float(count)) * 8)
+        let latest = Array(samples.suffix(spectrum.size))
+        lock.unlock()
+        // The FFT runs outside the lock: the main thread never waits on it.
+        let bands = latest.withUnsafeBufferPointer { spectrum.process($0, dt: Float(count) / 16_000) }
+        lock.lock()
+        currentBands = bands
         lock.unlock()
     }
 
@@ -52,6 +73,12 @@ final class DictationAudioCapture: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return currentLevel
+    }
+
+    func meter() -> DictationMeter {
+        lock.lock()
+        defer { lock.unlock() }
+        return DictationMeter(level: currentLevel, bands: currentBands)
     }
 
     func take() -> [Float] {
@@ -98,7 +125,7 @@ final class DictationAudioRecorder {
     private var meter: Timer?
     private var readIndex = 0
 
-    func start(onLevel: @escaping @MainActor @Sendable (Float) -> Void) throws {
+    func start(onMeter: @escaping @MainActor @Sendable (DictationMeter) -> Void) throws {
         stopWithoutAudio()
         let engine = AVAudioEngine()
         let input = engine.inputNode
@@ -119,8 +146,8 @@ final class DictationAudioRecorder {
         self.engine = engine
         readIndex = 0
         meter = Timer.scheduledTimer(withTimeInterval: Self.meterInterval, repeats: true) { [weak capture] _ in
-            let level = capture?.level() ?? 0
-            Task { @MainActor in onLevel(level) }
+            let reading = capture?.meter() ?? .silent
+            Task { @MainActor in onMeter(reading) }
         }
     }
 
@@ -130,6 +157,15 @@ final class DictationAudioRecorder {
         stopWithoutAudio()
         guard let samples = capture?.take(), !samples.isEmpty else { throw RecordingError.noAudio }
         return samples
+    }
+
+    /// Stops the mic, then returns the whole recording and the part `readNewSamples` hasn't handed out yet. Stopping
+    /// first means nothing the tap adds afterwards can be missing from the streamed text but present in the recording.
+    func finish() throws -> (all: [Float], unread: [Float]) {
+        let capture = self.capture, read = readIndex
+        stopWithoutAudio()
+        guard let all = capture?.take(), !all.isEmpty else { throw RecordingError.noAudio }
+        return (all, read < all.count ? Array(all[read...]) : [])
     }
 
     func readNewSamples() -> [Float] {

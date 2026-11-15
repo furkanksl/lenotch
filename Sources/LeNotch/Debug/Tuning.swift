@@ -16,8 +16,8 @@ struct Tuning: Codable, Equatable, Sendable {
     var earExtent = 60.0            // how far each ear reaches past the notch (70 felt a tad big live, 11-01)
     var earRadius = 18.0            // ~half the menu bar height: pill ends
     var hudExtent = 84.0            // 96 felt a tad big live (11-01)
-    var dictationExtent = 68.0      // dictation's ears: the mic left, nine bars of your voice right
-    var dictationLip = 44.0         // a dictation message: the lip under the notch holds two lines
+    var dictationExtent = 60.0      // dictation's ears: the music ears' width (the mic where the cover is, four bars)
+    var dictationLip = 44.0         // dictation's words: the lip under the notch holds two lines
     var expandedHalfWidth = 196.0
     var expandedHeight = 172.0
     var expandedRadius = 44.0
@@ -151,6 +151,7 @@ final class TuningStore {
         if t.earExtent == 70 { t.earExtent = 60 }     // slimmer ears (11-01)
         if t.hudExtent == 96 { t.hudExtent = 84 }
         if t.peekHeight == 68 { t.peekHeight = 76 }   // the preview holds the cover now
+        if t.dictationExtent == 68 { t.dictationExtent = 60 }   // four bars now, like the music ears
         if t.idleGrow == 2 { t.idleGrow = 0.5 }       // the notch at rest keeps the hardware notch's size (11-06)
         if t.idleGrow == 0.5 && t.idleDrop == 1 && t.idleRadius == 11 { t.idleGrow = 1.5; t.idleDrop = 1.5; t.idleRadius = 14 }   // rounder (11-07)
         if t.idleGrow == 1.5 && t.idleDrop == 1.5 && t.idleRadius == 14 { t.idleGrow = 2; t.idleDrop = 2; t.idleRadius = 18 }   // the ears' corners (11-07)

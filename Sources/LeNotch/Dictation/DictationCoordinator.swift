@@ -59,6 +59,13 @@ final class DictationCoordinator {
         case problem(String)
     }
 
+    /// Everything the notch needs from dictation: what to show, and the words heard so far.
+    struct Display: Equatable {
+        var indicator: Indicator?
+        /// What the model has heard so far, while it listens and works. Empty otherwise.
+        var transcript: String
+    }
+
     private(set) var phase: Phase = .idle { didSet { stateChanged() } }
     private(set) var notice: Notice? { didSet { stateChanged() } }
     /// A dictation run: from ⌥D starting it until its text is delivered, it fails, or it's cancelled. Setup's model
@@ -68,12 +75,19 @@ final class DictationCoordinator {
     private(set) var downloadProgress: Double?
     private(set) var preparingSpeechModel: DictationModel?
     private(set) var preparingCleanup = false
-    private(set) var level: Float = 0
-    /// The voice's recent levels, oldest first, for the bars: a new one arrives every `DictationAudioRecorder.meterInterval`.
-    private(set) var levels = DictationCoordinator.silentLevels
+    /// The mic's loudness and the voice's four bands, for the bars; a new reading every `DictationAudioRecorder.meterInterval`.
+    private(set) var meter = DictationMeter.silent
+    /// What the model has heard so far in this run (both models stream).
+    private(set) var liveText = "" { didSet { stateChanged() } }
     private(set) var lastTranscript: String?
     var shortcutUnavailable = false
     var indicator: Indicator? { Self.indicator(phase: phase, running: running, notice: notice) }
+    var display: Display { Self.display(indicator: indicator, liveText: liveText) }
+
+    /// Your words go with the run while it listens and works; a note or a problem has its own.
+    nonisolated static func display(indicator: Indicator?, liveText: String) -> Display {
+        Display(indicator: indicator, transcript: indicator == .listening || indicator == .working ? liveText : "")
+    }
     /// Esc or the menu can cancel now.
     var canCancel: Bool { Self.escapeCancels(phase: phase, running: running) }
     var selectedModelInstalled: Bool { speech.isInstalled(selectedModel) }
@@ -82,15 +96,16 @@ final class DictationCoordinator {
     var cleanupModelReady: Bool { cleanup.isReady }
 
     /// Told whenever what the notch shows changes (the app sends it to `IslandDirector.dictationChanged`).
-    var onIndicatorChange: ((Indicator?) -> Void)? {
+    var onDisplayChange: ((Display) -> Void)? {
         didSet {
-            published = indicator
-            onIndicatorChange?(published)
+            published = display
+            onDisplayChange?(display)
         }
     }
 
-    nonisolated static let levelCount = 9
-    nonisolated static let silentLevels = [Float](repeating: 0, count: levelCount)
+    /// Fluid Speech Pro previews by transcribing what it has heard so far: about twice a second keeps the words close
+    /// behind your voice without running the model all the time.
+    nonisolated static let previewInterval = 0.5
 
     private let audio = DictationAudioRecorder()
     private let speech = DictationSpeechModels()
@@ -102,7 +117,8 @@ final class DictationCoordinator {
     private var session = 0
     private var startedAt = Date()
     private let logger = Logger(subsystem: "LeNotch", category: "Dictation")
-    @ObservationIgnored private var published: Indicator?
+    @ObservationIgnored private var published = Display(indicator: nil, transcript: "")
+    @ObservationIgnored private var lastStreamedAt = Date.distantPast
     /// Esc, taken from every app only while a run can be cancelled (`escapeCancels`).
     @ObservationIgnored private var escapeKey: HotKey?
 
@@ -189,7 +205,8 @@ final class DictationCoordinator {
             session += 1
             let id = session
             lastTranscript = nil
-            levels = Self.silentLevels
+            meter = .silent
+            liveText = ""
             running = true
             // Straight from the last run's note into this one's work: the notch never closes in between.
             phase = .preparing
@@ -209,6 +226,8 @@ final class DictationCoordinator {
         streamTask?.cancel()
         currentTask?.cancel()
         audio.cancel()
+        speech.discardStreaming()
+        streamTask = nil
         lastTranscript = nil
         notice = nil
         running = false
@@ -216,8 +235,8 @@ final class DictationCoordinator {
         downloadProgress = nil
         preparingSpeechModel = nil
         preparingCleanup = false
-        level = 0
-        levels = Self.silentLevels
+        meter = .silent
+        liveText = ""
         statusMessage = ""
     }
 
@@ -257,9 +276,10 @@ final class DictationCoordinator {
                 return
             }
             guard id == session else { return }
-            if model == .nemotronStreaming { try await speech.beginStreaming() }
+            try await speech.beginStreaming()
             guard id == session else { return }
-            try audio.start { [weak self] newLevel in self?.heard(newLevel) }
+            lastStreamedAt = .distantPast
+            try audio.start { [weak self] reading in self?.heard(reading) }
             startedAt = Date()
             phase = .recording
             statusMessage = "Press ⌥D again to finish"
@@ -276,21 +296,27 @@ final class DictationCoordinator {
         guard phase == .recording else { return }
         if Date().timeIntervalSince(startedAt) >= 90 {
             finish()
-        } else if model == .nemotronStreaming {
+        } else {
             pollStreaming()
         }
     }
 
+    /// Hands the model what the mic heard since last time; its text so far shows in the notch.
     private func pollStreaming() {
         guard streamTask == nil else { return }
+        // Nemotron streams on every tick; Fluid re-reads what it has heard, so it previews less often.
+        if model == .fluidSpeechPro, Date().timeIntervalSince(lastStreamedAt) < Self.previewInterval { return }
         let samples = audio.readNewSamples()
         guard !samples.isEmpty else { return }
+        lastStreamedAt = Date()
         let activeSession = session
         streamTask = Task {
             defer { if activeSession == session { streamTask = nil } }
             do {
                 let partial = try await speech.stream(samples)
-                if activeSession == session, phase == .recording, !partial.isEmpty { statusMessage = partial }
+                if activeSession == session, phase == .recording, let partial, !partial.isEmpty { liveText = partial }
+            } catch is CancellationError {
+                // Cancelled with the run.
             } catch {
                 if activeSession == session, phase == .recording {
                     audio.cancel()
@@ -305,31 +331,25 @@ final class DictationCoordinator {
     private func finish() {
         recordingTimer?.invalidate()
         recordingTimer = nil
-        let remaining = audio.readNewSamples()
-        let samples: [Float]
+        let recording: (all: [Float], unread: [Float])
         do {
-            samples = try audio.stop()
+            recording = try audio.finish()
         } catch {
             fail(error.localizedDescription)
             return
         }
-        level = 0
-        levels = Self.silentLevels
+        meter = .silent
         phase = .transcribing
         statusMessage = "Processing on this Mac…"
-        logger.info("Captured \(samples.count, privacy: .public) audio samples for \(self.model.name, privacy: .public)")
+        logger.info("Captured \(recording.all.count, privacy: .public) audio samples for \(self.model.name, privacy: .public)")
         let activeSession = session
         let pendingStream = streamTask
         currentTask = Task {
             do {
+                // The last preview first: the session takes its samples in order.
                 if let pendingStream { await pendingStream.value }
                 guard activeSession == session else { return }
-                var text: String
-                if model == .nemotronStreaming {
-                    text = try await speech.finishStreaming(remaining)
-                } else {
-                    text = try await speech.transcribe(samples)
-                }
+                var text = try await speech.finishStreaming(unread: recording.unread, all: recording.all)
                 guard activeSession == session else { return }
                 logger.info("Recognized \(text.count, privacy: .public) characters")
                 if UserDefaults.standard.bool(forKey: "lenotch.dictation.cleanup"), cleanup.isInstalled() {
@@ -351,6 +371,7 @@ final class DictationCoordinator {
                 let result = await DictationTextInserter.deliver(text)
                 guard activeSession == session else { return }
                 logger.info("Delivery: \(String(describing: result), privacy: .public)")
+                liveText = ""
                 running = false
                 switch result {
                 case .pasted:
@@ -383,8 +404,8 @@ final class DictationCoordinator {
         downloadProgress = nil
         statusMessage = message
         notice = running ? .problem(message) : nil
-        level = 0
-        levels = Self.silentLevels
+        meter = .silent
+        liveText = ""
         running = false
         phase = .failed
         hideAfterDelay(5)
@@ -401,17 +422,10 @@ final class DictationCoordinator {
         }
     }
 
-    /// A new level from the mic: the bars scroll by one.
-    private func heard(_ newLevel: Float) {
+    /// A new reading from the mic, for the bars.
+    private func heard(_ reading: DictationMeter) {
         guard phase == .recording else { return }
-        level = newLevel
-        levels = Self.shifted(levels, adding: newLevel)
-    }
-
-    /// Drops the oldest level and adds the newest, keeping `levelCount`.
-    nonisolated static func shifted(_ levels: [Float], adding level: Float) -> [Float] {
-        let clean = level.isFinite ? min(max(level, 0), 1) : 0
-        return Array((levels + [clean]).suffix(levelCount))
+        meter = reading
     }
 
     /// The notch and Esc follow the run.
@@ -424,10 +438,10 @@ final class DictationCoordinator {
             key.unregister()
             escapeKey = nil
         }
-        let now = indicator
+        let now = display
         guard now != published else { return }
         published = now
-        onIndicatorChange?(now)
+        onDisplayChange?(now)
     }
 
     /// Esc cancels a run from ⌥D until its text is delivered. Only then: everywhere else Esc stays the apps'.

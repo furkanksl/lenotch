@@ -213,12 +213,20 @@ enum SnapshotRunner {
             var list: [Scenario] = [
                 Scenario(name: "media · ears") { $0.startMusic() },
                 Scenario(name: "dictation · listening") { d in
-                    d.sampleDictationLevels = [0.08, 0.25, 0.55, 0.9, 0.7, 0.45, 0.8, 0.35, 0.6]
+                    d.sampleDictationMeter = DictationMeter(level: 0.5, bands: [0.55, 0.9, 0.6, 0.3])
                     d.dictationChanged(.listening)
+                },
+                Scenario(name: "dictation · your words as they're heard") { d in
+                    d.sampleDictationMeter = DictationMeter(level: 0.5, bands: [0.7, 0.5, 0.85, 0.4])
+                    d.dictationChanged(.listening, transcript: "Let's move the launch to Thursday so the design review")
+                },
+                Scenario(name: "dictation · a long run keeps its last two lines") { d in
+                    d.sampleDictationMeter = DictationMeter(level: 0.5, bands: [0.4, 0.8, 0.5, 0.65])
+                    d.dictationChanged(.listening, transcript: "Thanks for the notes on the draft. I went through all of them this morning and folded most of them in, and the two about the onboarding flow I want to talk through")
                 },
                 Scenario(name: "dictation · listening over a song") { d in
                     d.startMusic()
-                    d.sampleDictationLevels = [0.4, 0.6, 0.3, 0.75, 0.5, 0.2, 0.65, 0.85, 0.45]
+                    d.sampleDictationMeter = DictationMeter(level: 0.5, bands: [0.6, 0.3, 0.75, 0.5])
                     d.dictationChanged(.listening)
                 },
                 Scenario(name: "dictation · working") { d in d.dictationChanged(.working) },
@@ -477,7 +485,7 @@ enum SnapshotRunner {
             c.moreModes = Set(PresentationMode.allCases.filter { island.balls($0)[2] != nil })
             c.activityHoldsEars = island.earsHeld
             c.activityEar = island.heldEar
-            c.dictationMessage = d.dictationMessage
+            c.dictationLipLines = d.dictationLipLines
             c.idleHover = d.idleHover
             c.peekPlace = d.groups.peekPlace
             c.peekCard = c.peekPlace.flatMap { d.groups.balls[$0] }.map(Island.peekCard)

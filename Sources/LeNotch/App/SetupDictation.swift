@@ -28,8 +28,8 @@ struct SetupDictationPage: View {
             } content: {
                 SetupRow(icon: .audioWave, active: dictation.selectedModelReady, title: model.name,
                          detail: model == .nemotronStreaming
-                         ? "Streams as you speak for low-latency feedback. About 700 MB."
-                         : "Transcribes after you stop speaking. About 650 MB.",
+                         ? "Lowest latency: your words appear as you speak. About 700 MB."
+                         : "Most accurate: your words appear as you speak, refined when you stop. About 650 MB.",
                          badge: dictation.selectedModelReady ? SetupBadge(text: "Ready", icon: .tick) : nil) {
                     if !dictation.selectedModelReady {
                         Button(speechIsPreparing ? (dictation.downloadProgress == nil ? "Loading…" : "Downloading…")
