@@ -113,6 +113,8 @@ final class DictationCoordinator {
     private let speech = DictationSpeechModels()
     private let cleanup = DictationCleanup()
     private var model: DictationModel = .fluidSpeechPro
+    private var provider = DictationProvider.local
+    private var chatGPTConnection: ChatGPTDictation.Connection?
     private var recordingTimer: Timer?
     private var streamTask: Task<Void, Never>?
     /// Core ML may finish a suspended inference after cancellation. Wait before resetting the reused models.
@@ -291,13 +293,19 @@ final class DictationCoordinator {
         guard id == session, !Task.isCancelled else { return }
         cancelledWork = nil
         model = selectedModel
+        provider = DictationProvider.selected()
+        chatGPTConnection = nil
         phase = .preparing
         downloadProgress = nil
-        preparingSpeechModel = model
+        preparingSpeechModel = provider == .local ? model : nil
         preparingCleanup = false
-        statusMessage = "Loading \(model.name)…"
+        statusMessage = provider == .local ? "Loading \(model.name)…" : "Preparing ChatGPT dictation…"
         do {
-            try await speech.prepare(model, allowDownload: false)
+            if provider == .local {
+                try await speech.prepare(model, allowDownload: false)
+            } else {
+                chatGPTConnection = try await ChatGPTDictation.connection()
+            }
             guard id == session else { return }
             let access = AVCaptureDevice.authorizationStatus(for: .audio)
             let allowed: Bool
@@ -312,7 +320,7 @@ final class DictationCoordinator {
                 return
             }
             guard id == session else { return }
-            try await speech.beginStreaming()
+            if provider == .local { try await speech.beginStreaming() }
             guard id == session else { return }
             lastStreamedAt = .distantPast
             try audio.start { [weak self] reading in self?.heard(reading) }
@@ -339,7 +347,7 @@ final class DictationCoordinator {
 
     /// Hands the model what the mic heard since last time; its text so far shows in the notch.
     private func pollStreaming() {
-        guard streamTask == nil else { return }
+        guard provider == .local, streamTask == nil else { return }
         // Nemotron streams on every tick; Fluid re-reads what it has heard, so it previews less often.
         if model == .fluidSpeechPro, Date().timeIntervalSince(lastStreamedAt) < Self.previewInterval { return }
         let samples = audio.readNewSamples()
@@ -377,8 +385,8 @@ final class DictationCoordinator {
         }
         meter = .silent
         phase = .transcribing
-        statusMessage = "Processing on this Mac…"
-        logger.info("Captured \(recording.all.count, privacy: .public) audio samples for \(self.model.name, privacy: .public)")
+        statusMessage = provider == .local ? "Processing on this Mac…" : "Transcribing with ChatGPT…"
+        logger.info("Captured \(recording.all.count, privacy: .public) audio samples for \(self.provider.name, privacy: .public)")
         let activeSession = session
         let pendingStream = streamTask
         currentTask = Task {
@@ -386,7 +394,13 @@ final class DictationCoordinator {
                 // The last preview first: the session takes its samples in order.
                 if let pendingStream { await pendingStream.value }
                 guard activeSession == session else { return }
-                var text = try await speech.finishStreaming(unread: recording.unread, all: recording.all)
+                var text: String
+                if provider == .chatGPT {
+                    guard let chatGPTConnection else { throw ChatGPTAccountError.unavailable }
+                    text = try await ChatGPTDictation.transcribe(recording.all, connection: chatGPTConnection)
+                } else {
+                    text = try await speech.finishStreaming(unread: recording.unread, all: recording.all)
+                }
                 guard activeSession == session else { return }
                 logger.info("Recognized \(text.count, privacy: .public) characters")
                 if DictationCleanup.isEnabled(), cleanup.isInstalled() {
@@ -396,7 +410,7 @@ final class DictationCoordinator {
                         try await cleanup.prepare(allowDownload: false)
                         text = await cleanup.polish(text)
                     } catch {
-                        // Keep the raw local transcript if the optional model cannot load.
+                        // Keep the raw transcript if the optional local cleanup model cannot load.
                     }
                 }
                 guard activeSession == session else { return }

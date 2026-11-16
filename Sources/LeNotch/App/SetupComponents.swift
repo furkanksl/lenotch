@@ -680,6 +680,7 @@ struct SetupStatusLine: View {
 struct SetupSegmented<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
+    var isOptionDisabled: (Value) -> Bool = { _ in false }
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -701,6 +702,8 @@ struct SetupSegmented<Value: Hashable>: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .disabled(isOptionDisabled(option.value))
+                .opacity(isOptionDisabled(option.value) ? 0.45 : 1)
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }

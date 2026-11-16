@@ -37,15 +37,25 @@ desktops to preload them: until a desktop has been captured, its wallpaper may b
 off restores native switching and the previous shortcut enable states. These private macOS APIs can change across OS
 releases; if unavailable, native switching remains in place. Do not run a second desktop-transition app simultaneously.
 
+Custom transitions run in a helper process from the signed LeNotch bundle, separate from the notch's UI and Metal
+render loop. Setup controls it through local pipes; it has no network listener. Disabling desktop switching or quitting
+LeNotch stops it, including when LeNotch exits unexpectedly. Only one helper can own the desktop input hooks at a time.
+
 The implementation is adapted from [Interspace](https://github.com/cnrad/interspace) under the MIT license; notices are
 included in `Resources/Interspace-LICENSE.txt` and in the app bundle. `refs/interspace` is an ignored reference checkout,
 not a build dependency.
 
 After code changes, quit the app, rebuild, and launch it again. To build a universal release for Apple silicon and Intel, run `./build_app.sh` without `CONFIG=debug`.
 
-### Local dictation (Apple silicon)
+### Dictation (Apple silicon)
 
-In **Setup → Dictation**, select **Fluid Speech Pro** (live previews, finalized when you stop) or
+In **Setup → Dictation**, choose **ChatGPT** to transcribe with the account connected under
+**Setup → AI providers**, without downloading a speech model. This option is disabled until
+an account is connected. Audio is uploaded to ChatGPT when you finish recording; it requires
+internet and does not show live text previews. This uses ChatGPT's backend transcription service,
+not the separately billed OpenAI Audio API. Account access and service availability may vary.
+
+For offline transcription, choose **On this Mac**, then **Fluid Speech Pro** (live previews, finalized when you stop) or
 **Nemotron 3.5 Streaming 320 ms** (native streaming). Download the chosen model explicitly
 before first use (roughly 650–700 MB). Grant **Microphone** and **Accessibility** under
 **Setup → Permissions**. Press **⌥D** to start, then press it again to finish; the result is inserted

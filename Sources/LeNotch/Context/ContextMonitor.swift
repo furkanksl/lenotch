@@ -26,6 +26,9 @@ final class ContextMonitor {
     private var viewedReading = false
     private let claudeTitles = ClaudeWindowTitle()
     private var frontTitlePoll: Timer?
+    /// A desktop transition is on screen: no window-list or Accessibility reads until it ends (see
+    /// `DesktopTransitionsModel.transitionChanged`). One fresh read follows.
+    private var desktopTransitioning = false
     private var inputDevice = AudioObjectID(kAudioObjectUnknown)
     private var inputListener: AudioObjectPropertyListenerBlock?
     private var cameras: [CMIOObjectID] = []
@@ -42,6 +45,16 @@ final class ContextMonitor {
         let dn = DistributedNotificationCenter.default()
         observe(ws, NSWorkspace.didActivateApplicationNotification) { $0.frontmostChanged() }
         observe(ws, NSWorkspace.activeSpaceDidChangeNotification) { $0.recheckScreen(after: [0.1, 0.7]) }
+        let transitions = NotificationCenter.default.addObserver(forName: DesktopTransitionsModel.transitionChanged, object: nil,
+                                                                 queue: .main) { [weak self] note in
+            let active = note.userInfo?["active"] as? Bool ?? false
+            MainActor.assumeIsolated {
+                guard let self, self.desktopTransitioning != active else { return }
+                self.desktopTransitioning = active
+                if !active { self.recheckScreen(after: [0]) }
+            }
+        }
+        observers.append((NotificationCenter.default, transitions))
         observe(ws, NSWorkspace.screensDidSleepNotification) { $0.set(\.locked, true) }
         observe(ws, NSWorkspace.screensDidWakeNotification) { $0.set(\.locked, false) }
         observe(ws, NSWorkspace.sessionDidResignActiveNotification) { $0.set(\.locked, true) }
@@ -90,7 +103,7 @@ final class ContextMonitor {
     }
 
     private func readFrontTitle() {
-        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return }
+        guard !desktopTransitioning, let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.2)
         var w: AnyObject?, t: AnyObject?
@@ -121,7 +134,7 @@ final class ContextMonitor {
     }
 
     private func readViewedSession() {
-        guard !viewedReading,
+        guard !viewedReading, !desktopTransitioning,
               let pid = NSRunningApplication.runningApplications(withBundleIdentifier: Agents.app(.claude)).first?.processIdentifier
         else { return }
         viewedReading = true
@@ -153,7 +166,7 @@ final class ContextMonitor {
 
     /// The window list, read off the main thread (`WindowReader`); one read at a time.
     private func readWindows(force: Bool = false) {
-        guard !windowsReading, let s = screen() else { return }
+        guard !windowsReading, !desktopTransitioning, let s = screen() else { return }
         windowsReading = true
         let reader = windowReader
         reader.queue.async { [weak self] in

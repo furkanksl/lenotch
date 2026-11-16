@@ -32,7 +32,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         switch self {
         case .permissions: "Allow only what you use. Every permission is optional, and macOS keeps track of each one."
         case .appearance: "Bring your music to the lock screen and desktop. Your wallpaper always comes back."
-        case .dictation: "Speak in any app. Speech is recognized on this Mac with a model you choose."
+        case .dictation: "Speak in any app. Transcribe on this Mac or with your connected ChatGPT account."
         case .notifications: "Show new notifications in the notch as they arrive."
         case .agents: "Ask ChatGPT from the notch, and follow your Claude and Codex sessions."
         case .launcher: "Open your apps, folders and websites straight from the notch."

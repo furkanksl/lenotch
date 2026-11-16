@@ -48,6 +48,10 @@ public final class ChatGPTAccount: ObservableObject {
     public static let shared = ChatGPTAccount()
     @Published public private(set) var status: ChatGPTAccountStatus = .disconnected
 
+    // Transient refresh failures retain the linked account so dictation can retry later.
+    @Published private(set) var isConnected = false
+    var connectionGeneration: Int { generation }
+
     private let keychain = ChatGPTAccountKeychain()
     private let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -64,6 +68,7 @@ public final class ChatGPTAccount: ObservableObject {
     private init() {
         // Reading our own item does not request access to another application's Keychain entries.
         if let saved = try? keychain.load() {
+            isConnected = true
             status = .connected(email: saved.email, plan: saved.plan)
         }
     }
@@ -102,6 +107,8 @@ public final class ChatGPTAccount: ObservableObject {
             let saved = try ChatGPTStoredCredentials(tokenData: response, previous: nil)
             guard currentGeneration == generation, !Task.isCancelled else { throw CancellationError() }
             try keychain.save(saved)
+            generation += 1
+            isConnected = true
             status = .connected(email: saved.email, plan: saved.plan)
         } catch {
             if currentGeneration == generation {
@@ -113,6 +120,7 @@ public final class ChatGPTAccount: ObservableObject {
 
     public func disconnect() {
         generation += 1
+        isConnected = false
         callbackServer?.close()
         callbackServer = nil
         refreshTask?.cancel()
@@ -140,6 +148,7 @@ public final class ChatGPTAccount: ObservableObject {
             let updated = try ChatGPTStoredCredentials(tokenData: data, previous: saved)
             guard currentGeneration == generation, !Task.isCancelled else { throw CancellationError() }
             try keychain.save(updated)
+            isConnected = true
             status = .connected(email: updated.email, plan: updated.plan)
             return updated
         }
@@ -151,6 +160,7 @@ public final class ChatGPTAccount: ObservableObject {
             if currentGeneration == generation {
                 if case ChatGPTAccountError.sessionExpired = error {
                     try? keychain.delete()
+                    isConnected = false
                     status = .error(ChatGPTAccountError.sessionExpired.localizedDescription)
                 } else if !(error is CancellationError) {
                     status = .error(error.localizedDescription)
@@ -190,7 +200,7 @@ public final class ChatGPTAccount: ObservableObject {
     }
 }
 
-private final class ChatGPTNoRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+final class ChatGPTNoRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {

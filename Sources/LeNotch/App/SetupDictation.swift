@@ -5,11 +5,15 @@ struct SetupDictationPage: View {
 
     @AppStorage("lenotch.dictation.model") private var selectedModel = "fluidSpeechPro"
     @AppStorage("lenotch.dictation.cleanup") private var cleanupEnabled = false
+    @AppStorage(DictationProvider.preferenceKey) private var providerID = DictationProvider.local.rawValue
     @AppStorage(DictationInputSettings.pushToTalkKey) private var pushToTalk = false
     @AppStorage(DictationInputSettings.toggleShortcutKey) private var toggleShortcut = true
     private let dictation = DictationCoordinator.shared
+    @ObservedObject private var chatGPT = ChatGPTAccount.shared
 
     private var model: DictationModel { DictationModel(rawValue: selectedModel) ?? .fluidSpeechPro }
+    private var provider: DictationProvider { DictationProvider(rawValue: providerID) ?? .local }
+    private var providerIsBusy: Bool { dictation.running || dictation.phase == .preparing }
 
     private var speechIsPreparing: Bool {
         dictation.phase == .preparing && dictation.preparingSpeechModel?.rawValue == selectedModel
@@ -21,34 +25,55 @@ struct SetupDictationPage: View {
         VStack(alignment: .leading, spacing: 36) {
             SetupDictationHero(pushToTalk: pushToTalk, toggleShortcut: toggleShortcut,
                                shortcutUnavailable: dictation.shortcutUnavailable)
+            .overlay(alignment: .bottomLeading) {
+                SetupSegmented(selection: $providerID, options: DictationProvider.allCases.map { ($0.rawValue, $0.name) },
+                               isOptionDisabled: { raw in
+                    !(DictationProvider(rawValue: raw) ?? .local).isAvailable(chatGPTConnected: chatGPT.isConnected)
+                })
+                .disabled(providerIsBusy)
+                .help(chatGPT.isConnected ? "Choose where speech is transcribed." : "Connect ChatGPT in AI providers to enable ChatGPT dictation.")
+                .accessibilityIdentifier("setup-dictation-provider")
+                .padding(.leading, 24).padding(.bottom, 20)
+            }
 
-            SetupGroup(title: "Speech model") {
-                SetupSegmented(selection: $selectedModel, options: [
-                    ("fluidSpeechPro", "Fluid Speech Pro"), ("nemotronStreaming", "Nemotron 3.5"),
-                ])
-                .disabled(dictation.phase == .preparing)
-                .accessibilityIdentifier("setup-dictation-model")
-            } content: {
-                SetupRow(icon: .audioWave, active: dictation.selectedModelReady, title: model.name,
-                         detail: model == .nemotronStreaming
-                         ? "Native streaming: your words appear as you speak. About 700 MB."
-                         : "Live previews as you speak; refines the transcript when you stop. About 650 MB.",
-                         badge: dictation.selectedModelReady ? SetupBadge(text: "Ready", icon: .tick) : nil) {
-                    if !dictation.selectedModelReady {
-                        Button(speechIsPreparing ? (dictation.downloadProgress == nil ? "Loading…" : "Downloading…")
-                               : dictation.selectedModelInstalled ? "Load" : "Download") {
-                            Task { await dictation.prepareSelectedModel() }
-                        }
-                        .buttonStyle(SetupButtonStyle(kind: .primary))
-                        .disabled(dictation.phase == .preparing)
-                    }
-                } below: {
-                    if dictation.phase == .failed && dictation.preparingSpeechModel?.rawValue == selectedModel {
-                        SetupStatusLine(kind: .failure, text: dictation.statusMessage)
-                    }
+            if provider == .chatGPT {
+                SetupGroup("Transcription") {
+                    SetupRow(icon: .mic, active: chatGPT.isConnected, title: "ChatGPT dictation",
+                             detail: chatGPT.isConnected
+                             ? "Uses your connected account. No speech model download. Audio is uploaded when you finish; no live text previews. Internet required."
+                             : "ChatGPT is disconnected. Reconnect in AI providers or choose On this Mac to dictate.",
+                             badge: chatGPT.isConnected ? SetupBadge(text: "Connected", icon: .tick) : nil) { EmptyView() }
+                    SetupNote(text: "Uses ChatGPT’s transcription service. Availability may vary by account or change over time.")
                 }
-                if speechIsPreparing {
-                    SetupProgressCard(status: dictation.statusMessage, progress: dictation.downloadProgress)
+            } else {
+                SetupGroup(title: "Speech model") {
+                    SetupSegmented(selection: $selectedModel, options: [
+                        ("fluidSpeechPro", "Fluid Speech Pro"), ("nemotronStreaming", "Nemotron 3.5"),
+                    ])
+                    .disabled(dictation.phase == .preparing)
+                    .accessibilityIdentifier("setup-dictation-model")
+                } content: {
+                    SetupRow(icon: .audioWave, active: dictation.selectedModelReady, title: model.name,
+                             detail: model == .nemotronStreaming
+                             ? "Native streaming: your words appear as you speak. About 700 MB."
+                             : "Live previews as you speak; refines the transcript when you stop. About 650 MB.",
+                             badge: dictation.selectedModelReady ? SetupBadge(text: "Ready", icon: .tick) : nil) {
+                        if !dictation.selectedModelReady {
+                            Button(speechIsPreparing ? (dictation.downloadProgress == nil ? "Loading…" : "Downloading…")
+                                   : dictation.selectedModelInstalled ? "Load" : "Download") {
+                                Task { await dictation.prepareSelectedModel() }
+                            }
+                            .buttonStyle(SetupButtonStyle(kind: .primary))
+                            .disabled(dictation.phase == .preparing)
+                        }
+                    } below: {
+                        if dictation.phase == .failed && dictation.preparingSpeechModel?.rawValue == selectedModel {
+                            SetupStatusLine(kind: .failure, text: dictation.statusMessage)
+                        }
+                    }
+                    if speechIsPreparing {
+                        SetupProgressCard(status: dictation.statusMessage, progress: dictation.downloadProgress)
+                    }
                 }
             }
 
@@ -106,7 +131,9 @@ struct SetupDictationPage: View {
                 }
             }
 
-            SetupNote(icon: .lock, text: "Speech recognition runs on your Mac. No analytics or audio uploads are added by these settings.")
+            SetupNote(icon: .lock, text: provider == .local
+                      ? "Speech recognition runs on your Mac. No audio uploads. Connect ChatGPT in AI providers to dictate without downloading a speech model."
+                      : "Your recording is sent to ChatGPT for transcription. Optional cleanup still runs on this Mac. Esc cancels; audio already sent cannot be recalled.")
         }
         .onChange(of: pushToTalk) { NotificationCenter.default.post(name: .dictationShortcutsChanged, object: nil) }
         .onChange(of: toggleShortcut) { NotificationCenter.default.post(name: .dictationShortcutsChanged, object: nil) }
