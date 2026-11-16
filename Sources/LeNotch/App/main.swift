@@ -8,6 +8,12 @@ if let i = CommandLine.arguments.firstIndex(of: "--snapshot") {
 }
 
 let app = NSApplication.shared
+if CommandLine.arguments.contains("--voice-diagnostic") {
+    let diagnostic = MainActor.assumeIsolated { ChatGPTVoiceDiagnostic() }
+    app.delegate = diagnostic
+    app.run()
+    exit(0)
+}
 if CommandLine.arguments.contains("--desktop-transitions-helper") {
     // A helper must be spawned with a parent-owned input pipe, never as a second
     // independent instance owning the user's keyboard and trackpad indefinitely.

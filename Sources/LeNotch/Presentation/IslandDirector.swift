@@ -316,6 +316,10 @@ final class IslandDirector {
     }
 
     private func changed() {
+        if askVoiceOpen && (!island.opened || island.askOpen == nil || island.context.locked || island.context.presenting) {
+            askVoiceOpen = false
+            askVoice.stop()
+        }
         syncMediaFacts()
         // Never run the script unseen: alerts, HUDs, a closed card and lock all pause it.
         if mode != .card || !island.opened || island.instance(island.cardOwner)?.id != .prompter || systemContext.lockScreen || island.context.locked {
@@ -1648,6 +1652,7 @@ final class IslandDirector {
     }
 
     func presentationCard(player: CardSize) -> CardSize {
+        if askVoiceOpen, island.askOpen != nil { return Self.askVoiceCard }
         if island.trayShows {
             switch tray.page {
             case .notifications: return CardSize(width: 420, height: 348, radius: 36)
@@ -1774,6 +1779,27 @@ final class IslandDirector {
     /// Who answers a new conversation (the ask card's switch). The conversation itself is `AgentProvider.ask`: its own
     /// ball, apart from the sessions the notch watches (owner, 11-07).
     private(set) var askProvider: AgentProvider = .claude
+    private(set) var askVoiceOpen = false
+    let askVoice = ChatGPTVoiceSession()
+    static let askVoiceCard = CardSize(width: 420, height: 360, radius: 34)
+
+    func openAskVoice() {
+        guard askProvider == .codex, island.askOpen != nil, ChatGPTAccount.shared.isConnected,
+              !island.context.locked, !island.context.presenting else { return }
+        replyFocused = false
+        hoverOff?.cancel(); hoverOff = nil
+        askVoiceOpen = true
+        askVoice.start()
+        onWantsKey?()
+        changed()
+    }
+
+    func endAskVoice() {
+        askVoiceOpen = false
+        askVoice.stop()
+        askFocusTick += 1
+        changed()
+    }
     /// The field asked for the keyboard (the panel becomes key without activating the app).
     @ObservationIgnored var onWantsKey: (() -> Void)?
     @ObservationIgnored var onYieldsKey: (() -> Void)?
@@ -1834,6 +1860,7 @@ final class IslandDirector {
 
     func setAskProvider(_ p: AgentProvider) {
         guard askProvider != p, p != .ask else { return }
+        if askVoiceOpen { endAskVoice() }
         askProvider = p
         if island.askOpen != nil { send(.openAsk(p)) }
     }
@@ -2059,6 +2086,8 @@ final class IslandDirector {
     }
 
     func stopAll() {
+        askVoiceOpen = false
+        askVoice.stop()
         for t in [hudEnd, pulseLoop, closing, hoverOff, leaving, shownClear] { t?.cancel() }
         for t in transientEnds.values { t.cancel() }
         transientEnds = [:]; hudEnd = nil; pulseLoop = nil; closing = nil; hoverOff = nil; leaving = nil; shownClear = nil
@@ -2195,6 +2224,7 @@ final class IslandDirector {
         // Holding the card is using it: the linger starts on release.
         guard island.hovered || island.peekBall != nil, hoverOff == nil, !pressed, !scrubbing else { return }
         if island.holdsOpen { return }      // closes by its buttons, the notch or a click outside
+        if askVoiceOpen { return }
         if island.opened && (replyFocused || notificationInbox.composing || notificationInbox.submitting) { return }
         let t = tuning()
         hoverOff = schedule(island.opened ? t.closeDelay : t.leaveDelay) { [weak self] in

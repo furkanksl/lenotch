@@ -16,7 +16,7 @@ enum AskPrimaryAction: Equatable {
     }
 }
 
-/// Text-only Quick Ask: a provider switch, keyboard hint, and capsule field with its send button.
+/// Quick Ask: text for either provider, plus connected-account voice for ChatGPT.
 struct AskCardLayer: View {
     let frame: FrameModel
     let director: IslandDirector
@@ -29,28 +29,43 @@ struct AskCardLayer: View {
     var body: some View {
         if provider != nil {
             let p = director.askProvider
-            CardPlacement(frame: frame, card: Island.askCard) {
-                VStack(alignment: .leading, spacing: 11) {
-                    HStack {
-                        switcher(p)
-                        Spacer(minLength: 8)
-                        Text("Return to ask · Esc to close").font(.system(size: 12)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
+            let card = director.askVoiceOpen ? IslandDirector.askVoiceCard : Island.askCard
+            CardPlacement(frame: frame, card: card) {
+                if director.askVoiceOpen {
+                    AskVoiceView(phase: director.askVoice.phase, muted: director.askVoice.muted,
+                                 level: director.askVoice.level, transcript: director.askVoice.transcript,
+                                 onMute: { director.askVoice.toggleMute() }, onEnd: { director.endAskVoice() },
+                                 onRetry: { director.askVoice.start() })
+                        .background(alignment: .topLeading) {
+                            AskVoiceMediaHost(view: director.askVoice.mediaHost)
+                                .frame(width: 1, height: 1)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                        .onExitCommand { director.endAskVoice() }
+                } else {
+                    VStack(alignment: .leading, spacing: 11) {
+                        HStack {
+                            switcher(p)
+                            Spacer(minLength: 8)
+                            Text("Return to ask · Esc to close").font(.system(size: 12)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
+                        }
+                        .frame(height: 28)
+                        .rise(0)
+                        field(p).rise(1)
                     }
-                    .frame(height: 28)
-                    .rise(0)
-                    field(p).rise(1)
-                }
-                .padding(.horizontal, 18).padding(.vertical, 14)
-                .frame(width: Island.askCard.width, height: Island.askCard.height)
-                .foregroundStyle(.white)
-                .onChange(of: focused) { _, f in director.replyFocused = f }
-                .task {
-                    // The panel has just become key: give the field the keyboard.
-                    try? await Task.sleep(for: .milliseconds(60))
-                    focused = director.askProvider != .codex || chatGPTReady
-                }
-                .onChange(of: chatGPT.status) { _, _ in
-                    if director.askProvider == .codex && chatGPTReady { focused = true }
+                    .padding(.horizontal, 18).padding(.vertical, 14)
+                    .frame(width: Island.askCard.width, height: Island.askCard.height)
+                    .foregroundStyle(.white)
+                    .onChange(of: focused) { _, f in director.replyFocused = f }
+                    .task {
+                        // The panel has just become key: give the field the keyboard.
+                        try? await Task.sleep(for: .milliseconds(60))
+                        focused = director.askProvider != .codex || chatGPTReady
+                    }
+                    .onChange(of: chatGPT.status) { _, _ in
+                        if director.askProvider == .codex && chatGPTReady { focused = true }
+                    }
                 }
             }
         }
@@ -83,6 +98,23 @@ struct AskCardLayer: View {
     private func field(_ p: AgentProvider) -> some View {
         let placeholder = "Ask \(p == .claude ? "Claude" : "ChatGPT")"
         return HStack(spacing: 0) {
+            if p == .codex {
+                Button {
+                    focused = false
+                    director.openAskVoice()
+                } label: {
+                    VoiceOrb(size: 26)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(PressScaleStyle(pressed: 0.88, hover: 1.06))
+                .disabled(!chatGPT.isConnected)
+                .opacity(chatGPT.isConnected ? 1 : 0.35)
+                .padding(.trailing, 8)
+                .help(chatGPT.isConnected ? "Start ChatGPT voice. Microphone audio is sent to ChatGPT." : "Connect ChatGPT in Setup → AI providers to use voice.")
+                .accessibilityLabel("Start ChatGPT voice")
+                .accessibilityIdentifier("ask-chatgpt-voice")
+            }
             if p == .codex && !chatGPTReady {
                 if case .connecting = chatGPT.status {
                     ProgressView().controlSize(.mini).tint(.white)
@@ -152,6 +184,13 @@ struct AskCardLayer: View {
         if case .error(let message) = chatGPT.status { return message }
         return nil
     }
+}
+
+/// WebKit media must live in the visible call window, not an offscreen helper panel.
+struct AskVoiceMediaHost: NSViewRepresentable {
+    let view: NSView
+    func makeNSView(context: Context) -> NSView { view }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// A ball turns once each time `rolls` goes up (the barrel-roll easter egg).

@@ -23,6 +23,18 @@ Edit that document in Icon Composer rather than exporting a flat PNG. The dev wa
 
 There is no Dock or menu bar icon. Right-click the notch to open Setup or quit. Grant the permissions you want LeNotch to use in Setup.
 
+### ChatGPT voice (experimental)
+
+In **Ask AI → ChatGPT**, the orb at the beginning of the input starts a voice conversation using
+the account connected in **Setup → AI providers**. It is disabled while disconnected and is not
+shown on the Claude tab. Allow microphone access when prompted. The expanded card shows connection,
+listening, and speaking status, with mute, retry, and end controls. Ending voice returns to text Ask;
+closing the card, locking the Mac, or disconnecting the account stops microphone capture.
+
+Microphone audio is sent to ChatGPT over WebRTC. Voice uses the experimental ChatGPT/Codex backend,
+not a separately billed OpenAI API key; account eligibility, limits, and backend availability can vary.
+Voice is a separate conversation: it does not inherit Ask's text history or execute Mac/agent tools.
+
 ### Desktop transitions (optional)
 
 **Setup → Appearance → Desktop switching** enables Interspace-style Spaces transitions. It is **off by default**;
