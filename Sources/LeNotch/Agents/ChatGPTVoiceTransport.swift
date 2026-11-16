@@ -17,6 +17,8 @@ enum ChatGPTVoiceTransportEvent: Equatable, Sendable {
     case connected, disconnected
     case userSpeaking, userStoppedSpeaking
     case assistantSpeaking, assistantStoppedSpeaking
+    case assistantThinking
+    case workRequested(id: String, text: String)
     /// Transcript events contain the current turn's complete text, not a delta.
     case userTranscript(String), assistantTranscript(String)
     case level(Double)
@@ -182,6 +184,12 @@ final class WebRTCVoiceTransport: NSObject, ChatGPTVoiceTransport {
     }
 
     func stop() { tearDown(error: CancellationError()) }
+
+    /// Opt-in diagnostic input from synthesized speech; never reads the microphone.
+    func playGeneratedAudio(_ audio: Data) async throws {
+        guard syntheticAudio, audio.count <= 2 * 1024 * 1024 else { throw ChatGPTVoiceTransportError.notReady }
+        _ = try await command("playGeneratedAudio", arguments: ["audio": audio.base64EncodedString()])
+    }
 
     private func command(_ action: String, arguments: [String: Any] = [:]) async throws -> String {
         let id = UUID().uuidString
@@ -425,7 +433,16 @@ struct ChatGPTVoiceEventDecoder {
         case "output_audio_buffer.stopped", "output_audio_buffer.cleared": return [.assistantStoppedSpeaking]
         case "response.created":
             assistantText = ""; assistantFinished = false
-            return []
+            return [.assistantThinking]
+        case "delegation.created":
+            guard let item = payload["item"] as? [String: Any], item["type"] as? String == "delegation",
+                  item["target"] as? String == "client", let id = item["id"] as? String,
+                  !id.isEmpty, id.utf8.count <= 256,
+                  let content = item["content"] as? [[String: Any]] else { return [] }
+            let text = content.filter { $0["type"] as? String == "input_text" }
+                .compactMap { $0["text"] as? String }.joined()
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf8.count <= 64 * 1024 else { return [] }
+            return [.workRequested(id: id, text: text)]
         case "response.done":
             assistantFinished = true
             return []
@@ -487,7 +504,7 @@ extension WebRTCVoiceTransport {
             const post = (kind, extra = {}) => window.webkit.messageHandlers.voice.postMessage({kind, generation, ...extra});
             let peer = null, channel = null, local = null, remote = null, audio = null;
             let context = null, sources = [], analysers = [], meter = null, stopped = false;
-            let assistantSpeaking = false, lastRemoteVoice = 0;
+            let assistantSpeaking = false, lastRemoteVoice = 0, syntheticDestination = null;
             let userSpeaking = false, lastLocalVoice = 0, microphoneMuted = false;
             const stopTracks = stream => stream?.getTracks().forEach(track => track.stop());
             const stop = () => {
@@ -553,6 +570,7 @@ extension WebRTCVoiceTransport {
                 post('stage', {value: 'microphone'});
                 const generated = syntheticAudio ? new AudioContext() : null;
                 const destination = generated?.createMediaStreamDestination();
+                syntheticDestination = destination;
                 const acquired = destination ? destination.stream : await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}, video: false});
                 if (generated) sources.push(destination);
                 if (stopped) { stopTracks(acquired); throw new Error('Voice conversation cancelled.'); }
@@ -609,6 +627,17 @@ extension WebRTCVoiceTransport {
                     }
                     Promise.resolve().then(async () => {
                         if (request.action === 'offer') return await offer(request.muted, request.syntheticAudio === true);
+                        if (request.action === 'playGeneratedAudio') {
+                            if (!context || !syntheticDestination) throw new Error('Generated audio is not available.');
+                            const bytes = Uint8Array.from(atob(request.audio), c => c.charCodeAt(0));
+                            const source = context.createBufferSource();
+                            source.buffer = await context.decodeAudioData(bytes.buffer);
+                            source.connect(syntheticDestination);
+                            sources.push(source);
+                            await context.resume();
+                            source.start();
+                            return '';
+                        }
                         if (request.action === 'answer') {
                             if (!peer || stopped) throw new Error('Start a new voice conversation before connecting.');
                             await peer.setRemoteDescription({type: 'answer', sdp: request.sdp});

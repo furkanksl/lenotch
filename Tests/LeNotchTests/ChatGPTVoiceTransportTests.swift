@@ -81,7 +81,7 @@ final class ChatGPTVoiceTransportTests: XCTestCase {
     func testInterruptedAssistantTranscriptDoesNotLeakIntoTheNextResponse() {
         var decoder = ChatGPTVoiceEventDecoder()
         XCTAssertEqual(decoder.decode(["type": "response.audio_transcript.delta", "delta": "Interrupted"]), [.assistantTranscript("Interrupted")])
-        XCTAssertEqual(decoder.decode(["type": "response.created"]), [])
+        XCTAssertEqual(decoder.decode(["type": "response.created"]), [.assistantThinking])
         XCTAssertEqual(decoder.decode(["type": "response.audio_transcript.delta", "delta": "Fresh"]), [.assistantTranscript("Fresh")])
         XCTAssertEqual(decoder.decode(["type": "response.done"]), [])
         XCTAssertEqual(decoder.decode(["type": "response.audio_transcript.delta", "delta": "Next"]), [.assistantTranscript("Next")])

@@ -5,6 +5,7 @@ enum AskVoicePresentation: Equatable {
     case connecting
     case listening
     case thinking
+    case working(String)
     case speaking
     case failed(String)
 }
@@ -54,11 +55,17 @@ struct AskVoiceView: View {
                 .opacity(failed ? 0.4 : (muted && phase == .listening ? 0.65 : 1))
                 .frame(height: 126)
 
-            Text(status)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(.white.opacity(0.95))
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 8) {
+                if isWorking {
+                    ProgressView().controlSize(.small).tint(.white.opacity(0.8))
+                        .accessibilityLabel("Task in progress")
+                }
+                Text(status)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+            }
 
             Text(detail)
                 .font(.system(size: 12.5))
@@ -128,11 +135,17 @@ struct AskVoiceView: View {
         phase == .speaking || (phase == .listening && !muted)
     }
 
+    private var isWorking: Bool {
+        if case .working = phase { return true }
+        return phase == .thinking
+    }
+
     private var status: String {
         switch phase {
         case .connecting: "Connecting…"
         case .listening: muted ? "Microphone muted" : "Listening"
         case .thinking: "Thinking…"
+        case .working(let status): status
         case .speaking: "Speaking"
         case .failed: "Voice couldn't connect"
         }
@@ -148,6 +161,7 @@ struct AskVoiceView: View {
         case .connecting: return "Microphone audio is sent to ChatGPT"
         case .listening: return muted ? "Unmute when you're ready." : "Go ahead. I'm listening."
         case .thinking: return "ChatGPT is working on a reply."
+        case .working: return "A task is running. You can keep talking or minimize this call."
         case .speaking: return "ChatGPT is responding."
         case .failed: return "Please try again."
         }

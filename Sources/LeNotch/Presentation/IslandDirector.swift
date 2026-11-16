@@ -1795,11 +1795,13 @@ final class IslandDirector {
 
     var askVoiceStatus: String {
         if case .failed = askVoice.phase { return "Tap to retry" }
+        if case .working(let status) = askVoice.phase { return status }
         if askVoice.muted { return "Microphone muted" }
         switch askVoice.phase {
         case .connecting: return "Connecting"
         case .listening: return "Listening"
         case .thinking: return "Thinking"
+        case .working(let status): return status
         case .speaking: return "Speaking"
         case .failed: return "Tap to retry"
         }
@@ -1814,6 +1816,11 @@ final class IslandDirector {
             openCard(island.activity?.serial == voice.serial ? .activity : .background(voice.serial))
         } else {
             show(.voice, opened: true, sample: false)
+            // Starting from the empty Chat composer must hand its card to voice, not leave
+            // askOpen in control while the ongoing call appears only as a minimized bubble.
+            if let voice = island.running.first(where: { $0.id == .voice }) {
+                openCard(island.activity?.serial == voice.serial ? .activity : .background(voice.serial))
+            }
             askVoice.start()
         }
         onWantsKey?()

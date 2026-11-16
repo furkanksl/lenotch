@@ -11,6 +11,7 @@ final class AskVoiceViewTests: XCTestCase {
             ("connecting", .connecting, "connecting"),
             ("listening", .listening, "listening"),
             ("thinking", .thinking, "thinking"),
+            ("working", .working("Searching the web"), "searching the web"),
             ("speaking", .speaking, "speaking"),
             ("failed", .failed("This account cannot start voice. Please try again."), "couldn't connect"),
         ]

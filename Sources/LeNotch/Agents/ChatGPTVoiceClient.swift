@@ -2,15 +2,22 @@ import Foundation
 
 @MainActor
 protocol ChatGPTVoiceCalling: AnyObject {
+    var onEvent: ((ChatGPTVoiceTransportEvent) -> Void)? { get set }
     func prepare() async throws
     func connect(offer: String) async throws -> String
+    func startEvents() async throws
+    func sendDelegationResult(id: String, text: String) async throws
+    func stop()
 }
 
 /// The ChatGPT-authenticated WebRTC path used by Codex. Unlike the public Audio API,
 /// this backend accepts JSON and returns an SDP answer. It is an experimental service.
 @MainActor
 final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
+    var onEvent: ((ChatGPTVoiceTransportEvent) -> Void)?
     private var connection: ChatGPTDictation.Connection?
+    private var callID: String?
+    private let sideband = ChatGPTVoiceSideband()
     private var voice = ChatGPTVoice.cove
     private let session: URLSession
     var onDiagnostic: ((String) -> Void)?
@@ -58,9 +65,34 @@ final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
             }
             try Task.checkCancellation()
             try validate(connection)
+            callID = try Self.callID(response.value(forHTTPHeaderField: "Location"))
             return try Self.answer(data)
         }
         throw VoiceError.http(401)
+    }
+
+    func startEvents() async throws {
+        guard let callID, let connection else { throw VoiceError.invalidAnswer }
+        sideband.onEvent = { [weak self] in self?.onEvent?($0) }
+        try await sideband.connect(callID: callID, connection: connection)
+    }
+
+    func sendDelegationResult(id: String, text: String) async throws {
+        guard let connection else { throw VoiceError.accountChanged }
+        try validate(connection)
+        for message in try ChatGPTVoiceDelegation.messages(id: id, text: text) { try await sideband.send(message) }
+    }
+
+    func sendText(_ text: String) async throws {
+        guard !text.isEmpty, text.utf8.count <= 500 else { throw VoiceError.invalidOffer }
+        try await sideband.send(["type": "session.context.append", "content": [["type": "input_text", "text": text]]])
+    }
+
+    func stop() {
+        sideband.onEvent = nil
+        sideband.stop()
+        callID = nil
+        connection = nil
     }
 
     private func validate(_ connection: ChatGPTDictation.Connection) throws {
@@ -69,6 +101,14 @@ final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
     }
 
     nonisolated static let maximumSDPBytes = 256 * 1024
+
+    nonisolated static func callID(_ location: String?) throws -> String {
+        guard let location, let components = URLComponents(string: location),
+              let id = components.percentEncodedPath.split(separator: "/").last.map(String.init),
+              id.utf8.count <= 256, id != ".", id != "..", id != "calls",
+              id.range(of: #"^[a-zA-Z0-9_-]+$"#, options: .regularExpression) != nil else { throw VoiceError.invalidAnswer }
+        return id
+    }
 
     /// Deliberately omits raw backend text, which may echo request/session information.
     nonisolated static func errorSummary(status: Int, data: Data) -> String {
@@ -105,7 +145,7 @@ final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "sdp": offer,
             "session": [
-                "instructions": "You are the voice assistant in Lenotch, a macOS utility. Have a natural, concise spoken conversation. Respond in the user's language. You cannot access this Mac, run commands, or browse the web. Do not claim to have done so.",
+                "instructions": "You are the voice assistant in Lenotch, a macOS utility. Have a natural, concise spoken conversation in the user's language. For requests needing current information, internet research, fact checking, or multi-step work, delegate the task to the client. The client worker can search and open web pages using ChatGPT web search. Wait for its returned result before claiming findings or completion. An acknowledgement is not a completed task; never pretend work is running if it was not delegated. You cannot access this Mac, run commands, or change files; say so for requests requiring those capabilities.",
                 "audio": [
                     "output": ["voice": voice.rawValue],
                 ],

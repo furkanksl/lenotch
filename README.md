@@ -38,7 +38,10 @@ saved for new conversations. End and restart an active voice conversation to app
 
 Microphone audio is sent to ChatGPT over WebRTC. Voice uses the experimental ChatGPT/Codex backend,
 not a separately billed OpenAI API key; account eligibility, limits, and backend availability can vary.
-Voice is a separate conversation: it does not inherit Chat's text history or execute Mac/agent tools.
+Voice is a separate conversation: it does not inherit Chat's text history. Research tasks are
+delegated to the connected ChatGPT web-search backend, with a visible Working/search status until
+the result is returned to voice. Ending the call cancels delegated work. Voice cannot run Mac
+commands, inspect local files, or execute coding-agent tools.
 
 ### Desktop transitions (optional)
 

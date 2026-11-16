@@ -27,6 +27,9 @@ final class ChatGPTVoiceClientTests: XCTestCase {
         XCTAssertEqual((session["delegation"] as? [String: Any])?["type"] as? String, "client")
         let audio = try XCTUnwrap(session["audio"] as? [String: Any])
         XCTAssertEqual((audio["output"] as? [String: Any])?["voice"] as? String, "cove")
+        let instructions = try XCTUnwrap(session["instructions"] as? String)
+        XCTAssertTrue(instructions.contains("delegate the task to the client"))
+        XCTAssertTrue(instructions.contains("Wait for its returned result"))
         XCTAssertFalse(String(decoding: body, as: UTF8.self).contains("test-token"))
         XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
     }
@@ -50,6 +53,14 @@ final class ChatGPTVoiceClientTests: XCTestCase {
         }
         defaults.set("no-longer-supported", forKey: ChatGPTVoice.preferenceKey)
         XCTAssertEqual(ChatGPTVoice.selected(in: defaults), .cove)
+    }
+
+    func testCallLocationIsValidatedBeforeSidebandAuthentication() throws {
+        XCTAssertEqual(try ChatGPTVoiceClient.callID("/v1/realtime/calls/rtc_test-1"), "rtc_test-1")
+        XCTAssertEqual(try ChatGPTVoiceClient.callID("https://chatgpt.com/backend-api/codex/realtime/calls/rtc_test"), "rtc_test")
+        for invalid: String? in [nil, "", "/calls", "/calls/..", "/calls/%2fprivate", "/calls/rtc%3ftoken"] {
+            XCTAssertThrowsError(try ChatGPTVoiceClient.callID(invalid))
+        }
     }
 
     func testEverySelectableVoiceIsSentAsTheSessionOutputVoice() throws {
@@ -296,6 +307,8 @@ final class ChatGPTVoiceSessionTests: XCTestCase {
 
 @MainActor
 private final class VoicePeerStub: ChatGPTVoiceTransport {
+    var results: [(id: String, text: String)] = []
+    func sendDelegationResult(id: String, text: String) async throws { results.append((id, text)) }
     func attach(to host: NSView) {}
     var onEvent: ((ChatGPTVoiceTransportEvent) -> Void)?
     var started = false
@@ -310,6 +323,10 @@ private final class VoicePeerStub: ChatGPTVoiceTransport {
 
 @MainActor
 private final class VoiceClientStub: ChatGPTVoiceCalling {
+    var onEvent: ((ChatGPTVoiceTransportEvent) -> Void)?
+    func startEvents() async throws {}
+    func sendDelegationResult(id: String, text: String) async throws {}
+    func stop() {}
     var prepareCount = 0
     var offer: String?
     var suspend = false
