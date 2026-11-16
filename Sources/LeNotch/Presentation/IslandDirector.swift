@@ -32,10 +32,13 @@ final class IslandDirector {
     @ObservationIgnored private let prompterEditor = PrompterEditor()
 
     init(prompter: PrompterModel? = nil, askVoice: ChatGPTVoiceSession? = nil,
-         voiceAccountConnected: @escaping () -> Bool = { ChatGPTAccount.shared.isConnected }) {
+         voiceAccountConnected: @escaping () -> Bool = { ChatGPTAccount.shared.isConnected },
+         chatDefaults: UserDefaults = .standard) {
         self.prompter = prompter ?? PrompterModel()
         self.askVoice = askVoice ?? ChatGPTVoiceSession()
         self.voiceAccountConnected = voiceAccountConnected
+        self.chatDefaults = chatDefaults
+        self.askProvider = ChatPreferences.provider(in: chatDefaults)
         tray.onGo = { [weak self] page in
             guard let self else { return }
             if page == .launcher {
@@ -1782,7 +1785,8 @@ final class IslandDirector {
     @ObservationIgnored let quickAsk = QuickAsk()
     /// Who answers a new conversation (the ask card's switch). The conversation itself is `AgentProvider.ask`: its own
     /// ball, apart from the sessions the notch watches (owner, 11-07).
-    private(set) var askProvider: AgentProvider = .claude
+    private(set) var askProvider: AgentProvider = .codex
+    @ObservationIgnored private let chatDefaults: UserDefaults
     let askVoice: ChatGPTVoiceSession
     @ObservationIgnored private let voiceAccountConnected: () -> Bool
     var askVoiceActive: Bool { island.running.contains { $0.id == .voice } }
@@ -1864,7 +1868,10 @@ final class IslandDirector {
     /// Ask from the tray, the shortcut or a chat's `+`: a recent conversation opens with its field ready; with none (or
     /// `new`), the ask card starts one.
     func openAsk(_ backend: AgentProvider? = nil, new: Bool = false) {
-        if let backend, backend != .ask { askProvider = backend }
+        if let backend, backend != .ask {
+            askProvider = backend
+            chatDefaults.set(backend.rawValue, forKey: ChatPreferences.providerKey)
+        }
         hoverOff?.cancel(); hoverOff = nil
         if !new, let recent = recentAsk, !island.context.menuOpen, !island.context.fullscreen {
             agentSelected[.ask] = recent.id
@@ -1887,6 +1894,7 @@ final class IslandDirector {
     func setAskProvider(_ p: AgentProvider) {
         guard askProvider != p, p != .ask else { return }
         askProvider = p
+        chatDefaults.set(p.rawValue, forKey: ChatPreferences.providerKey)
         if island.askOpen != nil { send(.openAsk(p)) }
     }
 

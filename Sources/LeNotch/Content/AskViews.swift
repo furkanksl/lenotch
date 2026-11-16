@@ -88,8 +88,8 @@ struct AskCardLayer: View {
                     focused = false
                     director.openAskVoice()
                 } label: {
-                    VoiceOrb(size: 26)
-                        .frame(width: 32, height: 32)
+                    VoiceOrb(size: 30)
+                        .frame(width: 30, height: 30)
                         .contentShape(Circle())
                 }
                 .buttonStyle(PressScaleStyle(pressed: 0.88, hover: 1.06))
@@ -138,7 +138,7 @@ struct AskCardLayer: View {
             .disabled(AskPrimaryAction.forProvider(p, status: chatGPT.status) == .wait)
         }
         .font(.system(size: 14))
-        .padding(.leading, 16).padding(.trailing, 5)
+        .padding(.leading, p == .codex ? 5 : 16).padding(.trailing, 5)
         .frame(height: 40)
         .background(Capsule().fill(.white.opacity(0.1)))
         .overlay(Capsule().strokeBorder(.white.opacity(focused ? 0.35 : 0.12), lineWidth: focused ? 1 : 0.5))

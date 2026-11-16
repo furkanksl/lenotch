@@ -7,7 +7,7 @@ import XCTest
 @MainActor
 final class AskTests: XCTestCase {
     private func director() -> (IslandDirector, ManualScheduler, [(String, AgentProvider, String)]) {
-        let d = IslandDirector(), s = ManualScheduler()
+        let d = IslandDirector(chatDefaults: isolatedChatDefaults()), s = ManualScheduler()
         d.schedule = s.schedule
         d.frontmostApp = { "" }
         var sent: [(String, AgentProvider, String)] = []
@@ -22,11 +22,11 @@ final class AskTests: XCTestCase {
         let (d, _, _) = director()
         d.openAsk()
         XCTAssertEqual(d.mode, .card)
-        XCTAssertEqual(d.island.askOpen, .claude)
-        XCTAssertEqual(d.groups.agentsAsk, .claude)
-        XCTAssertEqual(d.island.cardSize(player: CardSize(width: 372, height: 168, radius: 40)), CardSize(width: 420, height: 112, radius: 34))
-        d.setAskProvider(.codex)
         XCTAssertEqual(d.island.askOpen, .codex)
+        XCTAssertEqual(d.groups.agentsAsk, .codex)
+        XCTAssertEqual(d.island.cardSize(player: CardSize(width: 372, height: 168, radius: 40)), CardSize(width: 420, height: 112, radius: 34))
+        d.setAskProvider(.claude)
+        XCTAssertEqual(d.island.askOpen, .claude)
         d.closeAsk()
         XCTAssertNil(d.island.askOpen)
         XCTAssertEqual(d.mode, .idle)

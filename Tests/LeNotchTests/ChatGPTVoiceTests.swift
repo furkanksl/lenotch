@@ -170,7 +170,7 @@ final class ChatGPTVoiceSessionTests: XCTestCase {
     func testOutsideClickMinimizesAndReopensTheSameCallWithoutDisconnecting() async throws {
         let peer = VoicePeerStub(), client = VoiceClientStub()
         let voice = session(peer, client)
-        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true }, chatDefaults: isolatedChatDefaults())
         defer { director.stopAll() }
         director.openAsk(.codex)
         director.openAskVoice()
@@ -204,7 +204,7 @@ final class ChatGPTVoiceSessionTests: XCTestCase {
     func testMinimizedVoiceSurvivesOtherToolsAndProviderSwitches() async throws {
         let peer = VoicePeerStub(), client = VoiceClientStub()
         let voice = session(peer, client)
-        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true }, chatDefaults: isolatedChatDefaults())
         defer { director.stopAll() }
         director.openAsk(.codex)
         director.openAskVoice()
@@ -227,7 +227,7 @@ final class ChatGPTVoiceSessionTests: XCTestCase {
     func testLockingStopsAMinimizedVoiceForPrivacy() async {
         let peer = VoicePeerStub(), client = VoiceClientStub()
         let voice = session(peer, client)
-        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true }, chatDefaults: isolatedChatDefaults())
         defer { director.stopAll() }
         director.openAsk(.codex)
         director.openAskVoice()
@@ -244,7 +244,7 @@ final class ChatGPTVoiceSessionTests: XCTestCase {
     func testNativeMediaHostStaysAttachedWhenVoiceControlsAreMinimized() async throws {
         let peer = VoicePeerStub(), client = VoiceClientStub()
         let voice = session(peer, client)
-        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true }, chatDefaults: isolatedChatDefaults())
         let model = NotchContentModel(), frame = FrameModel()
         model.stills = true
         let host = NSHostingView(rootView: NotchContentView(model: model, frame: frame, director: director))
@@ -274,7 +274,7 @@ final class ChatGPTVoiceSessionTests: XCTestCase {
     func testMutedCallFailureStillOffersRetryWhenMinimized() async {
         let peer = VoicePeerStub(), client = VoiceClientStub()
         let voice = session(peer, client)
-        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true }, chatDefaults: isolatedChatDefaults())
         defer { director.stopAll() }
         director.openAsk(.codex)
         director.openAskVoice()
