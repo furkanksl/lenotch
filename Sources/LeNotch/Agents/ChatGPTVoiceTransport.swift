@@ -109,7 +109,7 @@ final class WebRTCVoiceTransport: NSObject, ChatGPTVoiceTransport {
             }
             try Task.checkCancellation()
             guard hostIsVisible else {
-                throw ChatGPTVoiceTransportError.bridge("The voice view isn't visible. Reopen Ask AI and try again.")
+                throw ChatGPTVoiceTransportError.bridge("The voice view isn't visible. Reopen Chat and try again.")
             }
             startupStage = "Loading the voice engine timed out. Reopen voice mode and try again."
             _ = try await command("prepare")

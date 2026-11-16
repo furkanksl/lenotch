@@ -61,9 +61,9 @@ struct SetupAgentsPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 36) {
-            SetupGroup("Ask") {
+            SetupGroup("Chat") {
                 account
-                SetupNote(text: "Ask can search and open web pages through ChatGPT, so your search queries are sent to it. No Codex CLI is needed. Claude answers use the Claude CLI on this Mac.")
+                SetupNote(text: "Chat can search and open web pages through ChatGPT, so your search queries are sent to it. No Codex CLI is needed. Claude answers use the Claude CLI on this Mac.")
             }
             SetupChatGPTVoiceSettings(connected: chatGPT.isConnected)
             SetupGroup("Coding agents") {
@@ -122,7 +122,7 @@ struct SetupAgentsPage: View {
             }
         case .disconnected, .error:
             SetupRow(icon: .chatGPT, active: false, title: "ChatGPT account",
-                     detail: "Sign in once to ask ChatGPT from the notch.") {
+                     detail: "Sign in once to chat with ChatGPT from the notch.") {
                 Button("Connect") { Task { try? await chatGPT.connect() } }
                     .buttonStyle(SetupButtonStyle(kind: .primary))
                     .accessibilityLabel("Connect ChatGPT")
@@ -173,7 +173,7 @@ struct SetupChatGPTVoiceSettings: View {
     var body: some View {
         SetupGroup("Voice mode") {
             SetupRow(icon: .audioWave, active: connected, title: "ChatGPT voice",
-                     detail: "The voice you hear in Ask AI. Changes apply to your next voice conversation.") {
+                     detail: "The voice you hear in Chat. Changes apply to your next voice conversation.") {
                 Picker("ChatGPT voice", selection: selection) {
                     ForEach(ChatGPTVoice.allCases) { voice in
                         Text(voice.name).tag(voice)
@@ -187,7 +187,7 @@ struct SetupChatGPTVoiceSettings: View {
             }
             SetupNote(text: connected
                       ? "End an active voice conversation and start a new one to hear your choice. Voice availability may vary by account."
-                      : "Connect ChatGPT above to choose a voice and talk in Ask AI.")
+                      : "Connect ChatGPT above to choose a voice and talk in Chat.")
         }
     }
 }

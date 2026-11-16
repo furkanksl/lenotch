@@ -42,6 +42,8 @@ final class ChatGPTVoiceSettingsTests: XCTestCase {
                 XCTAssertTrue(text.contains("chatgpt voice"), text)
                 XCTAssertTrue(text.contains("maple"), "Must display the saved selection, not hardcoded Cove: \(text)")
                 XCTAssertTrue(text.contains("next voice conversation"), text)
+                XCTAssertTrue(text.contains("voice you hear in chat"), text)
+                XCTAssertFalse(text.contains("ask ai"), text)
                 XCTAssertTrue(text.contains(connected ? "end an active" : "connect chatgpt"), text)
                 if let path = ProcessInfo.processInfo.environment["SETUP_SNAPSHOT_DIR"] {
                     let folder = URL(fileURLWithPath: path, isDirectory: true)

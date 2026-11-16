@@ -79,9 +79,9 @@ private struct TrayGrid: View {
         // Five tools per row, independent of playback state.
         VStack(spacing: 10) {
             HStack(spacing: 0) {
-                // Text-only Quick Ask (⌥Space).
-                Tool(icon: .ask, label: "Ask") { director.openAsk() }
-                    .help("Ask Claude or ChatGPT (⌥Space)")
+                // Chat (⌥Space).
+                Tool(icon: .ask, label: "Chat") { director.openAsk() }
+                    .help("Chat with Claude or ChatGPT (⌥Space)")
                 Tool(icon: .dictation, label: "Dictation",
                      tint: DictationCoordinator.shared.phase == .recording ? .red : nil) {
                     DictationCoordinator.shared.toggle()

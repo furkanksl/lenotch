@@ -92,7 +92,7 @@ struct AskCardLayer: View {
         .padding(2)
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.white.opacity(0.1)))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Ask")
+        .accessibilityLabel("Chat")
     }
 
     private func field(_ p: AgentProvider) -> some View {
@@ -149,7 +149,7 @@ struct AskCardLayer: View {
                     .contentShape(Circle())
             }
             .buttonStyle(PressScaleStyle(pressed: 0.85, hover: 1.06))
-            .accessibilityLabel(p == .codex && !chatGPTReady ? "Connect ChatGPT account" : "Ask")
+            .accessibilityLabel(p == .codex && !chatGPTReady ? "Connect ChatGPT account" : "Chat")
             .disabled(AskPrimaryAction.forProvider(p, status: chatGPT.status) == .wait)
         }
         .font(.system(size: 14))

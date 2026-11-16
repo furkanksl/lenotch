@@ -34,7 +34,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .appearance: "Bring your music to the lock screen and desktop. Your wallpaper always comes back."
         case .dictation: "Speak in any app. Transcribe on this Mac or with your connected ChatGPT account."
         case .notifications: "Show new notifications in the notch as they arrive."
-        case .agents: "Ask ChatGPT from the notch, and follow your Claude and Codex sessions."
+        case .agents: "Chat with ChatGPT from the notch, and follow your Claude and Codex sessions."
         case .launcher: "Open your apps, folders and websites straight from the notch."
         }
     }

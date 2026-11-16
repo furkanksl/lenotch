@@ -81,7 +81,7 @@ final class ToolIconTests: XCTestCase {
         frame.cardTop = 80
         frame.cardRadius = card.radius
         let labels = [
-            ["Ask", "Dictation", "Prompter", "Today", "Launcher"],
+            ["Chat", "Dictation", "Prompter", "Today", "Launcher"],
             ["Clipboard", "Shelf", "Shortcuts", "Usage", "Inbox"],
         ]
         let view = TrayLayer(frame: frame, director: director, card: card)
