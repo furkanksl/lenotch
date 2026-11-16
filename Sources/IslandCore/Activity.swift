@@ -3,6 +3,8 @@
 public enum ActivityID: String, CaseIterable, Sendable {
     case incoming, call, airpods, charging, battery, timer, meeting, camera, download, messages
     case prompter
+    /// A ChatGPT voice conversation keeps running when its card is minimized.
+    case voice
     /// Chess (11-06, docs/superpowers/specs/2026-11-06-chess-design.md): the opponent moved while you were elsewhere.
     case chess
     /// A Claude or Codex usage limit, and its reset (11-06, sim `aglimit` / `agback`).
@@ -56,6 +58,7 @@ public struct ActivitySpec: Sendable {
     /// short ones like the iPhone's (owner, 11-01: the short cards were cramped where there's more than one row).
     public var padding: Double {
         switch id {
+        case .voice: 0
         case .call, .meeting, .download, .messages, .incoming, .camera, .prompter,
              .chess, .agentLimit, .agentBack, .notice: 20
         default: 14
@@ -79,6 +82,7 @@ public struct ActivitySpec: Sendable {
         case .battery: "Low battery"
         case .timer: "Timer"
         case .prompter: "Prompter"
+        case .voice: "ChatGPT voice"
         case .meeting: "Next meeting"
         case .camera: "Camera"
         case .download: "Download"
@@ -121,6 +125,9 @@ public struct ActivitySpec: Sendable {
             ActivitySpec(id: .prompter, tier: .live, ear: 76,
                          card: CardSize(width: 500, height: 332, radius: 40), transient: nil, opens: true,
                          pulse: nil, colorHex: green),
+            ActivitySpec(id: .voice, tier: .ongoing, ear: 76,
+                         card: CardSize(width: 420, height: 360, radius: 34), transient: nil, opens: false,
+                         pulse: nil, colorHex: "#0A84FF"),
             ActivitySpec(id: .meeting, tier: .ongoing, ear: 80,
                          card: CardSize(width: 372, height: 126, radius: 40), transient: nil, opens: false,
                          pulse: nil, colorHex: "#0A84FF"),

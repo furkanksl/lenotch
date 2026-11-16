@@ -74,7 +74,7 @@ final class AskVoiceViewTests: XCTestCase {
                         scheme: ColorScheme, motion: IslandMotion, name: String) async throws -> String {
         let size = NSSize(width: 420, height: 360)
         let view = AskVoiceView(phase: phase, muted: muted, level: 0.6, transcript: transcript,
-                                onMute: {}, onEnd: {}, onRetry: {})
+                                onMute: {}, onEnd: {}, onRetry: {}, onMinimize: {})
             .environment(\.colorScheme, scheme)
             .environment(\.islandMotion, motion)
             .background(.black)

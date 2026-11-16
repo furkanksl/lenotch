@@ -29,7 +29,9 @@ In **Chat → ChatGPT**, the orb at the beginning of the input starts a voice co
 the account connected in **Setup → AI providers**. It is disabled while disconnected and is not
 shown on the Claude tab. Allow microphone access when prompted. The expanded card shows connection,
 listening, and speaking status, with mute, retry, and end controls. Ending voice returns to text Chat;
-closing the card, locking the Mac, or disconnecting the account stops microphone capture.
+clicking outside or minimizing the card keeps the call running in a notch indicator. Click the
+indicator to reopen the same call. **End voice**, locking the Mac, or disconnecting the account
+stops microphone capture.
 
 Choose a voice in **Setup → AI providers → Voice mode**. Cove is the default; your selection is
 saved for new conversations. End and restart an active voice conversation to apply a change.

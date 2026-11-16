@@ -78,7 +78,7 @@ struct ActivityCardLayer: View {
             let size = a.id == .notice ? card : a.spec.card
             CardPlacement(frame: frame, card: size) {
                 ActivityCard(instance: a, director: director)
-                    .padding(.horizontal, a.id == .incoming ? 20 : 18)
+                    .padding(.horizontal, a.id == .voice ? 0 : a.id == .incoming ? 20 : 18)
                     .padding(.vertical, a.spec.padding)
                     .frame(width: size.width, height: size.height)
                     .foregroundStyle(.white)
@@ -103,6 +103,11 @@ struct ActivityEars: View {
         let s = director.samples
         HStack(spacing: 7) {
             switch (instance.id, side) {
+            case (.voice, .left):
+                VoiceOrb(size: 22, active: director.askVoice.running, level: director.askVoice.level).entrance(side, 0)
+            case (.voice, .right):
+                Image(systemName: director.askVoice.muted ? "mic.slash.fill" : "waveform")
+                    .font(.system(size: 14)).foregroundStyle(IslandColor.cyan).entrance(side, 0)
             case (.incoming, .left):
                 Caller(size: 24).entrance(side, 0)
                 Text(presenting ? "Call" : "Marina").font(IslandType.ear).entrance(side, 1)
@@ -188,6 +193,7 @@ struct ActivityGlyph: View {
         let _ = director.now
         let s = director.samples
         switch instance.id {
+        case .voice: VoiceOrb(size: 24, active: director.askVoice.running, level: director.askVoice.level)
         case .incoming: Caller(size: 22)
         case .call: Image(systemName: "phone.fill").font(.system(size: 13)).foregroundStyle(IslandColor.green)
         case .airpods: BudsImage(height: 16)
@@ -217,6 +223,12 @@ struct ActivityCard: View {
 
     var body: some View {
         switch instance.id {
+        case .voice:
+            AskVoiceView(phase: director.askVoice.phase, muted: director.askVoice.muted,
+                         level: director.askVoice.level, transcript: director.askVoice.transcript,
+                         onMute: { director.askVoice.toggleMute() }, onEnd: { director.endAskVoice() },
+                         onRetry: { director.askVoice.start() }, onMinimize: { director.minimizeAskVoice() })
+                .onExitCommand { director.minimizeAskVoice() }
         case .incoming: incoming
         case .call: CallCard(director: director)
         case .airpods: airpods

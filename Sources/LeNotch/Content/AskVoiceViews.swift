@@ -18,6 +18,7 @@ struct AskVoiceView: View {
     let onMute: () -> Void
     let onEnd: () -> Void
     let onRetry: () -> Void
+    var onMinimize: (() -> Void)? = nil
 
     @Environment(\.islandMotion) private var motion
 
@@ -34,6 +35,16 @@ struct AskVoiceView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Capsule().fill(.white.opacity(0.08)))
+                if let onMinimize {
+                    Button(action: onMinimize) {
+                        Image(systemName: "minus").font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.65)).frame(width: 26, height: 26)
+                            .background(.white.opacity(0.07), in: Circle())
+                    }
+                    .buttonStyle(PressScaleStyle())
+                    .help("Minimize voice. The conversation keeps running.")
+                    .accessibilityLabel("Minimize voice")
+                }
             }
             .frame(height: 22)
 

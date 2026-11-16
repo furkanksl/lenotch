@@ -31,8 +31,11 @@ final class IslandDirector {
     let videoPlayback = VideoPlaybackState()
     @ObservationIgnored private let prompterEditor = PrompterEditor()
 
-    init(prompter: PrompterModel? = nil) {
+    init(prompter: PrompterModel? = nil, askVoice: ChatGPTVoiceSession? = nil,
+         voiceAccountConnected: @escaping () -> Bool = { ChatGPTAccount.shared.isConnected }) {
         self.prompter = prompter ?? PrompterModel()
+        self.askVoice = askVoice ?? ChatGPTVoiceSession()
+        self.voiceAccountConnected = voiceAccountConnected
         tray.onGo = { [weak self] page in
             guard let self else { return }
             if page == .launcher {
@@ -316,9 +319,9 @@ final class IslandDirector {
     }
 
     private func changed() {
-        if askVoiceOpen && (!island.opened || island.askOpen == nil || island.context.locked || island.context.presenting) {
-            askVoiceOpen = false
-            askVoice.stop()
+        if askVoiceActive && (island.context.locked || island.context.presenting) {
+            if let voice = island.running.first(where: { $0.id == .voice }) { end(serial: voice.serial) }
+            return
         }
         syncMediaFacts()
         // Never run the script unseen: alerts, HUDs, a closed card and lock all pause it.
@@ -933,6 +936,7 @@ final class IslandDirector {
 
     /// Ends a showing wherever it is: the ears, a ball, off the island.
     func end(serial: Int) {
+        if island.running.first(where: { $0.serial == serial })?.id == .voice { askVoice.stop() }
         transientEnds[serial]?.cancel(); transientEnds[serial] = nil
         if island.activity?.serial == serial { leaving?.cancel(); leaving = nil }
         send(.end(serial: serial))
@@ -1271,6 +1275,7 @@ final class IslandDirector {
         case .activity, .background:
             guard let a = island.instance(p) else { return "" }
             switch a.id {
+            case .voice: return askVoiceStatus
             case .timer: return clockText(samples.timerLeft) + " left"
             case .download: return "\(Int(transferFor(a).fraction * 100))%"
             case .meeting: return "in \(Int((meetingLeft(a) / 60).rounded(.up))) min"
@@ -1652,7 +1657,6 @@ final class IslandDirector {
     }
 
     func presentationCard(player: CardSize) -> CardSize {
-        if askVoiceOpen, island.askOpen != nil { return Self.askVoiceCard }
         if island.trayShows {
             switch tray.page {
             case .notifications: return CardSize(width: 420, height: 348, radius: 36)
@@ -1779,26 +1783,48 @@ final class IslandDirector {
     /// Who answers a new conversation (the ask card's switch). The conversation itself is `AgentProvider.ask`: its own
     /// ball, apart from the sessions the notch watches (owner, 11-07).
     private(set) var askProvider: AgentProvider = .claude
-    private(set) var askVoiceOpen = false
-    let askVoice = ChatGPTVoiceSession()
+    let askVoice: ChatGPTVoiceSession
+    @ObservationIgnored private let voiceAccountConnected: () -> Bool
+    var askVoiceActive: Bool { island.running.contains { $0.id == .voice } }
+    var askVoiceOpen: Bool { island.opened && island.cardActivity?.id == .voice }
     static let askVoiceCard = CardSize(width: 420, height: 360, radius: 34)
 
+    var askVoiceStatus: String {
+        if case .failed = askVoice.phase { return "Tap to retry" }
+        if askVoice.muted { return "Microphone muted" }
+        switch askVoice.phase {
+        case .connecting: return "Connecting"
+        case .listening: return "Listening"
+        case .thinking: return "Thinking"
+        case .speaking: return "Speaking"
+        case .failed: return "Tap to retry"
+        }
+    }
+
     func openAskVoice() {
-        guard askProvider == .codex, island.askOpen != nil, ChatGPTAccount.shared.isConnected,
+        guard askProvider == .codex, voiceAccountConnected(),
               !island.context.locked, !island.context.presenting else { return }
         replyFocused = false
         hoverOff?.cancel(); hoverOff = nil
-        askVoiceOpen = true
-        askVoice.start()
+        if let voice = island.running.first(where: { $0.id == .voice }) {
+            openCard(island.activity?.serial == voice.serial ? .activity : .background(voice.serial))
+        } else {
+            show(.voice, opened: true, sample: false)
+            askVoice.start()
+        }
         onWantsKey?()
         changed()
     }
 
+    func minimizeAskVoice() {
+        guard askVoiceOpen else { return }
+        send(.close)
+    }
+
     func endAskVoice() {
-        askVoiceOpen = false
-        askVoice.stop()
+        if let voice = island.running.first(where: { $0.id == .voice }) { end(serial: voice.serial) }
+        openAsk(.codex)
         askFocusTick += 1
-        changed()
     }
     /// The field asked for the keyboard (the panel becomes key without activating the app).
     @ObservationIgnored var onWantsKey: (() -> Void)?
@@ -1860,7 +1886,6 @@ final class IslandDirector {
 
     func setAskProvider(_ p: AgentProvider) {
         guard askProvider != p, p != .ask else { return }
-        if askVoiceOpen { endAskVoice() }
         askProvider = p
         if island.askOpen != nil { send(.openAsk(p)) }
     }
@@ -2086,7 +2111,6 @@ final class IslandDirector {
     }
 
     func stopAll() {
-        askVoiceOpen = false
         askVoice.stop()
         for t in [hudEnd, pulseLoop, closing, hoverOff, leaving, shownClear] { t?.cancel() }
         for t in transientEnds.values { t.cancel() }

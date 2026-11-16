@@ -195,6 +195,14 @@ struct NotchContentView: View {
         .environment(\.presenting, director.island.context.presenting)
         .environment(\.audioBars, model.bars)
         .environment(\.colorScheme, .dark)
+        .background(alignment: .top) {
+            // Audio outlives its controls. Keep WebKit attached to the visible notch
+            // while the voice card collapses or another tool takes its place.
+            AskVoiceMediaHost(view: director.askVoice.mediaHost)
+                .frame(width: 1, height: 1)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
         .transaction { if model.stills { $0.disablesAnimations = true } }
     }
 }

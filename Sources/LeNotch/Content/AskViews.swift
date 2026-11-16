@@ -29,21 +29,7 @@ struct AskCardLayer: View {
     var body: some View {
         if provider != nil {
             let p = director.askProvider
-            let card = director.askVoiceOpen ? IslandDirector.askVoiceCard : Island.askCard
-            CardPlacement(frame: frame, card: card) {
-                if director.askVoiceOpen {
-                    AskVoiceView(phase: director.askVoice.phase, muted: director.askVoice.muted,
-                                 level: director.askVoice.level, transcript: director.askVoice.transcript,
-                                 onMute: { director.askVoice.toggleMute() }, onEnd: { director.endAskVoice() },
-                                 onRetry: { director.askVoice.start() })
-                        .background(alignment: .topLeading) {
-                            AskVoiceMediaHost(view: director.askVoice.mediaHost)
-                                .frame(width: 1, height: 1)
-                                .allowsHitTesting(false)
-                                .accessibilityHidden(true)
-                        }
-                        .onExitCommand { director.endAskVoice() }
-                } else {
+            CardPlacement(frame: frame, card: Island.askCard) {
                     VStack(alignment: .leading, spacing: 11) {
                         HStack {
                             switcher(p)
@@ -66,7 +52,6 @@ struct AskCardLayer: View {
                     .onChange(of: chatGPT.status) { _, _ in
                         if director.askProvider == .codex && chatGPTReady { focused = true }
                     }
-                }
             }
         }
     }

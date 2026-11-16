@@ -1,5 +1,7 @@
 import AppKit
 import Foundation
+import IslandCore
+import SwiftUI
 import XCTest
 @testable import Lenotch
 
@@ -162,6 +164,126 @@ final class ChatGPTVoiceSessionTests: XCTestCase {
         XCTAssertEqual(voice.level, 1)
         peer.onEvent?(.disconnected)
         XCTAssertTrue(peer.stopped)
+        XCTAssertFalse(voice.running)
+    }
+
+    func testOutsideClickMinimizesAndReopensTheSameCallWithoutDisconnecting() async throws {
+        let peer = VoicePeerStub(), client = VoiceClientStub()
+        let voice = session(peer, client)
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        defer { director.stopAll() }
+        director.openAsk(.codex)
+        director.openAskVoice()
+        await settle()
+        peer.onEvent?(.connected)
+        peer.onEvent?(.assistantTranscript("A conversation in progress"))
+        let serial = try XCTUnwrap(director.island.running.first { $0.id == .voice }?.serial)
+
+        director.clickOutside()
+
+        XCTAssertFalse(director.askVoiceOpen)
+        XCTAssertTrue(director.askVoiceActive)
+        XCTAssertTrue(voice.running)
+        XCTAssertFalse(peer.stopped)
+        XCTAssertEqual(voice.transcript, "A conversation in progress")
+        XCTAssertEqual(director.island.activity?.id, .voice)
+        director.openAskVoice()
+        await settle()
+        XCTAssertTrue(director.askVoiceOpen)
+        XCTAssertEqual(director.island.cardActivity?.serial, serial)
+        XCTAssertEqual(client.prepareCount, 1, "Reopening must not create a second voice conversation")
+        XCTAssertFalse(peer.stopped)
+
+        director.endAskVoice()
+        XCTAssertFalse(director.askVoiceActive)
+        XCTAssertFalse(voice.running)
+        XCTAssertTrue(peer.stopped)
+        XCTAssertEqual(director.island.askOpen, .codex)
+    }
+
+    func testMinimizedVoiceSurvivesOtherToolsAndProviderSwitches() async throws {
+        let peer = VoicePeerStub(), client = VoiceClientStub()
+        let voice = session(peer, client)
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        defer { director.stopAll() }
+        director.openAsk(.codex)
+        director.openAskVoice()
+        await settle()
+        let serial = try XCTUnwrap(director.island.running.first { $0.id == .voice }?.serial)
+        director.minimizeAskVoice()
+        director.show(.timer, opened: true, sample: false)
+        director.openAsk(.claude)
+        XCTAssertTrue(voice.running)
+        XCTAssertFalse(peer.stopped)
+        director.openAsk(.codex)
+        director.openAskVoice()
+        XCTAssertEqual(director.island.cardActivity?.serial, serial)
+        XCTAssertEqual(client.prepareCount, 1)
+        director.end(serial: serial)
+        XCTAssertTrue(peer.stopped)
+        XCTAssertFalse(director.askVoiceActive)
+    }
+
+    func testLockingStopsAMinimizedVoiceForPrivacy() async {
+        let peer = VoicePeerStub(), client = VoiceClientStub()
+        let voice = session(peer, client)
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        defer { director.stopAll() }
+        director.openAsk(.codex)
+        director.openAskVoice()
+        await settle()
+        director.minimizeAskVoice()
+        var context = director.island.context
+        context.locked = true
+        director.setContext(context)
+        XCTAssertFalse(director.askVoiceActive)
+        XCTAssertFalse(voice.running)
+        XCTAssertTrue(peer.stopped)
+    }
+
+    func testNativeMediaHostStaysAttachedWhenVoiceControlsAreMinimized() async throws {
+        let peer = VoicePeerStub(), client = VoiceClientStub()
+        let voice = session(peer, client)
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        let model = NotchContentModel(), frame = FrameModel()
+        model.stills = true
+        let host = NSHostingView(rootView: NotchContentView(model: model, frame: frame, director: director))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: NotchContentView.size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { director.stopAll(); window.close() }
+        director.openAsk(.codex)
+        director.openAskVoice()
+        model.groups = director.groups
+        model.mode = director.mode
+        for _ in 0..<8 { await Task.yield(); host.layoutSubtreeIfNeeded() }
+        XCTAssertTrue(voice.mediaHost.window === window)
+        let parent = try XCTUnwrap(voice.mediaHost.superview)
+        director.clickOutside()
+        model.groups = director.groups
+        model.mode = director.mode
+        for _ in 0..<8 { await Task.yield(); host.layoutSubtreeIfNeeded() }
+        XCTAssertTrue(voice.mediaHost.window === window)
+        XCTAssertTrue(voice.mediaHost.superview === parent, "Minimizing must not reparent or detach WebKit's audio host")
+        XCTAssertFalse(voice.mediaHost.isHiddenOrHasHiddenAncestor)
+        XCTAssertTrue(voice.running)
+        XCTAssertFalse(peer.stopped)
+    }
+
+    func testMutedCallFailureStillOffersRetryWhenMinimized() async {
+        let peer = VoicePeerStub(), client = VoiceClientStub()
+        let voice = session(peer, client)
+        let director = IslandDirector(askVoice: voice, voiceAccountConnected: { true })
+        defer { director.stopAll() }
+        director.openAsk(.codex)
+        director.openAskVoice()
+        await settle()
+        voice.toggleMute()
+        director.minimizeAskVoice()
+        peer.onEvent?(.failed("The call disconnected"))
+        XCTAssertEqual(director.askVoiceStatus, "Tap to retry")
+        XCTAssertTrue(director.askVoiceActive, "A failed minimized call must remain reachable for retry or End")
         XCTAssertFalse(voice.running)
     }
 
