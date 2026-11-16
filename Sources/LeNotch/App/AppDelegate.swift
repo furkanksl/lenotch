@@ -166,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Which screen, and real or virtual notch (11-11).
         NotchMenu.shared.add(to: menu)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Setup…", action: #selector(showSetup), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Settings", action: #selector(showSetup), keyEquivalent: "").target = self
         // The debug panel (samples, chess, tuning) is for development: ⌥ held while the menu opens, or `--debug` (v1).
         if NSEvent.modifierFlags.contains(.option) || CommandLine.arguments.contains("--debug") {
             menu.addItem(withTitle: "Debug Panel", action: #selector(toggleDebug), keyEquivalent: "d").target = self
