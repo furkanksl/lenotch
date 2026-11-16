@@ -37,6 +37,30 @@ final class ChatGPTVoiceClientTests: XCTestCase {
         }
     }
 
+    func testSelectedVoicePersistsAndFallsBackToCoveForMissingOrUnknownSettings() throws {
+        let suite = "lenotch.test.voice.selection.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(ChatGPTVoice.selected(in: defaults), .cove)
+        for voice in ChatGPTVoice.allCases {
+            defaults.set(voice.rawValue, forKey: ChatGPTVoice.preferenceKey)
+            XCTAssertEqual(ChatGPTVoice.selected(in: defaults), voice)
+        }
+        defaults.set("no-longer-supported", forKey: ChatGPTVoice.preferenceKey)
+        XCTAssertEqual(ChatGPTVoice.selected(in: defaults), .cove)
+    }
+
+    func testEverySelectableVoiceIsSentAsTheSessionOutputVoice() throws {
+        for voice in ChatGPTVoice.allCases {
+            let request = try ChatGPTVoiceClient.request(offer: offer, token: "test", accountID: "test", voice: voice)
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let session = try XCTUnwrap(json["session"] as? [String: Any])
+            let audio = try XCTUnwrap(session["audio"] as? [String: Any])
+            XCTAssertEqual((audio["output"] as? [String: Any])?["voice"] as? String, voice.rawValue)
+        }
+    }
+
     func testAccountEntitlementAndRateLimitHaveDifferentRecoveryMessages() {
         XCTAssertTrue(ChatGPTVoiceClient.VoiceError.http(403).localizedDescription.contains("account"))
         XCTAssertTrue(ChatGPTVoiceClient.VoiceError.http(429).localizedDescription.contains("limit"))

@@ -11,6 +11,7 @@ protocol ChatGPTVoiceCalling: AnyObject {
 @MainActor
 final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
     private var connection: ChatGPTDictation.Connection?
+    private var voice = ChatGPTVoice.cove
     private let session: URLSession
     var onDiagnostic: ((String) -> Void)?
 
@@ -24,6 +25,7 @@ final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
     }
 
     func prepare() async throws {
+        voice = ChatGPTVoice.selected()
         connection = try await ChatGPTDictation.connection()
     }
 
@@ -35,7 +37,7 @@ final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
             try Task.checkCancellation()
             try validate(connection)
             guard credentials.accountID == connection.accountID else { throw VoiceError.accountChanged }
-            let request = try Self.request(offer: offer, token: credentials.accessToken, accountID: credentials.accountID)
+            let request = try Self.request(offer: offer, token: credentials.accessToken, accountID: credentials.accountID, voice: voice)
             let (bytes, response) = try await session.bytes(for: request)
             guard let response = response as? HTTPURLResponse else { throw VoiceError.invalidAnswer }
             if response.statusCode == 401, attempt == 0 { continue }
@@ -86,7 +88,7 @@ final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
         return fields.joined(separator: "; ")
     }
 
-    nonisolated static func request(offer: String, token: String, accountID: String) throws -> URLRequest {
+    nonisolated static func request(offer: String, token: String, accountID: String, voice: ChatGPTVoice = .cove) throws -> URLRequest {
         guard offer.utf8.count <= maximumSDPBytes, offer.hasPrefix("v=0"), offer.contains("m=audio ") else {
             throw VoiceError.invalidOffer
         }
@@ -105,7 +107,7 @@ final class ChatGPTVoiceClient: ChatGPTVoiceCalling {
             "session": [
                 "instructions": "You are the voice assistant in Lenotch, a macOS utility. Have a natural, concise spoken conversation. Respond in the user's language. You cannot access this Mac, run commands, or browse the web. Do not claim to have done so.",
                 "audio": [
-                    "output": ["voice": "cove"],
+                    "output": ["voice": voice.rawValue],
                 ],
                 "delegation": ["type": "client"],
             ],

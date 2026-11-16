@@ -31,6 +31,9 @@ shown on the Claude tab. Allow microphone access when prompted. The expanded car
 listening, and speaking status, with mute, retry, and end controls. Ending voice returns to text Ask;
 closing the card, locking the Mac, or disconnecting the account stops microphone capture.
 
+Choose a voice in **Setup → AI providers → Voice mode**. Cove is the default; your selection is
+saved for new conversations. End and restart an active voice conversation to apply a change.
+
 Microphone audio is sent to ChatGPT over WebRTC. Voice uses the experimental ChatGPT/Codex backend,
 not a separately billed OpenAI API key; account eligibility, limits, and backend availability can vary.
 Voice is a separate conversation: it does not inherit Ask's text history or execute Mac/agent tools.

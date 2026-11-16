@@ -65,6 +65,7 @@ struct SetupAgentsPage: View {
                 account
                 SetupNote(text: "Ask can search and open web pages through ChatGPT, so your search queries are sent to it. No Codex CLI is needed. Claude answers use the Claude CLI on this Mac.")
             }
+            SetupChatGPTVoiceSettings(connected: chatGPT.isConnected)
             SetupGroup("Coding agents") {
                 SetupToggleRow(icon: .terminal, title: "Agent sessions",
                                detail: "Follow Claude and Codex and answer their permission requests in the notch.",
@@ -155,6 +156,38 @@ struct SetupAgentsPage: View {
             failure = error
             changingAgents = false
             agents = HookInstaller.installed()
+        }
+    }
+}
+
+// MARK: - ChatGPT voice
+
+struct SetupChatGPTVoiceSettings: View {
+    let connected: Bool
+    @AppStorage(ChatGPTVoice.preferenceKey) private var voiceID = ChatGPTVoice.cove.rawValue
+
+    private var selection: Binding<ChatGPTVoice> {
+        Binding(get: { ChatGPTVoice(rawValue: voiceID) ?? .cove }, set: { voiceID = $0.rawValue })
+    }
+
+    var body: some View {
+        SetupGroup("Voice mode") {
+            SetupRow(icon: .audioWave, active: connected, title: "ChatGPT voice",
+                     detail: "The voice you hear in Ask AI. Changes apply to your next voice conversation.") {
+                Picker("ChatGPT voice", selection: selection) {
+                    ForEach(ChatGPTVoice.allCases) { voice in
+                        Text(voice.name).tag(voice)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 140)
+                .disabled(!connected)
+                .accessibilityIdentifier("setup-chatgpt-voice")
+            }
+            SetupNote(text: connected
+                      ? "End an active voice conversation and start a new one to hear your choice. Voice availability may vary by account."
+                      : "Connect ChatGPT above to choose a voice and talk in Ask AI.")
         }
     }
 }
