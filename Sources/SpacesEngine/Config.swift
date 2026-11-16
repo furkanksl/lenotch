@@ -16,6 +16,9 @@ enum Config {
     static let revealStartDistance: CGFloat = 0.0015
     static let liveCheckStartDistance: CGFloat = 0.2
     static let revealMaxWait: Double = 0.6
+    /// Without a picture to compare with, the live desktop is shown only after it has stopped changing for this long.
+    /// macOS draws some windows of the new desktop (the Dock, alerts) 100-150 ms after the switch itself.
+    static let liveStableTime: Double = 0.15
 
     static let scaleInset: CGFloat = 0.06
     static let fallbackCornerRadius: CGFloat = 12

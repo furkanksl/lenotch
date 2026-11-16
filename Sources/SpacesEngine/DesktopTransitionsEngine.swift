@@ -24,6 +24,12 @@ enum DesktopTransitionPollingPolicy {
         return .inspect
     }
 
+    /// Desktop pictures are plain images of the screen. A settings change keeps them unless it changes what a picture
+    /// contains (with or without the Dock) or the new style draws no pictures at all.
+    static func keepsPictures(from old: DesktopTransitionOptions, to new: DesktopTransitionOptions) -> Bool {
+        old.moveDock == new.moveDock && new.style.isDrawn
+    }
+
     static func shouldPoll(enabled: Bool, customTransition: Bool, paused: Bool, fullySetUp: Bool,
                            settingsInFront: Bool, pendingInspection: Bool) -> Bool {
         guard enabled, customTransition, !paused else { return false }
@@ -104,9 +110,10 @@ public final class DesktopTransitionsEngine {
 
     public func update(_ options: DesktopTransitionOptions) {
         guard options != self.options else { return }
+        let old = self.options
         self.options = options
-        // Cached images/layouts are only valid for the old visual configuration.
-        stopResources()
+        // The hooks restart with the new options; the desktops' pictures stay unless they no longer fit.
+        stopResources(keepPictures: DesktopTransitionPollingPolicy.keepsPictures(from: old, to: options))
         if enabled { reconcile() }
     }
 
@@ -133,6 +140,15 @@ public final class DesktopTransitionsEngine {
     public func debugStep(_ direction: Int) {
         guard active else { return }
         controller?.keyboardStep(direction)
+    }
+
+    /// Development only: the same path as a style/speed change in Setup (speed nudged, then restored).
+    public func debugRestyle() {
+        var nudged = options
+        nudged.speed = options.speed == 1 ? 1.01 : 1
+        let original = options
+        update(nudged)
+        update(original)
     }
     #endif
 
@@ -182,7 +198,8 @@ public final class DesktopTransitionsEngine {
             explicit: explicit || pendingInspection
         ) {
         case .pause:
-            stopResources(); publish(.paused); return
+            // Locked, asleep, presenting: no input hooks and nothing drawn. The pictures stay in memory for the return.
+            stopResources(keepPictures: true); publish(.paused); return
         case .deferInspection:
             // Keep explicit wake/permission/app notifications until the gesture has handed back.
             pendingInspection = pendingInspection || explicit
@@ -214,9 +231,15 @@ public final class DesktopTransitionsEngine {
             stopResources(); publish(.unsupported); return
         }
         AppSettings.shared.apply(options)
-        let controller = TransitionController(initialLayout: initialLayout, excludingProcessIDs: excludedProcessIDs)
-        self.controller = controller
-        controller.onActivityChanged = { [weak self] active in self?.setTransitioning(active) }
+        let controller: TransitionController
+        if let kept = self.controller {
+            controller = kept
+            controller.resume(with: initialLayout)
+        } else {
+            controller = TransitionController(initialLayout: initialLayout, excludingProcessIDs: excludedProcessIDs)
+            self.controller = controller
+            controller.onActivityChanged = { [weak self] active in self?.setTransitioning(active) }
+        }
         let multitouch = MultitouchMonitor()
         self.multitouch = multitouch
         multitouch.onFrame = { [weak self] fingers in
@@ -239,13 +262,19 @@ public final class DesktopTransitionsEngine {
         publish(.active(keyboard: keysInstalled, trackpad: hasTrackpad))
     }
 
-    private func stopResources() {
+    /// Removes every input hook. `keepPictures` suspends the controller with its desktop pictures instead of
+    /// releasing it; anything else (feature off, a permission withdrawn, unsupported) releases all captured pixels.
+    private func stopResources(keepPictures: Bool = false) {
         active = false
         pendingInspection = false
         ds_tap_set_suppress(false)
-        controller?.onActivityChanged = nil
-        controller?.shutdown()
-        controller = nil
+        if keepPictures, let controller {
+            controller.suspend()
+        } else {
+            controller?.onActivityChanged = nil
+            controller?.shutdown()
+            controller = nil
+        }
         setTransitioning(false)
         multitouch?.stop()
         multitouch = nil

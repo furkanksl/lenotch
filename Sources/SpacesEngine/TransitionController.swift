@@ -53,6 +53,15 @@ final class TransitionController: NSObject {
         sameSource: { $0.isSame(as: $1) }
     )
     private var knownSpaces: [String: [UInt64]] = [:]
+    /// The small grey copy of each desktop's picture, to know when the live desktop below shows the same thing.
+    private var pictureSamples: [UInt64: [UInt8]] = [:]
+    /// The picture sample of the desktop the current transition lands on, if there is a picture of it.
+    private var expectedSample: [UInt8]?
+    /// When the live desktop below last changed, during the check before the overlay goes.
+    private var liveStableSince: CFTimeInterval?
+    /// The displays the pictures were taken on. Screen-parameter notifications also come for Dock and menu-bar
+    /// changes; pictures are thrown away only when this changes.
+    private var displaySignature = TransitionController.currentDisplaySignature()
     private var wallpapers: [CGDirectDisplayID: Snapshot] = [:]
     private var wallpaperGeneration = 0
     /// Changes on shutdown as well as any cache reset. Worker completions must match it.
@@ -236,18 +245,45 @@ final class TransitionController: NSObject {
         for screen in NSScreen.screens { _ = readLayout(for: screen) }
         layout = nil
         lastSwitch = nil
+        // Arrived some other way (Mission Control, the Dock, an app's window): take this desktop's picture now, so a
+        // transition back to it shows its windows, not the wallpaper. A transition's own arrival is handled in reset().
+        guard AppSettings.shared.transition.isDrawn else { return }
+        refreshToken += 1
+        refreshCurrentSpace(refreshToken, delay: 0.4)
+    }
+
+    /// Stops all input handling and drawing, keeping the desktops' pictures. For a pause (locked, asleep, presenting)
+    /// or a settings change: the pictures are plain images of the screen and are still right afterwards.
+    func suspend() {
+        guard isEnabled else { return }
+        abort()
+        isEnabled = false
+        packing.removeAll()
+        imageUnpacker.invalidateCallbacks()
+    }
+
+    /// Continues after `suspend()` with the pictures it kept.
+    func resume(with initialLayout: SpaceLayout) {
+        guard !isEnabled else { return }
+        layoutQueries.seed(initialLayout, for: initialLayout.screen.displayID)
+        isEnabled = true
+    }
+
+    private static func currentDisplaySignature() -> [String] {
+        NSScreen.screens.map { "\($0.displayID) \($0.frame) \($0.backingScaleFactor)" }
     }
 
     func prewarm() {
         guard isEnabled, !isInstant else { return }
         let generation = lifecycleGeneration
         snapshotter.refreshDisplays { [weak self] in
-            guard let self, self.isEnabled, generation == self.lifecycleGeneration, self.phase == .idle,
-                  let screen = NSScreen.main else { return }
-            self.snapshotter.capture(screen: screen, includeDock: AppSettings.shared.dockMovesWithSpace) { [weak self] snapshot in
+            guard let self, self.isEnabled, generation == self.lifecycleGeneration, self.phase == .idle else { return }
+            // The desktop you are on gets its picture at once, not only when you first leave it.
+            self.refreshToken += 1
+            self.refreshCurrentSpace(self.refreshToken, delay: 0) { [weak self] snapshot, screen in
                 // WindowServer sets up a window, and maps its first surface, the first time it is shown: ~60 ms that
                 // the first transition would otherwise wait for. Show it once now, fully transparent.
-                guard let self, let snapshot, self.isEnabled, generation == self.lifecycleGeneration, self.phase == .idle,
+                guard let self, self.isEnabled, generation == self.lifecycleGeneration, self.phase == .idle,
                       !self.overlay.isVisible else { return }
                 self.overlay.warmUp(on: screen, with: snapshot)
             }
@@ -313,7 +349,16 @@ final class TransitionController: NSObject {
     }
 
     func displaysChanged() {
-        guard isEnabled else { return }
+        let signature = Self.currentDisplaySignature()
+        guard signature != displaySignature else { return }
+        displaySignature = signature
+        guard isEnabled else {
+            // Suspended: pictures of the old displays must not come back on resume.
+            forgetAllImages()
+            packing.removeAll()
+            wallpapers.removeAll()
+            return
+        }
         layoutQueries.invalidate()
         deferredInput.removeAll()
         deferredScreen = nil
@@ -664,6 +709,9 @@ final class TransitionController: NSObject {
         guard steps != 0 else { return }
         baseIndex = destination
         unpackNearImages()
+        #if DEBUG
+        mark("destination desktop \(destination + 1) of \(layout.spaceIDs.count): \(describeContent(at: destination))")
+        #endif
         progress = min(max(progress - CGFloat(steps), -limit), limit)
         didSwitch = true
         pumpDock()
@@ -779,7 +827,7 @@ final class TransitionController: NSObject {
         defer { knownSpaces[layout.displayUUID] = layout.spaceIDs }
         guard let before = knownSpaces[layout.displayUUID], before != layout.spaceIDs else { return }
         let removed = Set(before).subtracting(layout.spaceIDs)
-        for id in removed { cache[id] = nil; packed[id] = nil }
+        for id in removed { cache[id] = nil; packed[id] = nil; pictureSamples[id] = nil }
         cacheOrder.removeAll { removed.contains($0) }
     }
 
@@ -787,17 +835,23 @@ final class TransitionController: NSObject {
         guard isEnabled else { return }
         cache[spaceID] = snapshot
         packed[spaceID] = nil
+        pictureSamples[spaceID] = nil
         cacheOrder.removeAll { $0 == spaceID }
         cacheOrder.append(spaceID)
         while cacheOrder.count > Config.snapshotCacheLimit {
             let oldest = cacheOrder.removeFirst()
-            cache[oldest] = nil; packed[oldest] = nil
+            cache[oldest] = nil; packed[oldest] = nil; pictureSamples[oldest] = nil
+        }
+        snapshotter.sample(of: snapshot.image) { [weak self] sample in
+            // Only for the picture it was made from: a newer one may have replaced it meanwhile.
+            guard let self, let sample, self.cache[spaceID]?.image === snapshot.image else { return }
+            self.pictureSamples[spaceID] = sample
         }
     }
 
     private func forgetAllImages() {
         imageUnpacker.removeAll()
-        cache.removeAll(); packed.removeAll(); cacheOrder.removeAll()
+        cache.removeAll(); packed.removeAll(); cacheOrder.removeAll(); pictureSamples.removeAll()
     }
     private func imageIncludesDock(_ spaceID: UInt64) -> Bool? { cache[spaceID]?.includesDock ?? packed[spaceID]?.includesDock }
 
@@ -865,6 +919,17 @@ final class TransitionController: NSObject {
         // missing image must stay a placeholder, not stall a frame decoding a large file.
         return wallpapers[layout.displayID].map { .snapshot($0) } ?? .placeholder
     }
+
+    #if DEBUG
+    /// What the card at `index` shows, for the frame-detail log: a desktop's own picture (with its age) or a stand-in.
+    private func describeContent(at index: Int) -> String {
+        guard let layout, layout.spaceIDs.indices.contains(index) else { return "none" }
+        let id = layout.spaceIDs[index]
+        if let snapshot = cache[id] { return String(format: "picture %.1fs old", CACurrentMediaTime() - snapshot.capturedAt) }
+        if packed[id] != nil { return "packed" }
+        return wallpapers[layout.displayID] != nil ? "WALLPAPER" : "PLACEHOLDER"
+    }
+    #endif
 
     private func present() {
         guard isEnabled, let layout, !overlay.isVisible else { return }
@@ -983,6 +1048,14 @@ final class TransitionController: NSObject {
         guard dockIndex == baseIndex, force || (abs(progress) < Config.liveCheckStartDistance && dockHasLanded) else { return }
         stabilityStarted = true
         lastSample = nil
+        liveStableSince = nil
+        // The card shows this desktop's own picture (not the wallpaper): the live desktop is ready when it looks the same.
+        if let layout, layout.spaceIDs.indices.contains(baseIndex) {
+            let id = layout.spaceIDs[baseIndex]
+            expectedSample = cache[id] != nil || packed[id] != nil ? pictureSamples[id] : nil
+        } else {
+            expectedSample = nil
+        }
         stabilityToken += 1
         sampleLiveDesktop(stabilityToken, deadline: CACurrentMediaTime() + Config.revealMaxWait)
     }
@@ -994,7 +1067,20 @@ final class TransitionController: NSObject {
             var stable = false
             var sameOrigin = false
             if let sample {
-                if let last = self.lastSample { stable = Snapshotter.samplesMatch(last, sample) }
+                // Ready at once when every window of the picture is drawn below. Otherwise (no picture of this
+                // desktop, or it has changed since) when the live desktop has stopped changing for a while.
+                if let expected = self.expectedSample, Snapshotter.liveMatchesPicture(expected, sample) { stable = true }
+                if let last = self.lastSample, Snapshotter.samplesMatch(last, sample) {
+                    if now - (self.liveStableSince ?? now) >= Config.liveStableTime { stable = true }
+                } else {
+                    self.liveStableSince = now
+                }
+                #if DEBUG
+                let versusPicture = self.expectedSample.flatMap { Snapshotter.pictureDifference($0, sample) }
+                    .map { String(format: "picture diff %.1f/%.1f%%", $0.mean, $0.changed * 100) } ?? "no picture"
+                self.mark(String(format: "live sample: %@, unchanged %.0fms, landed %@", versusPicture,
+                                 (now - (self.liveStableSince ?? now)) * 1000, self.dockHasLanded ? "yes" : "no"))
+                #endif
                 self.lastSample = sample
                 if let origin = self.tourOriginSample, Snapshotter.samplesMatch(origin, sample, sameDesktop: true) {
                     stable = true; sameOrigin = true
@@ -1183,6 +1269,8 @@ final class TransitionController: NSObject {
         stabilityStarted = false
         liveReady = false
         lastSample = nil
+        expectedSample = nil
+        liveStableSince = nil
         refreshToken += 1
         phase = .idle
         layout = nil
@@ -1198,8 +1286,9 @@ final class TransitionController: NSObject {
         if isEnabled { packFarImages(refreshToken) }
         showMenuBarIcon?()
     }
-    private func refreshCurrentSpace(_ token: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+    private func refreshCurrentSpace(_ token: Int, delay: Double = 0.15,
+                                     completion: ((Snapshot, NSScreen) -> Void)? = nil) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, self.isEnabled, token == self.refreshToken, self.phase == .idle, !self.overlay.isVisible,
                   let layout = self.currentLayout() else { return }
             let id = layout.spaceIDs[layout.currentIndex]
@@ -1209,6 +1298,7 @@ final class TransitionController: NSObject {
                       after.spaceIDs[after.currentIndex] == id else { return }
                 self.store(snapshot, for: id)
                 self.packFarImages(token)
+                completion?(snapshot, layout.screen)
             }
         }
     }

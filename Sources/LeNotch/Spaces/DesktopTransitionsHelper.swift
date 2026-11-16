@@ -34,6 +34,14 @@ final class DesktopTransitionsHelper: NSObject, NSApplicationDelegate {
             let direction = Int(note.object as? String ?? "") ?? 0
             MainActor.assumeIsolated { self?.engine.debugStep(direction) }
         })
+        // `...debug.desktop-pause` simulates a lock/unlock, `...debug.desktop-restyle` a settings change.
+        lockObservers.append(center.addObserver(forName: Notification.Name("com.lenotch.app.debug.desktop-pause"), object: nil, queue: .main) { [weak self] note in
+            let paused = (note.object as? String) == "1"
+            MainActor.assumeIsolated { self?.engine.setSuspended(paused) }
+        })
+        lockObservers.append(center.addObserver(forName: Notification.Name("com.lenotch.app.debug.desktop-restyle"), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.engine.debugRestyle() }
+        })
         #endif
         engine.onStatus = { [weak self] status in
             self?.send(.status(status))

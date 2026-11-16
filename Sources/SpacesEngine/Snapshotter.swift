@@ -15,6 +15,8 @@ struct Snapshot {
     var patch: CGImage?
     var patchFrame = CGRect.zero
     var includesDock = true
+    /// When the pixels were taken (media clock). Tells how old a desktop's picture is when a card shows it.
+    var capturedAt = CACurrentMediaTime()
 
     /// Layer contents for this desktop: the shared surface, or the image if one could not be made.
     var layerContents: Any { surface ?? image }
@@ -359,6 +361,30 @@ final class Snapshotter {
     private static let sampleWidth = 96
     private static let sampleHeight = 60
 
+    /// The same small grey copy as `sampleBelow`, made from a stored picture: what the live desktop should look like.
+    func sample(of image: CGImage, completion: @escaping ([UInt8]?) -> Void) {
+        guard let epoch = lifetime.token() else { return }
+        let lifetime = self.lifetime
+        Self.sampleQueue.async {
+            guard lifetime.contains(epoch) else { return }
+            let sample = Self.greySample(of: image)
+            DispatchQueue.main.async { if lifetime.contains(epoch) { completion(sample) } }
+        }
+    }
+
+    private static func greySample(of image: CGImage) -> [UInt8]? {
+        var pixels = [UInt8](repeating: 0, count: sampleWidth * sampleHeight)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: sampleWidth, height: sampleHeight,
+                                          bitsPerComponent: 8, bytesPerRow: sampleWidth, space: CGColorSpaceCreateDeviceGray(),
+                                          bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(image, in: CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight))
+            return true
+        }
+        return drawn ? pixels : nil
+    }
+
     func sampleBelow(windowNumber: Int, screen: NSScreen, completion: @escaping ([UInt8]?) -> Void) {
         guard let epoch = lifetime.token() else { return }
         let key = UUID()
@@ -388,6 +414,32 @@ final class Snapshotter {
                 self.samples.finish(key, ticket: ticket, value: result)
             }
         }
+    }
+
+    /// Rows of a sample left out when the live desktop is compared with its picture: the menu bar, where LeNotch's
+    /// own notch, the clock and menu extras change by themselves and are not part of a desktop's picture.
+    static let pictureCompareSkippedRows = 2
+
+    /// The difference between a desktop's picture and the live desktop: mean grey levels, and the share of points
+    /// that differ by more than 20 levels. Both from the small grey samples.
+    static func pictureDifference(_ picture: [UInt8], _ live: [UInt8]) -> (mean: Double, changed: Double)? {
+        let skip = sampleWidth * pictureCompareSkippedRows
+        guard picture.count == live.count, picture.count > skip else { return nil }
+        var total = 0, changed = 0
+        for index in skip..<picture.count {
+            let difference = abs(Int(picture[index]) - Int(live[index]))
+            total += difference
+            if difference > 20 { changed += 1 }
+        }
+        let count = Double(picture.count - skip)
+        return (Double(total) / count, Double(changed) / count)
+    }
+
+    /// The live desktop shows what its picture shows: every window the picture has is drawn. A Dock or an alert that
+    /// macOS has not drawn yet (about 2% of the sample) is enough to fail this.
+    static func liveMatchesPicture(_ picture: [UInt8], _ live: [UInt8]) -> Bool {
+        guard let difference = pictureDifference(picture, live) else { return false }
+        return difference.mean < 2.5 && difference.changed < 0.006
     }
 
     static func samplesMatch(_ a: [UInt8], _ b: [UInt8], sameDesktop: Bool = false) -> Bool {
