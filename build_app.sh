@@ -26,6 +26,7 @@ zsh tools/build_icon.sh "$APP/Contents/Resources" "$APP/Contents/Info.plist"
 # LiquidRenderer compiles this at launch; MLX's shaders require Xcode's Metal Toolchain at build time.
 cp Sources/LeNotch/Render/LiquidShape.metal "$APP/Contents/Resources/"
 cp Resources/Hugeicons-LICENSE.txt "$APP/Contents/Resources/"
+cp Resources/Interspace-LICENSE.txt "$APP/Contents/Resources/"
 # SwiftPM dependency resources, including MLX's compiled Metal shaders and Hub tokenizer files.
 for bundle in "$BIN_DIR"/*.bundle(N); do
   ditto "$bundle" "$APP/Contents/Resources/${bundle:t}"

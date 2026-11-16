@@ -131,7 +131,7 @@ private enum SetupPermissionRequest: Equatable {
 @MainActor
 struct SetupScreenCaptureAccess {
     static let title = "Screen Recording"
-    static let detail = "Show a video’s window in the notch. No recordings are saved."
+    static let detail = "Show video in the notch and capture optional desktop transitions. No recordings are saved."
     private let preflight: () -> Bool
     private let request: () -> Bool
     private var requested = false

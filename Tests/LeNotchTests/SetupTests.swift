@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import SpacesEngine
 import Vision
 import XCTest
 @testable import Lenotch
@@ -277,6 +278,40 @@ final class SetupTests: XCTestCase {
     }
 
     // MARK: Pixels
+
+    func testDesktopTransitionControlsRenderWithoutStartingTheSystemEngine() async throws {
+        let suite = "lenotch.test.setup.spaces.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = DesktopTransitionsModel(defaults: defaults) {
+            XCTFail("Rendering settings must never create system controls")
+            return DesktopTransitionsEngine()
+        }
+        for enabled in [false, true] {
+            model.setEnabled(enabled)
+            for scheme in [ColorScheme.light, .dark] {
+                let view = ScrollView {
+                    SetupDesktopTransitions(model: model).padding(24)
+                }
+                .frame(width: 640, height: 760).background(SetupTheme.card)
+                .environment(\.colorScheme, scheme)
+                let (window, host) = makeWindow(view, size: NSSize(width: 640, height: 760), scheme: scheme)
+                defer { window.close() }
+                let result = try await render(host, name: "desktop-transitions-\(enabled)-\(scheme)")
+                let words = normalized(result.transcript)
+                XCTAssertTrue(words.contains("custom desktop transitions"), words)
+                if enabled {
+                    for text in ["transition", "lightweight", "animation speed", "swipe sensitivity", "rounded desktop corners"] {
+                        XCTAssertTrue(words.contains(text), "Missing \(text): \(words)")
+                    }
+                } else {
+                    XCTAssertTrue(words.contains("off by default"), words)
+                    XCTAssertFalse(words.contains("animation speed"), "No configuration clutter while disabled")
+                }
+            }
+        }
+        XCTAssertEqual(model.status, .off)
+    }
 
     /// Checks one pixel against a hex color. `x` and `y` are in points from the top-left. The capture is color-matched
     /// into sRGB first: the offscreen bitmap is tagged with the display's space, so its raw numbers aren't sRGB.

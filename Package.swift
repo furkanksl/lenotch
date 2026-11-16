@@ -14,6 +14,12 @@ let package = Package(
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.0"),
     ],
     targets: [
+        .target(name: "CDockSwipe", path: "Sources/CDockSwipe", publicHeadersPath: "include",
+                linkerSettings: [.linkedFramework("ApplicationServices"), .linkedLibrary("dl")]),
+        .target(name: "SpacesEngine", dependencies: ["CDockSwipe"],
+                swiftSettings: [.swiftLanguageMode(.v5)],
+                linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("QuartzCore"),
+                                 .linkedFramework("ScreenCaptureKit"), .linkedFramework("IOSurface")]),
         // The island's state model: who holds the ears, the bubble and the card, from the
         // activities and where you are on the Mac. Pure (no AppKit), so it can be unit-tested
         // and event traces replayed.
@@ -22,7 +28,7 @@ let package = Package(
             path: "Sources/IslandCore",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
-        // What's playing: runs the vendored mediaremote-adapter (the app's only private-API use,
+        // What's playing: runs the vendored mediaremote-adapter (private API,
         // in Vendor/) and falls back to the players' own notifications. No AppKit.
         .target(
             name: "NowPlaying",
@@ -32,7 +38,7 @@ let package = Package(
         .executableTarget(
             name: "Lenotch",
             dependencies: [
-                "IslandCore", "NowPlaying", .product(name: "Sparkle", package: "Sparkle"),
+                "IslandCore", "NowPlaying", "SpacesEngine", .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
@@ -63,7 +69,7 @@ let package = Package(
         ),
         .testTarget(
             name: "LenotchTests",
-            dependencies: ["Lenotch", "IslandCore"],
+            dependencies: ["Lenotch", "IslandCore", "SpacesEngine"],
             path: "Tests/LeNotchTests",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

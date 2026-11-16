@@ -23,6 +23,24 @@ Edit that document in Icon Composer rather than exporting a flat PNG. The dev wa
 
 There is no Dock or menu bar icon. Right-click the notch to open Setup or quit. Grant the permissions you want LeNotch to use in Setup.
 
+### Desktop transitions (optional)
+
+**Setup → Appearance → Desktop switching** enables Interspace-style Spaces transitions. It is **off by default**;
+when off, LeNotch installs no desktop event taps, monitors no trackpad contacts, and captures no desktop snapshots.
+Choose Instant, Lightweight, Magnetic, Hexagon, Stack, or macOS default. Speed, swipe sensitivity, rounded corners,
+and whether the Dock moves with the desktop are configurable. Existing three/four-finger trackpad gestures and the
+macOS “Move left/right a space” keyboard shortcuts are used; disabled shortcuts stay disabled.
+
+Accessibility is needed for input handling; drawn transitions also need Screen Recording. Images stay in memory and
+are discarded on disable, lock, or presentation. Reduce Motion pauses custom transitions. LeNotch does not visit your
+desktops to preload them: until a desktop has been captured, its wallpaper may be shown instead. Turning the feature
+off restores native switching and the previous shortcut enable states. These private macOS APIs can change across OS
+releases; if unavailable, native switching remains in place. Do not run a second desktop-transition app simultaneously.
+
+The implementation is adapted from [Interspace](https://github.com/cnrad/interspace) under the MIT license; notices are
+included in `Resources/Interspace-LICENSE.txt` and in the app bundle. `refs/interspace` is an ignored reference checkout,
+not a build dependency.
+
 After code changes, quit the app, rebuild, and launch it again. To build a universal release for Apple silicon and Intel, run `./build_app.sh` without `CONFIG=debug`.
 
 ### Local dictation (Apple silicon)

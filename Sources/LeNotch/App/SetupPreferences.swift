@@ -16,6 +16,7 @@ struct SetupAppearancePage: View {
                                    desktop: true, isOn: $desktopColors)
             }
             SetupNote(icon: .refresh, text: "Your original wallpaper is saved first and restored automatically.")
+            SetupDesktopTransitions()
         }
     }
 }

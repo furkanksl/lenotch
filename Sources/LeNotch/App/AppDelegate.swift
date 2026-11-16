@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             // Dictation is the notch's own: it takes the ears while it listens and works.
             DictationCoordinator.shared.onDisplayChange = { d.dictationChanged($0.indicator, transcript: $0.transcript) }
+            DesktopTransitionsModel.shared.start()
             launcherShortcutObserver = NotificationCenter.default.addObserver(forName: .launcherShortcutChanged, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.configureLauncherShortcut() }
             }
@@ -187,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAllCalendars() { MeetingWatcher.shared?.showAllCalendars() }
 
     func applicationWillTerminate(_ notification: Notification) {
+        DesktopTransitionsModel.shared.stop()
         UsageModel.shared.stop()
         launcherKey?.unregister()
         askKey?.unregister()

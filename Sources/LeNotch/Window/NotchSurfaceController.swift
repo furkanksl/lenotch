@@ -157,6 +157,7 @@ final class NotchSurfaceController {
             return (CGDisplayBounds(g.displayID), Double(g.notchHeight))
         }
         desktop.onChange = { [weak self] c in
+            DesktopTransitionsModel.shared.setSuspended(c.locked || c.presenting)
             if c.locked { self?.keys.cancelFnHold() }
             Self.log.info("context: \(c.frontmostApp, privacy: .public) fullscreen \(c.fullscreen) menu \(c.menuOpen) locked \(c.locked) mic \(c.micInUse) camera \(c.cameraInUse)")
             self?.director.systemContextChanged(c)
