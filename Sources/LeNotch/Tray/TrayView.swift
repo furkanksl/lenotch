@@ -119,7 +119,9 @@ private struct TrayGrid: View {
                  tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
         case .today: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.today) }
         case .launcher: Tool(icon: tool.icon, label: tool.menuLabel) { director.showTool(.launcher) }
-        case .clipboard: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.clipboard) }
+        case .clipboard:
+            Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.clipboard) }
+                .help(shortcutHelp("Recent clipboard items", target: .clipboard))
         case .shelf:
             Tool(icon: tool.icon, label: tool.menuLabel, badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
         case .shortcuts: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.shortcuts) }
@@ -128,8 +130,10 @@ private struct TrayGrid: View {
         case .todo:
             let left = director.todos.openCount
             Tool(icon: tool.icon, label: tool.menuLabel, badge: left == 0 ? nil : min(left, 99)) { tray.go(.todo) }
-                .help(left == 0 ? "Your to-do lists" : "\(left) to do")
-        case .notes: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.notes) }
+                .help(shortcutHelp(left == 0 ? "Your to-do lists" : "\(left) to do", target: .todo))
+        case .notes:
+            Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.notes) }
+                .help(shortcutHelp("Your notes", target: .notes))
         case .notifications:
             Tool(icon: tool.icon, label: tool.menuLabel,
                  badge: director.notificationInbox.items.isEmpty ? nil : director.notificationInbox.items.count) {
@@ -137,6 +141,11 @@ private struct TrayGrid: View {
                 tray.go(.notifications)
             }
         }
+    }
+
+    private func shortcutHelp(_ title: String, target: ToolShortcutTarget) -> String {
+        guard let binding = ToolShortcutSettings.shared.binding(for: target) else { return title }
+        return "\(title) (\(binding.display))"
     }
 }
 

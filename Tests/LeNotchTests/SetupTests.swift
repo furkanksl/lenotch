@@ -193,7 +193,7 @@ final class SetupTests: XCTestCase {
         case .notifications: (["notifications in the notch"], ["full disk access", "notification settings"])
         case .agents: (["chatgpt"], ["coding agents", "agent sessions"])
         case .launcher: (["notch preview", "configure"], ["open with"])
-        case .tools: (["tools menu", "chat", "dictation"], ["prompter", "today"])
+        case .tools: (["keyboard shortcuts", "to do", "notes", "clipboard"], ["launcher keeps"])
         }
     }
 

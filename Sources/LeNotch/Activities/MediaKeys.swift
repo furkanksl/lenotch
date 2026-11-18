@@ -344,6 +344,11 @@ final class HardwareKeyEventTap: @unchecked Sendable {
             if let port { CGEvent.tapEnable(tap: port, enable: true) }
             return false
         }
+        if ToolShortcutRecordingGate.isRecording {
+            if let action = interruptFn() { onFn?(action) }
+            swallowSpaceUp = false
+            return false
+        }
         let result = fn.withLock { $0.route(type, keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags) }
         if let action = result.action { onFn?(action) }
         if result.consume { return true }

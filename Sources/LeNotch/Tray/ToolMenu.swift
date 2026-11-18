@@ -36,13 +36,13 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .prompter: "Read a script from the notch."
         case .today: "Your calendar for the day."
         case .launcher: "Open your apps, folders and websites. Its shortcut still works."
-        case .clipboard: "Your recent copies, ready to paste again."
+        case .clipboard: "Your recent copies. Its keyboard shortcut still works when hidden."
         case .shelf: "Hold files for a moment. Dropping a file on the notch still opens it."
         case .shortcuts: "Run your Shortcuts from the notch."
         case .usage: "How much of your Claude and Codex limits you have used."
         case .system: "CPU, memory and storage on this Mac."
-        case .todo: "Lists of things to do, kept on this Mac."
-        case .notes: "Write notes and keep them on this Mac."
+        case .todo: "Lists of things to do, kept on this Mac. Its shortcut still works when hidden."
+        case .notes: "Write notes on this Mac. Its shortcut still works when hidden."
         case .notifications: "Your recent notifications, shown as Inbox. New ones still appear as banners."
         }
     }

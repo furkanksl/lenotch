@@ -3,11 +3,28 @@ import SwiftUI
 /// Setup's Tools page: one switch per tool in the notch's menu. Off removes the tool's button and nothing else.
 struct SetupToolsPage: View {
     let model: ToolMenuModel
+    let shortcuts: ToolShortcutSettings
+    @State private var recordingTarget: ToolShortcutTarget?
 
-    init(model: ToolMenuModel = .shared) { self.model = model }
+    init(model: ToolMenuModel = .shared, shortcuts: ToolShortcutSettings = .shared) {
+        self.model = model
+        self.shortcuts = shortcuts
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 36) {
+            SetupGroup("Keyboard shortcuts") {
+                ForEach(ToolShortcutTarget.allCases) { target in
+                    HStack(spacing: 16) {
+                        SetupToolTile(icon: target.icon)
+                        SetupRowText(title: target.title, detail: "Open from anywhere, even when hidden from the menu.")
+                        ToolShortcutRecorder(target: target, settings: shortcuts, recordingTarget: $recordingTarget)
+                    }
+                    .modifier(SetupRowSurface(hoverable: false))
+                    .accessibilityElement(children: .contain)
+                }
+            }
+            SetupNote(icon: .info, text: "Click a shortcut to change it. Escape cancels; Delete clears it. Use the options menu to restore a default. Launcher keeps ⌥A.")
             SetupGroup(title: "Tools menu", accessory: {
                 SetupBadge(text: "\(model.visible.count) of \(TrayTool.allCases.count) shown", tone: .neutral)
             }, content: {

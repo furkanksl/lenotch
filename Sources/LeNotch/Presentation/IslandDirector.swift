@@ -1659,6 +1659,16 @@ final class IslandDirector {
         openTray(at: page)
     }
 
+    /// Shortcut access is independent of menu visibility. Repeating the same shortcut closes its
+    /// page; a different tool switches in place. Locked/presenting Macs never reveal local content.
+    func toggleToolShortcut(_ target: ToolShortcutTarget) {
+        guard !island.context.locked, !island.context.presenting,
+              !systemContext.locked, !systemContext.presenting else { return }
+        if island.opened, island.trayShows, tray.page == target.page {
+            clickOutside()
+        } else { showTool(target.page) }
+    }
+
     func toggleLauncher() {
         showLauncher(toggle: true)
     }

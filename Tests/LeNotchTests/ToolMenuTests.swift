@@ -373,7 +373,7 @@ final class ToolMenuTests: XCTestCase {
     private func words(of page: SetupToolsPage, scheme: ColorScheme) throws -> String {
         let view = page
             .padding(24)
-            .frame(width: 700, height: 1180, alignment: .topLeading)
+            .frame(width: 700, height: 1760, alignment: .topLeading)
             .background(scheme == .dark ? Color(red: 0.09, green: 0.09, blue: 0.086) : .white)
             .environment(\.colorScheme, scheme)
         let renderer = ImageRenderer(content: view)
@@ -388,9 +388,11 @@ final class ToolMenuTests: XCTestCase {
     }
 
     func testSetupListsEveryToolWithItsCountInBothThemes() throws {
-        let model = ToolMenuModel(defaults: try defaults())
+        let store = try defaults()
+        let model = ToolMenuModel(defaults: store)
+        let shortcuts = ToolShortcutSettings(defaults: store)
         for scheme in [ColorScheme.light, .dark] {
-            let read = try words(of: SetupToolsPage(model: model), scheme: scheme)
+            let read = try words(of: SetupToolsPage(model: model, shortcuts: shortcuts), scheme: scheme)
             for tool in TrayTool.allCases {
                 XCTAssertTrue(read.contains(tool.title.lowercased()), "\(tool.title) is missing in \(scheme). Read: \(read)")
             }
@@ -402,9 +404,10 @@ final class ToolMenuTests: XCTestCase {
     }
 
     func testSetupExplainsWhyTheLastToolCannotBeTurnedOff() throws {
-        let model = ToolMenuModel(defaults: try defaults())
+        let store = try defaults()
+        let model = ToolMenuModel(defaults: store)
         for tool in TrayTool.allCases.dropFirst() { model.setEnabled(tool, false) }
-        let read = try words(of: SetupToolsPage(model: model), scheme: .light)
+        let read = try words(of: SetupToolsPage(model: model, shortcuts: ToolShortcutSettings(defaults: store)), scheme: .light)
         XCTAssertTrue(read.contains("1 of 13 shown"), read)
         XCTAssertTrue(read.contains("at least one tool stays on"), read)
     }
@@ -412,7 +415,7 @@ final class ToolMenuTests: XCTestCase {
     func testSetupSwitchesReadAndWriteTheSharedMenu() throws {
         let store = try defaults()
         let model = ToolMenuModel(defaults: store)
-        let page = SetupToolsPage(model: model)
+        let page = SetupToolsPage(model: model, shortcuts: ToolShortcutSettings(defaults: store))
         XCTAssertFalse(page.isOn(.notifications).wrappedValue)
         XCTAssertTrue(page.isOn(.chat).wrappedValue)
         page.isOn(.notifications).wrappedValue = true

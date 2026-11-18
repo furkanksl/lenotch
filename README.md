@@ -43,6 +43,12 @@ dropping files on the notch to open the Shelf, and notifications opening the inb
 in `lenotch.tools.choices` in the app's defaults, as just the tools you changed, so a tool added later starts on its
 own default.
 
+**Keyboard shortcuts** at the top of **Setup → Tools** opens To-do with **⌥T**, Notes with **⌥N**, and Clipboard with
+**⌥C** by default. Click a shortcut, then press a new key combination with Option, Control, or Command. Escape
+cancels recording; Delete clears the shortcut. Each shortcut's options menu restores its default. Conflicts with
+another tool or an unavailable system-wide shortcut are reported there. The shortcuts work even when the tool's
+menu button is hidden; pressing the same shortcut again closes that tool. Launcher keeps **⌥A**.
+
 ### To-do lists
 
 Open **To-do** from the notch tools menu. Start typing in the empty **Tasks** list, or use **+** to make another list.
