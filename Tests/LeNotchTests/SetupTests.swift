@@ -10,9 +10,9 @@ final class SetupTests: XCTestCase {
     // MARK: Structure
 
     func testSetupPagesFormOneFlatSidebarWithTheirOwnIcons() {
-        XCTAssertEqual(SetupPage.allCases, [.permissions, .appearance, .dictation, .notifications, .agents, .launcher])
+        XCTAssertEqual(SetupPage.allCases, [.permissions, .appearance, .dictation, .notifications, .agents, .launcher, .tools])
         XCTAssertEqual(SetupPage.allCases.map(\.title),
-                       ["Permissions", "Appearance", "Dictation", "Notifications", "AI & Agents", "Launcher"])
+                       ["Permissions", "Appearance", "Dictation", "Notifications", "AI & Agents", "Launcher", "Tools"])
         XCTAssertEqual(SetupPage.allCases.map(\.id), SetupPage.allCases)
         XCTAssertEqual(Set(SetupPage.allCases.map(\.icon)).count, SetupPage.allCases.count, "each page has its own icon")
         for page in SetupPage.allCases { XCTAssertFalse(page.subtitle.isEmpty, page.rawValue) }
@@ -193,6 +193,7 @@ final class SetupTests: XCTestCase {
         case .notifications: (["notifications in the notch"], ["full disk access", "notification settings"])
         case .agents: (["chatgpt"], ["coding agents", "agent sessions"])
         case .launcher: (["notch preview", "configure"], ["open with"])
+        case .tools: (["tools menu", "chat", "dictation"], ["prompter", "today"])
         }
     }
 

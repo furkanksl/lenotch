@@ -72,37 +72,62 @@ private struct TrayPages: View {
 
 // MARK: - Grid
 
-/// Two rows of tools: 40 pt rounded squares with 11 pt labels, the rows 10 pt apart.
+/// The tools that are on, five to a row: 40 pt rounded squares with 11 pt labels, the rows 10 pt apart. The card is as
+/// tall as its rows (`ToolMenuModel.cardHeight`), and a short last row keeps the columns above it, centered.
 private struct TrayGrid: View {
     let tray: TrayModel
     let director: IslandDirector
 
     var body: some View {
-        // Five tools per row, independent of playback state.
-        VStack(spacing: 10) {
-            HStack(spacing: 0) {
-                // Chat (⌥Space).
-                Tool(icon: .ask, label: "Chat") { director.openAsk() }
-                    .help("Chat with Claude or ChatGPT (⌥Space)")
-                Tool(icon: .dictation, label: "Dictation",
-                     tint: DictationCoordinator.shared.phase == .recording ? .red : nil) {
-                    DictationCoordinator.shared.toggle()
-                    director.dismissTrayForDictation()
+        let rows = director.toolMenu.rows
+        // Independent of playback state.
+        GeometryReader { proxy in
+            let cell = proxy.size.width / Double(ToolMenuModel.columns)
+            VStack(spacing: ToolMenuModel.rowSpacing) {
+                ForEach(rows.indices, id: \.self) { index in
+                    HStack(spacing: 0) {
+                        ForEach(rows[index]) { tool in
+                            button(for: tool).frame(width: cell)
+                        }
+                    }
                 }
-                .help("Start or finish dictation (⌥D)")
-                Tool(icon: .prompter, label: "Prompter", tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
-                Tool(icon: .today, label: "Today") { tray.go(.today) }
-                Tool(icon: .launcher, label: "Launcher") { director.showTool(.launcher) }
             }
-            HStack(spacing: 0) {
-                Tool(icon: .clipboard, label: "Clipboard") { tray.go(.clipboard) }
-                Tool(icon: .shelf, label: "Shelf", badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
-                Tool(icon: .shortcuts, label: "Shortcuts") { tray.go(.shortcuts) }
-                Tool(icon: .usage, label: "Usage") { tray.go(.usage) }
-                Tool(icon: .system, label: "System") { tray.go(.system) }
-            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder private func button(for tool: TrayTool) -> some View {
+        switch tool {
+        case .chat:
+            // Chat (⌥Space).
+            Tool(icon: tool.icon, label: tool.menuLabel) { director.openAsk() }
+                .help("Chat with Claude or ChatGPT (⌥Space)")
+        case .dictation:
+            Tool(icon: tool.icon, label: tool.menuLabel,
+                 tint: DictationCoordinator.shared.phase == .recording ? .red : nil) {
+                DictationCoordinator.shared.toggle()
+                director.dismissTrayForDictation()
+            }
+            .help("Start or finish dictation (⌥D)")
+        case .prompter:
+            Tool(icon: tool.icon, label: tool.menuLabel,
+                 tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
+        case .today: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.today) }
+        case .launcher: Tool(icon: tool.icon, label: tool.menuLabel) { director.showTool(.launcher) }
+        case .clipboard: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.clipboard) }
+        case .shelf:
+            Tool(icon: tool.icon, label: tool.menuLabel, badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
+        case .shortcuts: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.shortcuts) }
+        case .usage: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.usage) }
+        case .system: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.system) }
+        case .notifications:
+            Tool(icon: tool.icon, label: tool.menuLabel,
+                 badge: director.notificationInbox.items.isEmpty ? nil : director.notificationInbox.items.count) {
+                director.expandNotices(true)
+                tray.go(.notifications)
+            }
+        }
     }
 }
 

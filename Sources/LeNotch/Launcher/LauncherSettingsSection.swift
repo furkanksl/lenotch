@@ -8,9 +8,13 @@ extension Notification.Name {
 /// opens anything.
 struct LauncherSettingsSection: View {
     let model: LauncherModel
+    let toolMenu: ToolMenuModel
     @AppStorage("lenotch.launcher.shortcut") private var shortcut = true
 
-    init(model: LauncherModel = .shared) { self.model = model }
+    init(model: LauncherModel = .shared, toolMenu: ToolMenuModel = .shared) {
+        self.model = model
+        self.toolMenu = toolMenu
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 36) {
@@ -19,7 +23,9 @@ struct LauncherSettingsSection: View {
                 SetupToggleRow(icon: .keyboard, title: "Open with ⌥A",
                                detail: "Fan your places out of the notch from any app.", isOn: $shortcut) {
                     if shortcut && model.shortcutUnavailable {
-                        SetupStatusLine(kind: .info, text: "⌥A is already in use. Launcher is still available in Tools.")
+                        SetupStatusLine(kind: .info, text: toolMenu.isEnabled(.launcher)
+                                        ? "⌥A is already in use. Launcher is still available in Tools."
+                                        : "⌥A is already in use. Turn Launcher on in the Tools page to open it from the notch's menu.")
                     }
                 }
                 .onChange(of: shortcut) { NotificationCenter.default.post(name: .launcherShortcutChanged, object: nil) }

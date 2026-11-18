@@ -311,7 +311,7 @@ struct SetupIconTile: View {
 
 /// The surface every row sits on: #FAF9F7, a 16-point corner and a hairline ring; it warms under the pointer when the
 /// whole row acts.
-private struct SetupRowSurface: ViewModifier {
+struct SetupRowSurface: ViewModifier {
     var hoverable: Bool
     @State private var hovered = false
     @Environment(\.isEnabled) private var enabled
@@ -367,7 +367,7 @@ extension SetupRow where Below == EmptyView {
     }
 }
 
-private struct SetupRowText: View {
+struct SetupRowText: View {
     let title: String
     let detail: String?
     var badge: SetupBadge?

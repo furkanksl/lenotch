@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SetupPage: String, CaseIterable, Identifiable {
-    case permissions, appearance, dictation, notifications, agents, launcher
+    case permissions, appearance, dictation, notifications, agents, launcher, tools
 
     var id: Self { self }
 
@@ -14,6 +14,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .notifications: "Notifications"
         case .agents: "AI & Agents"
         case .launcher: "Launcher"
+        case .tools: "Tools"
         }
     }
 
@@ -25,6 +26,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .notifications: .bell
         case .agents: .aiBrain
         case .launcher: .grid
+        case .tools: .settings
         }
     }
 
@@ -36,6 +38,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .notifications: "Show new notifications in the notch as they arrive."
         case .agents: "Chat with ChatGPT from the notch, and follow your Claude and Codex sessions."
         case .launcher: "Open your apps, folders and websites straight from the notch."
+        case .tools: "Choose which tools the notch's menu shows. A hidden tool keeps its shortcut."
         }
     }
 }
@@ -166,6 +169,7 @@ struct SetupView: View {
             }
         case .agents: SetupAgentsPage()
         case .launcher: SetupLauncherPage()
+        case .tools: SetupToolsPage()
         }
     }
 

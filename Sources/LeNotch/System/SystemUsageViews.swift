@@ -102,7 +102,7 @@ private struct SystemMetricRow: View {
     /// The percentage is the tallest text in the row. Its line box holds ascender space above the capitals, so
     /// centering the boxes sits the tile visibly high. The tile centers on the visible content instead: from
     /// the top of the capitals to the bottom of the bar.
-    private static let capHeight: CGFloat = NSFont.systemFont(ofSize: 15, weight: .semibold).capHeight
+    private nonisolated static let capHeight: CGFloat = NSFont.systemFont(ofSize: 15, weight: .semibold).capHeight
 
     var body: some View {
         HStack(spacing: 10) {

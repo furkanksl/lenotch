@@ -33,12 +33,14 @@ final class IslandDirector {
 
     init(prompter: PrompterModel? = nil, askVoice: ChatGPTVoiceSession? = nil,
          voiceAccountConnected: @escaping () -> Bool = { ChatGPTAccount.shared.isConnected },
-         chatDefaults: UserDefaults = .standard, systemUsage: SystemUsageModel? = nil) {
+         chatDefaults: UserDefaults = .standard, systemUsage: SystemUsageModel? = nil,
+         toolMenu: ToolMenuModel? = nil) {
         self.prompter = prompter ?? PrompterModel()
         self.askVoice = askVoice ?? ChatGPTVoiceSession()
         self.voiceAccountConnected = voiceAccountConnected
         self.chatDefaults = chatDefaults
         self.systemUsage = systemUsage ?? SystemUsageModel()
+        self.toolMenu = toolMenu ?? ToolMenuModel(defaults: chatDefaults)
         self.askProvider = ChatPreferences.provider(in: chatDefaults)
         tray.onGo = { [weak self] page in
             guard let self else { return }
@@ -54,6 +56,7 @@ final class IslandDirector {
             if page != .today && island.dayLarge { send(.closeDay) }
             else { changed() }
         }
+        self.toolMenu.onChange = { [weak self] tool in self?.toolMenuChanged(tool) }
     }
 
     // Media: what's really playing (P2), or the samples while the debug panel plays them.
@@ -111,6 +114,8 @@ final class IslandDirector {
     let launcher = LauncherModel.shared
     let usage = UsageModel.shared
     let systemUsage: SystemUsageModel
+    /// Which tools the tools menu shows (Setup's Tools page).
+    let toolMenu: ToolMenuModel
     var sendNotificationReply: ((Notice, String) async throws -> String)?
     @ObservationIgnored private var notificationReplyTask: Task<Void, Never>?
     /// The pointer is over the empty notch: it swells a little to say a press opens the tray.
@@ -1685,7 +1690,22 @@ final class IslandDirector {
         if !island.trayShows, island.cardOwner == .activity, island.instance(.activity)?.id == .notice {
             return CardSize(width: 420, height: notificationInbox.expanded ? 348 : 206, radius: 36)
         }
-        return island.cardSize(player: player)
+        let card = island.cardSize(player: player)
+        // The tools menu is as tall as its rows: a row more or fewer follows the tools turned on in Setup.
+        if island.trayShows, tray.page == .main, card == Island.trayOnly {
+            return CardSize(width: card.width, height: toolMenu.cardHeight, radius: card.radius)
+        }
+        return card
+    }
+
+    /// A tool turned on or off in Setup. The menu redraws at its new height; a page of a tool just turned off
+    /// closes back to the menu, which is the one place a hidden tool's page can't be left open.
+    private func toolMenuChanged(_ tool: TrayTool) {
+        if !toolMenu.isEnabled(tool), let page = tool.page, tray.page == page, island.trayShows {
+            tray.go(.main)
+        } else {
+            changed()
+        }
     }
 
     func expandNotices(_ expanded: Bool) {

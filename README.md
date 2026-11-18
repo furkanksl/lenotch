@@ -28,7 +28,20 @@ There is no Dock or menu bar icon. Right-click the notch to open Setup or quit. 
 Open **System** from the notch tools menu to see CPU load across all cores, memory usage, and startup-disk storage.
 CPU and memory update every two seconds while the page is visible; storage refreshes every thirty seconds. Sampling
 stops when the page closes or the Mac locks. These readings stay local and require no additional permissions.
-System replaces the menu's Inbox shortcut; notification-driven inbox access is unchanged.
+System replaces the menu's Inbox button by default; notification-driven inbox access is unchanged. The Inbox button
+can come back from **Setup → Tools**.
+
+### Tools menu
+
+**Setup → Tools** has a switch for each tool in the notch's tools menu: Chat, Dictation, Prompter, Today, Launcher,
+Clipboard, Shelf, Shortcuts, Usage, System, and Notifications (shown in the menu as Inbox). Every tool is on except
+Notifications. The menu shows five tools a row and grows a row when it needs one, so turning tools off shrinks it and
+turning Notifications on adds a third row. At least one tool always stays on.
+
+Turning a tool off hides its button only. Its shortcut (⌥Space for Chat, ⌥D for Dictation, the Launcher shortcut),
+dropping files on the notch to open the Shelf, and notifications opening the inbox keep working. Your choices are stored
+in `lenotch.tools.choices` in the app's defaults, as just the tools you changed, so a tool added later starts on its
+own default.
 
 ### ChatGPT voice (experimental)
 
