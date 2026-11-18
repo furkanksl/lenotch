@@ -7,8 +7,20 @@ import XCTest
 
 @MainActor
 final class TrayPresentationTests: XCTestCase {
+    private var suites: [String] = []
+
+    override func tearDown() {
+        for suite in suites { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        suites = []
+        super.tearDown()
+    }
+
     private func director() -> IslandDirector {
-        let director = IslandDirector(prompter: PrompterModel(storageURL: nil))
+        let suite = "lenotch.test.traypresentation.\(UUID().uuidString)"
+        suites.append(suite)
+        let defaults = UserDefaults(suiteName: suite)!
+        let director = IslandDirector(prompter: PrompterModel(storageURL: nil), chatDefaults: defaults,
+                                      toolMenu: ToolMenuModel(defaults: defaults))
         let scheduler = ManualScheduler()
         director.schedule = scheduler.schedule
         director.clock = { 0 }
@@ -159,10 +171,11 @@ final class TrayPresentationTests: XCTestCase {
             recognizedLabels += (labelRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         }
         let labels = recognizedLabels.joined(separator: " ").lowercased()
-        for label in ["Chat", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "System", "To-do"] {
+        for label in ["Chat", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "System", "To-do", "Notes"] {
             XCTAssertTrue(labels.contains(label.lowercased()), "Missing tools label \(label): \(labels)")
         }
         let words = Set(labels.split(whereSeparator: \.isWhitespace))
+        XCTAssertFalse(words.contains("usage"), "Usage stays hidden until the user enables it")
         XCTAssertFalse(words.contains("inbox"), "Notifications have their own inbox access; System replaces only the menu entry")
         XCTAssertFalse(words.contains("ask"), "The conversation tool is named Chat")
         XCTAssertFalse(words.contains("play"), "Playback belongs in the player, not the tools menu")

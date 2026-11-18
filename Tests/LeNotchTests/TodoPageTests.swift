@@ -41,7 +41,9 @@ final class TodoPageTests: XCTestCase {
     }
 
     private func director(_ store: TodoStore, toolMenu: ToolMenuModel? = nil) -> IslandDirector {
-        let director = IslandDirector(prompter: PrompterModel(storageURL: nil), chatDefaults: defaults(), toolMenu: toolMenu, todos: store)
+        let preferences = defaults()
+        let director = IslandDirector(prompter: PrompterModel(storageURL: nil), chatDefaults: preferences,
+                                      toolMenu: toolMenu ?? ToolMenuModel(defaults: preferences), todos: store)
         let scheduler = ManualScheduler()
         director.schedule = scheduler.schedule
         director.clock = { 0 }
@@ -276,14 +278,18 @@ final class TodoPageTests: XCTestCase {
 
     func testToDoSitsInTheMenuWithTheNumberLeftToDo() async throws {
         let store = sampleStore()   // 5 to do across the lists
-        let withCount = try await render(director(store), page: .main)
-        XCTAssertGreaterThan(try brightPixels(withCount, in: badgeRegion(withCount)), 60, "A badge sits at the To-do tile's corner")
+        let populatedDirector = director(store)
+        let withCount = try await render(populatedDirector, page: .main)
+        let populatedBadge = try badgeRegion(withCount, model: populatedDirector.toolMenu)
+        XCTAssertGreaterThan(try brightPixels(withCount, in: populatedBadge), 60, "A badge sits at the To-do tile's corner")
         let lines = try read(withCount)
         XCTAssertNotNil(line(lines, containing: "To-do"), lines.map(\.text).joined(separator: " | "))
         XCTAssertNotNil(lines.first { $0.text == "5" }, "…and it says 5: \(lines.map(\.text))")
 
-        let none = try await render(director(TodoStore(storageURL: nil)), page: .main)
-        XCTAssertEqual(try brightPixels(none, in: badgeRegion(none)), 0, "No badge without anything to do")
+        let emptyDirector = director(TodoStore(storageURL: nil))
+        let none = try await render(emptyDirector, page: .main)
+        let emptyBadge = try badgeRegion(none, model: emptyDirector.toolMenu)
+        XCTAssertEqual(try brightPixels(none, in: emptyBadge), 0, "No badge without anything to do")
     }
 
     func testTheBadgeStopsAtNinetyNine() async throws {
@@ -296,12 +302,16 @@ final class TodoPageTests: XCTestCase {
         XCTAssertNil(lines.first { $0.text.contains("120") })
     }
 
-    /// Where the To-do tile's badge sits: its tile is alone on the third row, centered.
-    private func badgeRegion(_ rendered: Rendered) -> CGRect {
-        let cell = rendered.content.width / 5
+    /// Locate To-do in the actual menu, including centered short rows.
+    private func badgeRegion(_ rendered: Rendered, model: ToolMenuModel) throws -> CGRect {
+        let rowIndex = try XCTUnwrap(model.rows.firstIndex { $0.contains(.todo) })
+        let row = model.rows[rowIndex]
+        let columnIndex = try XCTUnwrap(row.firstIndex(of: .todo))
+        let cell = rendered.content.width / Double(ToolMenuModel.columns)
         let pitch = ToolMenuModel.rowHeight + ToolMenuModel.rowSpacing
-        let tileCenterX = rendered.content.minX + cell * 2.5
-        let tileTop = rendered.content.minY + 2 * pitch
+        let leading = Double(ToolMenuModel.columns - row.count) / 2
+        let tileCenterX = rendered.content.minX + cell * (leading + Double(columnIndex) + 0.5)
+        let tileTop = rendered.content.minY + Double(rowIndex) * pitch
         return CGRect(x: tileCenterX + 20 - 9, y: tileTop - 6, width: 22, height: 20)
     }
 

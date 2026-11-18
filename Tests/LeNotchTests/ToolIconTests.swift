@@ -8,7 +8,7 @@ final class ToolIconTests: XCTestCase {
     func testEveryToolHasANonemptyVector() {
         XCTAssertEqual(ToolIcon.allCases, [
             .ask, .dictation, .timer, .prompter, .today, .launcher,
-            .clipboard, .shelf, .shortcuts, .usage, .system, .todo, .inbox,
+            .clipboard, .shelf, .shortcuts, .usage, .system, .todo, .notes, .inbox,
         ], "Every tool must have a Hugeicons vector, including newly added tools")
         for icon in ToolIcon.allCases {
             let path = ToolIconShape(icon: icon).path(in: CGRect(x: 0, y: 0, width: 24, height: 24))
@@ -49,6 +49,16 @@ final class ToolIconTests: XCTestCase {
         }
     }
 
+    func testNotesMenuIconIsDistinctFromClipboardAndToDo() {
+        let rect = CGRect(x: 0, y: 0, width: 24, height: 24)
+        let path = ToolIconShape(icon: .notes).path(in: rect)
+        XCTAssertFalse(path.isEmpty)
+        for other in [ToolIcon.clipboard, .todo] {
+            XCTAssertNotEqual(path, ToolIconShape(icon: other).path(in: rect),
+                              "Notes should not reuse the \(other) icon")
+        }
+    }
+
     func testAllIconsRenderAtActualToolSizeAtStandardAndRetinaScale() throws {
         for scale in [1.0, 2.0] {
             for icon in ToolIcon.allCases {
@@ -68,22 +78,23 @@ final class ToolIconTests: XCTestCase {
     }
 
     func testEveryActualToolsGridButtonContainsVisibleIconPixels() throws {
-        let director = IslandDirector(prompter: PrompterModel(storageURL: nil))
+        let suite = "lenotch.test.toolicons.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let director = IslandDirector(prompter: PrompterModel(storageURL: nil), chatDefaults: defaults,
+                                      toolMenu: ToolMenuModel(defaults: defaults))
         let scheduler = ManualScheduler()
         director.schedule = scheduler.schedule
         director.clock = { 0 }
         director.realTime = { 0 }
         director.openTray()
-        let card = director.island.cardSize(player: CardSize(width: 520, height: 240, radius: 32))
+        let card = director.presentationCard(player: CardSize(width: 520, height: 240, radius: 32))
         let frame = FrameModel()
         frame.cardHalfWidth = card.halfWidth
         frame.cardHeight = card.height
         frame.cardTop = 80
         frame.cardRadius = card.radius
-        let labels = [
-            ["Chat", "Dictation", "Prompter", "Today", "Launcher"],
-            ["Clipboard", "Shelf", "Shortcuts", "Usage", "Inbox"],
-        ]
+        let rows = director.toolMenu.rows
         let view = TrayLayer(frame: frame, director: director, card: card)
             .environment(\.islandMotion, IslandMotion(reduce: true, stills: true))
             .frame(width: NotchContentView.size.width, height: NotchContentView.size.height)
@@ -92,11 +103,14 @@ final class ToolIconTests: XCTestCase {
             let renderer = ImageRenderer(content: view)
             renderer.scale = scale
             let image = try XCTUnwrap(renderer.cgImage)
-            for (row, names) in labels.enumerated() {
-                for (column, name) in names.enumerated() {
+            for (rowIndex, row) in rows.enumerated() {
+                let leading = Double(ToolMenuModel.columns - row.count) / 2
+                for (column, tool) in row.enumerated() {
+                    let name = tool.menuLabel
                     let centerX = FrameModel.cx - card.halfWidth + 20
-                        + (card.width - 40) / 5 * (Double(column) + 0.5)
-                    let top = frame.cardTop + 20 + (card.height - 40 + 10) / 2 * Double(row)
+                        + (card.width - 40) / Double(ToolMenuModel.columns) * (leading + Double(column) + 0.5)
+                    let top = frame.cardTop + ToolMenuModel.margin
+                        + (ToolMenuModel.rowHeight + ToolMenuModel.rowSpacing) * Double(rowIndex)
                     let crop = try XCTUnwrap(image.cropping(to: CGRect(
                         x: (centerX - 12) * scale, y: (top + 8) * scale,
                         width: 24 * scale, height: 24 * scale

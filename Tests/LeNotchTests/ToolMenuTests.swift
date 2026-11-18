@@ -34,21 +34,38 @@ final class ToolMenuTests: XCTestCase {
 
     // MARK: Model
 
-    func testTheMenuStartsWithElevenToolsAndNotificationsHidden() throws {
+    func testTheMenuStartsWithElevenToolsAndUsageAndNotificationsHidden() throws {
         let model = ToolMenuModel(defaults: try defaults())
         XCTAssertEqual(model.visible.map(\.title),
-                       ["Chat", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "System", "To-do"])
+                       ["Chat", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "System", "To-do", "Notes"])
+        XCTAssertFalse(model.isEnabled(.usage))
         XCTAssertFalse(model.isEnabled(.notifications))
+        XCTAssertEqual(TrayTool.allCases.count, 13)
         XCTAssertEqual(TrayTool.allCases.last, .notifications)
         XCTAssertEqual(model.rows.map { $0.map(\.menuLabel) },
                        [["Chat", "Dictation", "Prompter", "Today", "Launcher"],
-                        ["Clipboard", "Shelf", "Shortcuts", "Usage", "System"],
-                        ["To-do"]],
-                       "The first ten keep their places; To-do follows them")
+                        ["Clipboard", "Shelf", "Shortcuts", "System", "To-do"],
+                        ["Notes"]],
+                       "Notes follows To-do, while Usage starts hidden")
         XCTAssertEqual(model.cardHeight, ToolMenuModel.cardHeight(rows: 3))
         XCTAssertEqual(ToolMenuModel.cardHeight(rows: 2), Island.trayOnly.height, "Two rows are the card's long-standing height")
-        XCTAssertTrue(model.setEnabled(.todo, false))
-        XCTAssertEqual(model.cardHeight, Island.trayOnly.height, "Without To-do the menu is the two rows it always was")
+        XCTAssertTrue(model.setEnabled(.notes, false))
+        XCTAssertEqual(model.cardHeight, Island.trayOnly.height, "Hiding Notes leaves ten tools in two rows")
+    }
+
+    func testUsageCanStillBeEnabledAndItsExplicitChoiceSurvivesTheNewDefault() throws {
+        let store = try defaults()
+        let model = ToolMenuModel(defaults: store)
+        XCTAssertFalse(model.isEnabled(.usage), "Usage is off before anyone chooses otherwise")
+        XCTAssertTrue(model.setEnabled(.usage, true))
+        XCTAssertTrue(ToolMenuModel(defaults: store).isEnabled(.usage), "An explicit opt-in survives a restart")
+
+        // Choices written by an earlier version also override today's defaults.
+        store.set([TrayTool.usage.rawValue: true], forKey: ToolMenuModel.storageKey)
+        let restored = ToolMenuModel(defaults: store)
+        XCTAssertTrue(restored.isEnabled(.usage))
+        XCTAssertTrue(restored.setEnabled(.usage, false))
+        XCTAssertFalse(ToolMenuModel(defaults: store).isEnabled(.usage), "An explicit opt-out is saved too")
     }
 
     func testEveryToolHasItsOwnNameIconAndPage() {
@@ -99,6 +116,7 @@ final class ToolMenuTests: XCTestCase {
         store.set(Dictionary(uniqueKeysWithValues: TrayTool.allCases.map { ($0.rawValue, false) }), forKey: ToolMenuModel.storageKey)
         let model = ToolMenuModel(defaults: store)
         XCTAssertEqual(model.visible.count, 11, "A menu with nothing in it is a dead end")
+        XCTAssertFalse(model.isEnabled(.usage))
         XCTAssertFalse(model.isEnabled(.notifications))
         store.set("not a dictionary", forKey: ToolMenuModel.storageKey)
         XCTAssertEqual(ToolMenuModel(defaults: store).visible.count, 11)
@@ -109,12 +127,12 @@ final class ToolMenuTests: XCTestCase {
         XCTAssertEqual(model.rows.map(\.count), [5, 5, 1])
         XCTAssertTrue(model.setEnabled(.notifications, true))
         XCTAssertEqual(model.rows.map(\.count), [5, 5, 2])
-        XCTAssertEqual(model.rows[2], [.todo, .notifications])
+        XCTAssertEqual(model.rows[2], [.notes, .notifications])
         XCTAssertEqual(model.cardHeight, 237)
-        for tool in [TrayTool.todo, .notifications] { model.setEnabled(tool, false) }
+        for tool in [TrayTool.notes, .notifications] { model.setEnabled(tool, false) }
         XCTAssertEqual(model.rows.map(\.count), [5, 5])
         XCTAssertEqual(model.cardHeight, 168)
-        for tool in [TrayTool.clipboard, .shelf, .shortcuts, .usage, .system] { model.setEnabled(tool, false) }
+        for tool in [TrayTool.clipboard, .shelf, .shortcuts, .system, .todo] { model.setEnabled(tool, false) }
         XCTAssertEqual(model.rows.map(\.count), [5])
         XCTAssertEqual(model.cardHeight, 99)
         XCTAssertEqual(ToolMenuModel.cardHeight(rows: 0), 99, "Never shorter than one row")
@@ -130,16 +148,37 @@ final class ToolMenuTests: XCTestCase {
             changes.append((tool, model.isEnabled(tool),
                             (store.dictionary(forKey: ToolMenuModel.storageKey) as? [String: Bool])?[tool.rawValue] == model.isEnabled(tool)))
         }
-        model.setEnabled(.usage, true)   // already on: nothing changes
-        model.setEnabled(.usage, false)
-        model.setEnabled(.usage, false)
-        model.setEnabled(.usage, true)
-        XCTAssertEqual(changes.map(\.0), [.usage, .usage])
+        model.setEnabled(.system, true)   // already on: nothing changes
+        model.setEnabled(.system, false)
+        model.setEnabled(.system, false)
+        model.setEnabled(.system, true)
+        XCTAssertEqual(changes.map(\.0), [.system, .system])
         XCTAssertEqual(changes.map(\.1), [false, true])
         XCTAssertTrue(changes.allSatisfy(\.2), "The choice is stored before anyone is told")
     }
 
     // MARK: Director
+
+    func testNotesHasItsOwnMenuIdentityAndCanBeHiddenWithoutBlockingItsPage() throws {
+        XCTAssertEqual(TrayTool.notes.title, "Notes")
+        XCTAssertEqual(TrayTool.notes.menuLabel, "Notes")
+        XCTAssertEqual(TrayTool.notes.icon, .notes)
+        XCTAssertEqual(TrayTool.notes.page, .notes)
+        XCTAssertTrue(TrayTool.notes.enabledByDefault)
+
+        let store = try defaults()
+        let model = ToolMenuModel(defaults: store)
+        let director = director(model, defaults: store)
+        director.showTool(.notes)
+        XCTAssertEqual(director.tray.page, .notes)
+        XCTAssertTrue(director.groups.tray)
+        model.setEnabled(.notes, false)
+        XCTAssertFalse(model.visible.contains(.notes))
+        XCTAssertEqual(director.tray.page, .main, "Hiding the open tool returns to the menu")
+        XCTAssertFalse(ToolMenuModel(defaults: store).isEnabled(.notes), "The visibility choice survives a restart")
+        director.showTool(.notes)
+        XCTAssertEqual(director.tray.page, .notes, "Hiding the menu button does not disable Notes")
+    }
 
     func testTheMenuCardFollowsTheRowsAndKeepsItsWidth() throws {
         let store = try defaults()
@@ -147,13 +186,13 @@ final class ToolMenuTests: XCTestCase {
         let director = director(model, defaults: store)
         director.openTray()
         XCTAssertEqual(director.presentationCard(player: player), CardSize(width: 372, height: 237, radius: 34),
-                       "The default menu is three rows, To-do alone on the last")
-        model.setEnabled(.todo, false)
+                       "The default menu is three rows, Notes alone on the last")
+        model.setEnabled(.notes, false)
         XCTAssertEqual(director.presentationCard(player: player), Island.trayOnly)
         model.setEnabled(.notifications, true)
-        model.setEnabled(.todo, true)
+        model.setEnabled(.notes, true)
         XCTAssertEqual(director.presentationCard(player: player), CardSize(width: 372, height: 237, radius: 34))
-        for tool in [TrayTool.clipboard, .shelf, .shortcuts, .usage, .system, .todo, .notifications] { model.setEnabled(tool, false) }
+        for tool in [TrayTool.clipboard, .shelf, .shortcuts, .usage, .system, .todo, .notes, .notifications] { model.setEnabled(tool, false) }
         XCTAssertEqual(director.presentationCard(player: player), CardSize(width: 372, height: 99, radius: 34))
 
         // The shape the notch grows into is the one the card reports.
@@ -252,8 +291,10 @@ final class ToolMenuTests: XCTestCase {
         return centers
     }
 
-    private func labels(in menu: RenderedMenu, row: Int, tileTop: Double) throws -> [(text: String, centerX: Double)] {
-        let rect = CGRect(x: menu.left + 4, y: tileTop + 41, width: menu.card.width - 8, height: 22)
+    private func labels(in menu: RenderedMenu, cellCenter: Double, cellWidth: Double,
+                        tileTop: Double) throws -> [(text: String, centerX: Double)] {
+        // Reading a whole row lets Vision merge adjacent labels, biasing their bounding boxes.
+        let rect = CGRect(x: cellCenter - cellWidth / 2, y: tileTop + 41, width: cellWidth, height: 22)
         let crop = try XCTUnwrap(menu.image.cropping(to: CGRect(x: rect.minX * 2, y: rect.minY * 2,
                                                               width: rect.width * 2, height: rect.height * 2)))
         let request = VNRecognizeTextRequest()
@@ -264,6 +305,10 @@ final class ToolMenuTests: XCTestCase {
         return (request.results ?? []).compactMap { observation in
             observation.topCandidates(1).first.map { ($0.string, rect.minX + observation.boundingBox.midX * rect.width) }
         }
+    }
+
+    private func normalizedLabel(_ text: String) -> String {
+        text.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
     private func assertMenu(_ tools: Set<TrayTool>, rows expectedRows: [[TrayTool]], file: StaticString = #filePath, line: UInt = #line) throws {
@@ -288,9 +333,9 @@ final class ToolMenuTests: XCTestCase {
             for (found, want) in zip(centers, expected) {
                 XCTAssertEqual(found, want, accuracy: 1.5, "Row \(index) keeps the columns", file: file, line: line)
             }
-            let read = try labels(in: menu, row: index, tileTop: tileTop)
             for (position, tool) in row.enumerated() {
-                let match = read.first { $0.text.lowercased().contains(tool.menuLabel.lowercased()) }
+                let read = try labels(in: menu, cellCenter: expected[position], cellWidth: cell, tileTop: tileTop)
+                let match = read.first { normalizedLabel($0.text) == normalizedLabel(tool.menuLabel) }
                 XCTAssertNotNil(match, "Row \(index) is missing \(tool.menuLabel). Read: \(read.map(\.text))", file: file, line: line)
                 if let match {
                     XCTAssertEqual(match.centerX, expected[position], accuracy: 6, "\(tool.menuLabel) sits under its tile", file: file, line: line)
@@ -299,23 +344,23 @@ final class ToolMenuTests: XCTestCase {
         }
     }
 
-    func testTheDefaultMenuDrawsThreeRowsWithToDoCentered() throws {
+    func testTheDefaultMenuDrawsThreeRowsWithNotesCentered() throws {
         let defaultTools = Set(TrayTool.allCases.filter(\.enabledByDefault))
         try assertMenu(defaultTools, rows: [[.chat, .dictation, .prompter, .today, .launcher],
-                                            [.clipboard, .shelf, .shortcuts, .usage, .system],
-                                            [.todo]])
+                                            [.clipboard, .shelf, .shortcuts, .system, .todo],
+                                            [.notes]])
     }
 
-    func testTwoRowsDrawTheLongStandingMenu() throws {
-        let tools = Set(TrayTool.allCases.filter { $0.enabledByDefault && $0 != .todo })
+    func testHidingNotesFitsTheOtherDefaultToolsInTwoRows() throws {
+        let tools = Set(TrayTool.allCases.filter { $0.enabledByDefault && $0 != .notes })
         try assertMenu(tools, rows: [[.chat, .dictation, .prompter, .today, .launcher],
-                                     [.clipboard, .shelf, .shortcuts, .usage, .system]])
+                                     [.clipboard, .shelf, .shortcuts, .system, .todo]])
     }
 
-    func testAnInboxJoinsToDoOnTheThirdRowCentered() throws {
+    func testAllEnabledToolsCenterToDoNotesAndInboxOnTheThirdRow() throws {
         try assertMenu(Set(TrayTool.allCases), rows: [[.chat, .dictation, .prompter, .today, .launcher],
                                                       [.clipboard, .shelf, .shortcuts, .usage, .system],
-                                                      [.todo, .notifications]])
+                                                      [.todo, .notes, .notifications]])
     }
 
     func testAFewToolsDrawOneShortCenteredRow() throws {
@@ -350,7 +395,7 @@ final class ToolMenuTests: XCTestCase {
                 XCTAssertTrue(read.contains(tool.title.lowercased()), "\(tool.title) is missing in \(scheme). Read: \(read)")
             }
             XCTAssertTrue(read.contains("tools menu"), read)
-            XCTAssertTrue(read.contains("11 of 12 shown"), "The default menu shows eleven of the twelve: \(read)")
+            XCTAssertTrue(read.contains("11 of 13 shown"), "The default menu shows eleven of the thirteen: \(read)")
             XCTAssertFalse(read.contains("at least one tool"), "The reminder shows only when one tool is left")
             XCTAssertTrue(read.contains("shortcut"), "The page says what hiding a tool leaves working: \(read)")
         }
@@ -360,7 +405,7 @@ final class ToolMenuTests: XCTestCase {
         let model = ToolMenuModel(defaults: try defaults())
         for tool in TrayTool.allCases.dropFirst() { model.setEnabled(tool, false) }
         let read = try words(of: SetupToolsPage(model: model), scheme: .light)
-        XCTAssertTrue(read.contains("1 of 12 shown"), read)
+        XCTAssertTrue(read.contains("1 of 13 shown"), read)
         XCTAssertTrue(read.contains("at least one tool stays on"), read)
     }
 

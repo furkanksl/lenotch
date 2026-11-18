@@ -34,8 +34,8 @@ can come back from **Setup → Tools**.
 ### Tools menu
 
 **Setup → Tools** has a switch for each tool in the notch's tools menu: Chat, Dictation, Prompter, Today, Launcher,
-Clipboard, Shelf, Shortcuts, Usage, System, To-do, and Notifications (shown in the menu as Inbox). Every tool is on except
-Notifications. The menu shows five tools a row and grows a row when it needs one, so turning tools off shrinks it and
+Clipboard, Shelf, Shortcuts, Usage, System, To-do, Notes, and Notifications (shown in the menu as Inbox). Every tool is on except
+Usage and Notifications. The menu shows five tools a row and grows a row when it needs one, so turning tools off shrinks it and
 short rows stay centered. At least one tool always stays on.
 
 Turning a tool off hides its button only. Its shortcut (⌥Space for Chat, ⌥D for Dictation, the Launcher shortcut),
@@ -57,6 +57,18 @@ Lists, task titles, completion state, and the selected list are saved after ever
 `~/Library/Application Support/lenotch/todos.json`. There is no database, account, or network sync. The file is
 written atomically; an unreadable file is preserved before replacement, and an unsupported newer format is never
 overwritten. Storage problems are reported on the To-do page.
+
+### Notes
+
+Open **Notes** from the tools menu for a title-and-preview list of your notes, newest edited first. Use **New note**
+to start one. A note has a title and a plain-text body; Return in the title moves to the multiline editor. Changes
+save as you type, including line breaks and Unicode. The back button returns to all notes. Delete a note from the
+editor or a note's context menu, with **Undo** available for six seconds.
+
+Notes are stored only in `~/Library/Application Support/lenotch/notes.json`, next to your To-do lists. There is no
+database or network sync. The selected note is restored after a restart; unreadable files are preserved before a
+replacement is saved, and newer unsupported formats are never overwritten. **Setup → Tools** controls the Notes
+button. Usage and Notifications are off by default and can be turned back on there.
 
 ### ChatGPT voice (experimental)
 

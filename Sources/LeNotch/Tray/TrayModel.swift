@@ -6,7 +6,7 @@ import Observation
 /// decides when the tray shows; this decides what's in it.
 @MainActor @Observable
 final class TrayModel {
-    enum Page: String, CaseIterable, Sendable { case main, timer, clipboard, shelf, shortcuts, today, prompter, launcher, usage, system, todo, notifications }
+    enum Page: String, CaseIterable, Sendable { case main, timer, clipboard, shelf, shortcuts, today, prompter, launcher, usage, system, todo, notes, notifications }
 
     struct Clip: Equatable, Identifiable {
         let id: Int

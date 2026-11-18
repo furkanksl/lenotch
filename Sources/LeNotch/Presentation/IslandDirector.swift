@@ -30,15 +30,17 @@ final class IslandDirector {
     let prompter: PrompterModel
     /// The to-do lists. Without one given the director keeps them in memory only, so a test never touches the real file.
     let todos: TodoStore
+    let notes: NotesStore
     let videoPlayback = VideoPlaybackState()
     @ObservationIgnored private let prompterEditor = PrompterEditor()
 
     init(prompter: PrompterModel? = nil, askVoice: ChatGPTVoiceSession? = nil,
          voiceAccountConnected: @escaping () -> Bool = { ChatGPTAccount.shared.isConnected },
          chatDefaults: UserDefaults = .standard, systemUsage: SystemUsageModel? = nil,
-         toolMenu: ToolMenuModel? = nil, todos: TodoStore? = nil) {
+         toolMenu: ToolMenuModel? = nil, todos: TodoStore? = nil, notes: NotesStore? = nil) {
         self.prompter = prompter ?? PrompterModel()
         self.todos = todos ?? TodoStore(storageURL: nil)
+        self.notes = notes ?? NotesStore(storageURL: nil)
         self.askVoice = askVoice ?? ChatGPTVoiceSession()
         self.voiceAccountConnected = voiceAccountConnected
         self.chatDefaults = chatDefaults
@@ -1688,6 +1690,7 @@ final class IslandDirector {
             case .usage: return CardSize(width: 480, height: 266, radius: 36)
             case .system: return CardSize(width: 400, height: 208, radius: 36)
             case .todo: return CardSize(width: 440, height: 324, radius: 36)
+            case .notes: return CardSize(width: 460, height: 348, radius: 36)
             default: break
             }
         }

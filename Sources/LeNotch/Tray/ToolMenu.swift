@@ -3,7 +3,7 @@ import Observation
 
 /// One entry of the notch's tools menu, in the order the menu lists them.
 enum TrayTool: String, CaseIterable, Identifiable {
-    case chat, dictation, prompter, today, launcher, clipboard, shelf, shortcuts, usage, system, todo, notifications
+    case chat, dictation, prompter, today, launcher, clipboard, shelf, shortcuts, usage, system, todo, notes, notifications
 
     var id: Self { self }
 
@@ -21,6 +21,7 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .usage: "Usage"
         case .system: "System"
         case .todo: "To-do"
+        case .notes: "Notes"
         case .notifications: "Notifications"
         }
     }
@@ -41,6 +42,7 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .usage: "How much of your Claude and Codex limits you have used."
         case .system: "CPU, memory and storage on this Mac."
         case .todo: "Lists of things to do, kept on this Mac."
+        case .notes: "Write notes and keep them on this Mac."
         case .notifications: "Your recent notifications, shown as Inbox. New ones still appear as banners."
         }
     }
@@ -58,6 +60,7 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .usage: .usage
         case .system: .system
         case .todo: .todo
+        case .notes: .notes
         case .notifications: .inbox
         }
     }
@@ -74,12 +77,13 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .usage: .usage
         case .system: .system
         case .todo: .todo
+        case .notes: .notes
         case .notifications: .notifications
         }
     }
 
-    /// Everything but the notifications is on, as the menu has always been.
-    var enabledByDefault: Bool { self != .notifications }
+    /// Usage and Notifications are opt-in; existing explicit choices remain available.
+    var enabledByDefault: Bool { self != .notifications && self != .usage }
 }
 
 /// Which tools the menu shows. Only the choices the person made are stored, so a tool added later still takes its

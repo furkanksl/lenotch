@@ -49,6 +49,8 @@ private struct TrayPages: View {
                     SystemUsagePage(model: director.systemUsage, back: { tray.go(.main) })
                 case .todo:
                     TodoPage(tray: tray, director: director, store: director.todos)
+                case .notes:
+                    NotesPage(tray: tray, director: director, store: director.notes)
                 case .notifications:
                     if !director.notificationInbox.expanded, let notice = director.notificationInbox.selected {
                         VStack(spacing: 8) {
@@ -127,6 +129,7 @@ private struct TrayGrid: View {
             let left = director.todos.openCount
             Tool(icon: tool.icon, label: tool.menuLabel, badge: left == 0 ? nil : min(left, 99)) { tray.go(.todo) }
                 .help(left == 0 ? "Your to-do lists" : "\(left) to do")
+        case .notes: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.notes) }
         case .notifications:
             Tool(icon: tool.icon, label: tool.menuLabel,
                  badge: director.notificationInbox.items.isEmpty ? nil : director.notificationInbox.items.count) {
