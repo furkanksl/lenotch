@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import SwiftUI
 import Vision
 import XCTest
@@ -6,6 +7,49 @@ import XCTest
 
 @MainActor
 final class ChatGPTDictationSetupTests: XCTestCase {
+    func testDictationUsesTheSharedShortcutAndNeverWritesTheLegacyToggle() async throws {
+        let suite = "lenotch.test.setup.dictation-shortcut.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(DictationProvider.chatGPT.rawValue, forKey: DictationProvider.preferenceKey)
+        defaults.set(false, forKey: DictationInputSettings.pushToTalkKey)
+        defaults.set(false, forKey: DictationInputSettings.toggleShortcutKey)
+        let shortcuts = ToolShortcutSettings(defaults: defaults)
+        let remapped = ToolKeyBinding(keyCode: kVK_F12, modifiers: cmdKey | shiftKey)
+        XCTAssertTrue(shortcuts.setBinding(remapped, for: .dictation))
+
+        for binding in [remapped, nil] {
+            XCTAssertTrue(shortcuts.setBinding(binding, for: .dictation))
+            shortcuts.setRegistrationFailures(binding == nil ? [:] : [.dictation: "Shortcut registration failed"])
+            for scheme in [ColorScheme.light, .dark] {
+                let view = SetupDictationPage(reviewAccess: {}, shortcutSettings: shortcuts)
+                    .padding(24)
+                    .frame(width: 656)
+                    .background(SetupTheme.card)
+                    .defaultAppStorage(defaults)
+                    .environment(\.colorScheme, scheme)
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 2
+                let image = try XCTUnwrap(renderer.cgImage)
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .accurate
+                request.usesLanguageCorrection = false
+                try VNImageRequestHandler(cgImage: image).perform([request])
+                let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+                    .joined(separator: " ").lowercased()
+                for label in ["keyboard shortcut", "configure", "hold fn to talk"] {
+                    XCTAssertTrue(text.contains(label), "Missing \(label): \(text)")
+                }
+                XCTAssertTrue(text.contains(binding == nil ? "dictate from the notch" : "f12"), text)
+                XCTAssertEqual(text.contains("not set"), binding == nil, text)
+                XCTAssertEqual(text.contains("shortcut registration failed"), binding != nil, text)
+                XCTAssertFalse(text.contains("toggle dictation with"), "Shortcuts are configured only in Tools: \(text)")
+                XCTAssertFalse(defaults.bool(forKey: DictationInputSettings.toggleShortcutKey))
+                XCTAssertEqual(shortcuts.binding(for: .dictation), binding)
+            }
+        }
+    }
+
     func testChatGPTSettingsRenderWithoutSpeechModelDownloadsInBothThemes() async throws {
         let suite = "lenotch.test.setup.chatgpt.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

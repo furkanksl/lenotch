@@ -174,7 +174,22 @@ final class ToolShortcutRecorderTests: XCTestCase {
         XCTAssertEqual(result.levels, 0)
     }
 
-    func testToolsPageExposesThreeNamedRecorderButtonsAndTheirDefaultValuesInBothThemes() async throws {
+    func testLegacyOptionSpacePassesThroughWhenTheUnifiedShortcutOwnsChat() throws {
+        let calls = Mutex(0)
+        let tap = HardwareKeyEventTap(onLevel: { _ in }, onAsk: { calls.withLock { $0 += 1 } },
+                                      interceptsLegacyAskShortcut: false)
+        let down = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Space), keyDown: true))
+        down.flags = .maskAlternate
+        XCTAssertTrue(try XCTUnwrap(tap.route(.keyDown, event: down)).takeUnretainedValue() === down)
+        down.setIntegerValueField(.keyboardEventAutorepeat, value: 1)
+        XCTAssertNotNil(tap.route(.keyDown, event: down))
+        let up = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Space), keyDown: false))
+        up.flags = .maskAlternate
+        XCTAssertTrue(try XCTUnwrap(tap.route(.keyUp, event: up)).takeUnretainedValue() === up)
+        XCTAssertEqual(calls.withLock { $0 }, 0, "The legacy handler must not double-fire the configurable Chat shortcut")
+    }
+
+    func testToolsPageExposesAllNamedRecorderButtonsAndConfiguredValuesInBothThemes() async throws {
         for scheme in [ColorScheme.light, .dark] {
             let settings = try settings()
             let suite = "lenotch.test.shortcut-page.\(UUID().uuidString)"
@@ -188,12 +203,13 @@ final class ToolShortcutRecorderTests: XCTestCase {
             try await prepareAccessibilityHost(host)
             let buttons = accessibilityNodes(host).filter { $0.accessibilityRole() == .button }
             let recorders = buttons.filter { $0.accessibilityLabel()?.hasPrefix("Change ") == true }
-            XCTAssertEqual(recorders.count, 3)
-            for (target, value) in zip(ToolShortcutTarget.allCases, ["⌥T", "⌥N", "⌥C"]) {
+            XCTAssertEqual(recorders.count, 13)
+            for target in ToolShortcutTarget.allCases {
                 let button = try XCTUnwrap(recorders.first { $0.accessibilityLabel() == "Change \(target.title) shortcut" })
-                XCTAssertEqual(button.accessibilityValue() as? String, value)
-                XCTAssertTrue(accessibilityNodes(host).contains { $0.accessibilityLabel() == "\(target.title) shortcut options" })
+                XCTAssertEqual(button.accessibilityValue() as? String, settings.binding(for: target)?.display ?? "Not set")
             }
+            XCTAssertFalse(accessibilityNodes(host).contains { $0.accessibilityLabel()?.hasSuffix("shortcut options") == true },
+                           "The unified rows use compact recorders, not a second options column")
             XCTAssertFalse(settings.isRecording, "Displaying Settings must not begin recording or register shortcuts")
         }
     }
@@ -294,7 +310,7 @@ final class ToolShortcutRecorderTests: XCTestCase {
         XCTAssertEqual(settings.binding(for: .notes), ToolShortcutTarget.notes.defaultBinding)
     }
 
-    func testKeyboardShortcutSectionRendersThreeRowsBeforeToolTogglesInBothThemes() throws {
+    func testUnifiedToolListRendersAllToolsAndShortcutControlsInBothThemes() throws {
         let settings = try settings()
         let suite = "lenotch.test.shortcut-page-ocr.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -316,16 +332,29 @@ final class ToolShortcutRecorderTests: XCTestCase {
                 guard let text = observation.topCandidates(1).first?.string.lowercased() else { return nil }
                 return (text, observation.boundingBox)
             }
-            let tools = try XCTUnwrap(rows.first { $0.text.contains("tools menu") }, "Missing Tools menu heading in \(scheme)")
-            let shortcutRows = rows.filter { $0.bounds.minY > tools.bounds.maxY }
-            let text = shortcutRows.map(\.text).joined(separator: " ")
-            XCTAssertTrue(text.contains("keyboard shortcuts"), "\(scheme): \(text)")
-            for title in ["to-do", "notes", "clipboard"] {
-                XCTAssertEqual(shortcutRows.filter { $0.text == title }.count, 1,
-                               "Each shortcut row appears once, before the toggles in \(scheme): \(text)")
+            let text = rows.map(\.text).joined(separator: " ")
+            for label in ["your tools", "shortcut", "in menu", "restore order", "preview menu"] {
+                XCTAssertTrue(text.contains(label), "Missing \(label) in \(scheme): \(text)")
             }
-            XCTAssertEqual(shortcutRows.filter { $0.text.contains("open from anywhere") }.count, 3,
-                           "All three shortcut rows have their explanation in \(scheme): \(text)")
+            XCTAssertEqual(ToolShortcutTarget.allCases.count, 13)
+            // The dedicated menu/row tests verify every title's pixel position. Here use
+            // representative enabled rows: Vision may omit dimmed hidden-tool labels.
+            for target in [ToolShortcutTarget.chat, .clipboard, .todo, .notes] {
+                let title = target.title.lowercased()
+                // Vision can group the icon, name and shortcut into one observation. Match
+                // complete words in the transcript instead of relying on OCR line breaks.
+                let name = target == .todo ? "to[\\s\\p{Pd}]*do" : NSRegularExpression.escapedPattern(for: title)
+                let pattern = "(?<![\\p{L}\\p{N}])\(name)(?![\\p{L}\\p{N}])"
+                XCTAssertNotNil(text.range(of: pattern, options: .regularExpression),
+                                "Missing tool \(title) in \(scheme): \(text)")
+            }
+            let emptyControls = try NSRegularExpression(pattern: "\\badd\\s+shortcut\\b")
+                .numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text))
+            XCTAssertEqual(emptyControls, 7,
+                           "Tools without default bindings still expose assignment: \(text)")
+            XCTAssertFalse(text.contains("keyboard shortcuts"), "Do not restore a separate shortcut section: \(text)")
+            XCTAssertFalse(text.contains("open from anywhere"), "Rows should use the compact unified recorder: \(text)")
+            XCTAssertTrue(text.contains("fn hold works independently"), text)
             XCTAssertFalse(settings.isRecording)
         }
     }

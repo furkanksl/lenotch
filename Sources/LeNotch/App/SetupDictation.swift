@@ -2,14 +2,19 @@ import SwiftUI
 
 struct SetupDictationPage: View {
     var reviewAccess: () -> Void
+    let shortcutSettings: ToolShortcutSettings
 
     @AppStorage("lenotch.dictation.model") private var selectedModel = "fluidSpeechPro"
     @AppStorage("lenotch.dictation.cleanup") private var cleanupEnabled = false
     @AppStorage(DictationProvider.preferenceKey) private var providerID = DictationProvider.local.rawValue
     @AppStorage(DictationInputSettings.pushToTalkKey) private var pushToTalk = false
-    @AppStorage(DictationInputSettings.toggleShortcutKey) private var toggleShortcut = true
     private let dictation = DictationCoordinator.shared
     @ObservedObject private var chatGPT = ChatGPTAccount.shared
+
+    init(reviewAccess: @escaping () -> Void, shortcutSettings: ToolShortcutSettings = .shared) {
+        self.reviewAccess = reviewAccess
+        self.shortcutSettings = shortcutSettings
+    }
 
     private var model: DictationModel { DictationModel(rawValue: selectedModel) ?? .fluidSpeechPro }
     private var provider: DictationProvider { DictationProvider(rawValue: providerID) ?? .local }
@@ -23,8 +28,8 @@ struct SetupDictationPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 36) {
-            SetupDictationHero(pushToTalk: pushToTalk, toggleShortcut: toggleShortcut,
-                               shortcutUnavailable: dictation.shortcutUnavailable)
+            SetupDictationHero(pushToTalk: pushToTalk, shortcut: shortcutSettings.binding(for: .dictation),
+                               shortcutFailure: shortcutSettings.failures[.dictation])
             .overlay(alignment: .bottomLeading) {
                 SetupSegmented(selection: $providerID, options: DictationProvider.allCases.map { ($0.rawValue, $0.name) },
                                isOptionDisabled: { raw in
@@ -112,11 +117,19 @@ struct SetupDictationPage: View {
                         SetupStatusLine(kind: .info, text: "Fn needs Accessibility access. Review permissions below; LeNotch will retry automatically.")
                     }
                 }
-                SetupToggleRow(icon: .keyboard, title: "Toggle dictation with ⌥D",
-                               detail: "Press once to start, and again to finish. Independent of push-to-talk.",
-                               isOn: $toggleShortcut) {
-                    if toggleShortcut && dictation.shortcutUnavailable {
-                        SetupStatusLine(kind: .info, text: "⌥D is in use by another app. Start dictation from the notch menu instead.")
+                SetupRow(icon: .keyboard, title: "Keyboard shortcut", detail: "Change in Settings → Tools.") {
+                    HStack(spacing: 10) {
+                        Text(shortcutSettings.binding(for: .dictation)?.display ?? "Not set")
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(SetupTheme.textSecondary)
+                        Button("Configure") {
+                            NotificationCenter.default.post(name: Notification.Name("lenotch.settings.tools.open"), object: nil)
+                        }
+                        .buttonStyle(SetupButtonStyle(kind: .secondary))
+                    }
+                } below: {
+                    if let failure = shortcutSettings.failures[.dictation] {
+                        SetupStatusLine(kind: .info, text: failure)
                     }
                 }
                 if pushToTalk {
@@ -136,28 +149,27 @@ struct SetupDictationPage: View {
                       : "Your recording is sent to ChatGPT for transcription. Optional cleanup still runs on this Mac. Esc cancels; audio already sent cannot be recalled.")
         }
         .onChange(of: pushToTalk) { NotificationCenter.default.post(name: .dictationShortcutsChanged, object: nil) }
-        .onChange(of: toggleShortcut) { NotificationCenter.default.post(name: .dictationShortcutsChanged, object: nil) }
     }
 }
 
 /// KLOI's "Summon" bento: a warm gradient card with the shortcut's keys tilted in its corner.
 private struct SetupDictationHero: View {
     let pushToTalk: Bool
-    let toggleShortcut: Bool
-    let shortcutUnavailable: Bool
+    let shortcut: ToolKeyBinding?
+    let shortcutFailure: String?
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let dark = scheme == .dark
         ZStack(alignment: .bottomTrailing) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(pushToTalk ? "Hold Fn to talk" : toggleShortcut ? "Press ⌥D anywhere" : "Dictate from the notch")
+                Text(pushToTalk ? "Hold Fn to talk" : shortcut.map { "Press \($0.display) anywhere" } ?? "Dictate from the notch")
                     .font(.system(size: 16, weight: .heavy)).tracking(-0.4)
                     .foregroundStyle(SetupTheme.text)
                 Text(pushToTalk ? "Hold while you speak, release to paste. Esc cancels."
-                     : !toggleShortcut ? "Start and finish from the notch menu, or enable a shortcut below. Esc cancels."
-                     : shortcutUnavailable
-                     ? "⌥D is in use by another app. Start dictation from the notch menu instead."
+                     : shortcut == nil ? "Start and finish from the notch menu, or set a shortcut in Settings → Tools. Esc cancels."
+                     : shortcutFailure != nil
+                     ? "This shortcut is unavailable. Change it in Settings → Tools, or start from the notch menu. Esc cancels."
                      : "Speak, press it again, and your words are pasted where you’re typing. Esc cancels.")
                     .setupDetail().frame(maxWidth: 270, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -167,9 +179,8 @@ private struct SetupDictationHero: View {
             HStack(alignment: .bottom, spacing: 6) {
                 if pushToTalk {
                     SetupKeycap(symbol: "fn", name: "globe", width: 58)
-                } else if toggleShortcut {
-                    SetupKeycap(symbol: "⌥", name: "option", width: 58)
-                    SetupKeycap(symbol: "D", width: 52)
+                } else if let shortcut {
+                    SetupKeycap(symbol: shortcut.display, width: max(72, CGFloat(shortcut.display.count) * 17))
                 }
             }
             .rotationEffect(.degrees(-12))

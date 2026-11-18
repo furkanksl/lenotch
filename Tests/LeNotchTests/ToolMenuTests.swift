@@ -140,6 +140,27 @@ final class ToolMenuTests: XCTestCase {
         XCTAssertEqual(ToolMenuModel.cardHeight(rows: 3), 237)
     }
 
+    func testBalancedRowsFollowVisibleCountAndPreserveSavedOrder() throws {
+        let store = try defaults()
+        let order = Array(TrayTool.allCases.reversed())
+        store.set(order.map(\.rawValue), forKey: ToolMenuModel.orderStorageKey)
+        let model = ToolMenuModel(defaults: store)
+        for count in 1...TrayTool.allCases.count {
+            let visible = Array(order.prefix(count))
+            for tool in visible { model.setEnabled(tool, true) }
+            for tool in order.dropFirst(count) { model.setEnabled(tool, false) }
+            let columns = count == 6 ? 3 : count == 8 ? 4 : 5
+            let expectedRows = stride(from: 0, to: count, by: columns).map {
+                Array(visible[$0..<min($0 + columns, count)])
+            }
+            XCTAssertEqual(model.columnCount, columns, "\(count) visible tools")
+            XCTAssertEqual(model.rows, expectedRows)
+            XCTAssertEqual(model.rows.flatMap { $0 }, visible)
+            XCTAssertEqual(ToolMenuModel(defaults: store).rows, expectedRows, "Layout survives restart")
+            XCTAssertEqual(model.cardHeight, ToolMenuModel.cardHeight(rows: expectedRows.count))
+        }
+    }
+
     func testOnChangeReportsEachRealChangeOnceAfterItIsStored() throws {
         let store = try defaults()
         let model = ToolMenuModel(defaults: store)
@@ -311,23 +332,25 @@ final class ToolMenuTests: XCTestCase {
         text.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
-    private func assertMenu(_ tools: Set<TrayTool>, rows expectedRows: [[TrayTool]], file: StaticString = #filePath, line: UInt = #line) throws {
+    private func assertMenu(_ tools: Set<TrayTool>, rows expectedRows: [[TrayTool]], order: [TrayTool]? = nil,
+                            file: StaticString = #filePath, line: UInt = #line) throws {
         let store = try defaults()
+        if let order { store.set(order.map(\.rawValue), forKey: ToolMenuModel.orderStorageKey) }
         let model = ToolMenuModel(defaults: store)
         for tool in TrayTool.allCases where !tools.contains(tool) { model.setEnabled(tool, false) }
         for tool in tools { model.setEnabled(tool, true) }
         XCTAssertEqual(model.rows, expectedRows, file: file, line: line)
         let menu = try render(model, defaults: store)
         XCTAssertEqual(menu.card.height, ToolMenuModel.cardHeight(rows: expectedRows.count), file: file, line: line)
-        let cell = (menu.card.width - 40) / Double(ToolMenuModel.columns)
+        let cell = (menu.card.width - 40) / Double(model.columnCount)
         let innerLeft = menu.left + 20
 
-        // Each row's tiles sit in the five columns, a short row centered under them.
+        // Each row uses the current column count, with short rows centered underneath.
         let pitch = (menu.card.height - 2 * ToolMenuModel.margin + ToolMenuModel.rowSpacing) / Double(expectedRows.count)
         for (index, row) in expectedRows.enumerated() {
             let tileTop = menu.cardTop + ToolMenuModel.margin + Double(index) * pitch
             let centers = tileCenters(in: menu, atY: tileTop + 20)
-            let leading = Double(ToolMenuModel.columns - row.count) / 2
+            let leading = Double(model.columnCount - row.count) / 2
             let expected = row.indices.map { innerLeft + (leading + Double($0) + 0.5) * cell }
             XCTAssertEqual(centers.count, row.count, "Row \(index) draws one tile per tool: \(centers)", file: file, line: line)
             for (found, want) in zip(centers, expected) {
@@ -363,44 +386,135 @@ final class ToolMenuTests: XCTestCase {
                                                       [.todo, .notes, .notifications]])
     }
 
+    func testEightToolsDrawTwoRowsOfFour() throws {
+        try assertMenu([.chat, .dictation, .prompter, .today, .launcher, .clipboard, .todo, .notes], rows: [
+            [.chat, .dictation, .prompter, .today], [.launcher, .clipboard, .todo, .notes],
+        ])
+    }
+
+    func testSixToolsDrawTwoRowsOfThreeInCustomOrder() throws {
+        try assertMenu([.chat, .dictation, .launcher, .clipboard, .todo, .notes], rows: [
+            [.notes, .todo, .clipboard], [.launcher, .dictation, .chat],
+        ], order: Array(TrayTool.allCases.reversed()))
+    }
+
     func testAFewToolsDrawOneShortCenteredRow() throws {
         try assertMenu([.chat, .system, .usage], rows: [[.chat, .usage, .system]])
         try assertMenu([.today, .shelf], rows: [[.today, .shelf]])
     }
 
+    func testMenuDrawsPersistedCustomOrderWhileHiddenToolsKeepTheirPlaces() throws {
+        try assertMenu(Set(TrayTool.allCases.filter(\.enabledByDefault)), rows: [
+            [.notes, .todo, .system, .shortcuts, .shelf],
+            [.clipboard, .launcher, .today, .prompter, .dictation],
+            [.chat],
+        ], order: Array(TrayTool.allCases.reversed()))
+    }
+
     // MARK: Setup
 
-    private func words(of page: SetupToolsPage, scheme: ColorScheme) throws -> String {
+    private func settingsImage(of page: SetupToolsPage, scheme: ColorScheme) throws -> CGImage {
         let view = page
             .padding(24)
-            .frame(width: 700, height: 1760, alignment: .topLeading)
+            .frame(width: 700, height: 1180, alignment: .topLeading)
             .background(scheme == .dark ? Color(red: 0.09, green: 0.09, blue: 0.086) : .white)
             .environment(\.colorScheme, scheme)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
-        let image = try XCTUnwrap(renderer.cgImage)
+        return try XCTUnwrap(renderer.cgImage)
+    }
+
+    private func recognizedText(in image: CGImage, crop: CGRect? = nil) throws -> [(text: String, bounds: CGRect)] {
+        let rect = crop ?? CGRect(x: 0, y: 0, width: CGFloat(image.width) / 2, height: CGFloat(image.height) / 2)
+        let input = try crop.map { rect in
+            try XCTUnwrap(image.cropping(to: CGRect(x: rect.minX * 2, y: rect.minY * 2,
+                                                    width: rect.width * 2, height: rect.height * 2)))
+        } ?? image
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["en-US"]
         request.usesLanguageCorrection = false
-        try VNImageRequestHandler(cgImage: image).perform([request])
-        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
+        try VNImageRequestHandler(cgImage: input).perform([request])
+        return (request.results ?? []).compactMap { observation in
+            guard let text = observation.topCandidates(1).first?.string else { return nil }
+            let box = observation.boundingBox
+            return (text, CGRect(x: rect.minX + box.minX * rect.width,
+                                 y: rect.minY + (1 - box.maxY) * rect.height,
+                                 width: box.width * rect.width, height: box.height * rect.height))
+        }
     }
 
-    func testSetupListsEveryToolWithItsCountInBothThemes() throws {
+    private func words(of page: SetupToolsPage, scheme: ColorScheme) throws -> String {
+        try recognizedText(in: settingsImage(of: page, scheme: scheme))
+            .map(\.text).joined(separator: " ").lowercased()
+    }
+
+    /// Isolate the title column so shortcut glyphs and switch labels cannot merge with tool names.
+    private func titlePositions(in image: CGImage) throws -> [(tool: TrayTool, bounds: CGRect)] {
+        let read = try recognizedText(in: image, crop: CGRect(x: 84, y: 80, width: 340, height: 1000))
+        return TrayTool.allCases.compactMap { tool in
+            read.first { normalizedLabel($0.text) == normalizedLabel(tool.title) }.map { (tool, $0.bounds) }
+        }.sorted { $0.bounds.midY < $1.bounds.midY }
+    }
+
+    func testUnifiedSetupListsAllThirteenToolsCompactlyInBothThemes() throws {
         let store = try defaults()
         let model = ToolMenuModel(defaults: store)
         let shortcuts = ToolShortcutSettings(defaults: store)
         for scheme in [ColorScheme.light, .dark] {
-            let read = try words(of: SetupToolsPage(model: model, shortcuts: shortcuts), scheme: scheme)
-            for tool in TrayTool.allCases {
-                XCTAssertTrue(read.contains(tool.title.lowercased()), "\(tool.title) is missing in \(scheme). Read: \(read)")
-            }
-            XCTAssertTrue(read.contains("tools menu"), read)
-            XCTAssertTrue(read.contains("11 of 13 shown"), "The default menu shows eleven of the thirteen: \(read)")
+            let image = try settingsImage(of: SetupToolsPage(model: model, shortcuts: shortcuts), scheme: scheme)
+            let read = try recognizedText(in: image).map(\.text).joined(separator: " ").lowercased()
+            let titles = try titlePositions(in: image)
+            XCTAssertEqual(titles.map(\.tool), TrayTool.allCases, "All thirteen tools share one list in \(scheme): \(read)")
+            XCTAssertTrue(read.contains("your tools"), read)
+            XCTAssertTrue(read.contains("13 tools") && read.contains("11 in menu"),
+                          "The default count describes the list and menu separately: \(read)")
+            XCTAssertTrue(read.contains("shortcut") && read.contains("in menu"), "The columns are labelled: \(read)")
+            XCTAssertTrue(read.contains("restore order") && read.contains("preview menu"), read)
+            XCTAssertFalse(read.contains("tools menu"), "The old section is replaced by the unified list")
+            XCTAssertFalse(read.contains("keyboard shortcuts"), "There is no separate three-tool shortcut section")
+            XCTAssertFalse(read.contains("still opens") || read.contains("still works"), "Fixed shortcut claims are removed")
             XCTAssertFalse(read.contains("at least one tool"), "The reminder shows only when one tool is left")
-            XCTAssertTrue(read.contains("shortcut"), "The page says what hiding a tool leaves working: \(read)")
+
+            for (upper, lower) in zip(titles, titles.dropFirst()) {
+                let pitch = lower.bounds.midY - upper.bounds.midY
+                // Notifications has a second line, putting its title slightly above its row's center.
+                XCTAssertGreaterThan(pitch, lower.tool == .notifications ? 44 : 52, "Rows do not overlap in \(scheme)")
+                XCTAssertLessThan(pitch, 57, "Rows stay compact, rather than retaining the old detail cards")
+                XCTAssertLessThan(upper.bounds.height, 20, "Titles fit a single readable line")
+            }
         }
+    }
+
+    func testUnifiedSetupDrawsPersistedOrderIncludingHiddenTools() throws {
+        let store = try defaults()
+        let original = ToolMenuModel(defaults: store)
+        original.move(.notifications, before: .chat)
+        original.move(.notes, before: .chat)
+        let restarted = ToolMenuModel(defaults: store)
+        let image = try settingsImage(of: SetupToolsPage(model: restarted, shortcuts: ToolShortcutSettings(defaults: store)), scheme: .dark)
+
+        XCTAssertEqual(try titlePositions(in: image).map(\.tool), [.notifications, .notes] + TrayTool.allCases.filter {
+            $0 != .notifications && $0 != .notes
+        }, "The settings list retains hidden tools in their saved positions")
+    }
+
+    func testShortcutConflictIsDrawnUnderItsToolWithoutCoveringTheNextRow() throws {
+        let store = try defaults()
+        let model = ToolMenuModel(defaults: store)
+        let shortcuts = ToolShortcutSettings(defaults: store)
+        shortcuts.setRegistrationFailures([.notes: "This shortcut is already in use. Choose another."])
+        let image = try settingsImage(of: SetupToolsPage(model: model, shortcuts: shortcuts), scheme: .light)
+        let titles = try titlePositions(in: image)
+        let note = try XCTUnwrap(titles.first { $0.tool == .notes })
+        let next = try XCTUnwrap(titles.first { $0.tool == .notifications })
+        let read = try recognizedText(in: image)
+        let conflict = try XCTUnwrap(read.first { $0.text.lowercased().contains("already in use") }, "Read: \(read.map(\.text))")
+
+        XCTAssertGreaterThan(conflict.bounds.minY, note.bounds.maxY, "Conflict feedback belongs beneath Notes")
+        XCTAssertLessThan(conflict.bounds.maxY, next.bounds.minY, "Conflict feedback leaves Notifications readable")
+        XCTAssertGreaterThan(next.bounds.midY - note.bounds.midY, 60, "Only the affected row expands for feedback")
+        XCTAssertEqual(titles.count, 13, "A conflict must not push any tool out of the rendered list")
     }
 
     func testSetupExplainsWhyTheLastToolCannotBeTurnedOff() throws {
@@ -408,8 +522,8 @@ final class ToolMenuTests: XCTestCase {
         let model = ToolMenuModel(defaults: store)
         for tool in TrayTool.allCases.dropFirst() { model.setEnabled(tool, false) }
         let read = try words(of: SetupToolsPage(model: model, shortcuts: ToolShortcutSettings(defaults: store)), scheme: .light)
-        XCTAssertTrue(read.contains("1 of 13 shown"), read)
-        XCTAssertTrue(read.contains("at least one tool stays on"), read)
+        XCTAssertTrue(read.contains("13 tools") && read.contains("1 in menu"), read)
+        XCTAssertTrue(read.contains("keep at least one tool visible"), read)
     }
 
     func testSetupSwitchesReadAndWriteTheSharedMenu() throws {

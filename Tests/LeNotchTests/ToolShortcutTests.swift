@@ -34,14 +34,24 @@ final class ToolShortcutTests: XCTestCase {
 
     // MARK: Bindings and validation
 
-    func testDefaultsUseOptionTOptionNAndOptionCWithoutWritingPreferences() throws {
+    func testAllToolsFollowMenuOrderAndExactlySixHaveDefaults() throws {
         let store = try defaults()
         let settings = ToolShortcutSettings(defaults: store)
-        XCTAssertEqual(ToolShortcutTarget.allCases, [.todo, .notes, .clipboard])
-        XCTAssertEqual(ToolShortcutTarget.allCases.map(\.title), ["To-do", "Notes", "Clipboard"])
-        XCTAssertEqual(ToolShortcutTarget.allCases.map(\.page), [.todo, .notes, .clipboard])
-        XCTAssertEqual(ToolShortcutTarget.allCases.map(\.icon), [.todo, .notes, .clipboard])
-        XCTAssertEqual(ToolShortcutTarget.allCases.compactMap { settings.binding(for: $0)?.display }, ["⌥T", "⌥N", "⌥C"])
+        XCTAssertEqual(ToolShortcutTarget.allCases,
+                       [.chat, .dictation, .prompter, .today, .launcher, .clipboard, .shelf,
+                        .shortcuts, .usage, .system, .todo, .notes, .notifications])
+        XCTAssertEqual(ToolShortcutTarget.allCases.map(\.tool), TrayTool.allCases)
+        XCTAssertEqual(ToolShortcutTarget.allCases.map(\.title), TrayTool.allCases.map(\.title))
+        XCTAssertEqual(ToolShortcutTarget.allCases.map(\.page), TrayTool.allCases.map(\.page))
+        XCTAssertEqual(ToolShortcutTarget.allCases.map(\.icon), TrayTool.allCases.map(\.icon))
+        XCTAssertEqual(ToolShortcutTarget.allCases.compactMap { settings.binding(for: $0)?.display },
+                       ["⌥Space", "⌥D", "⌥A", "⌥C", "⌥T", "⌥N"])
+        for target in ToolShortcutTarget.allCases {
+            XCTAssertEqual(settings.binding(for: target), target.defaultBinding)
+        }
+        XCTAssertNil(ToolShortcutTarget.chat.page)
+        XCTAssertNil(ToolShortcutTarget.dictation.page)
+        XCTAssertNil(ToolShortcutTarget.launcher.page)
         XCTAssertNil(store.object(forKey: ToolShortcutSettings.storageKey))
         XCTAssertTrue(settings.failures.isEmpty)
         XCTAssertFalse(settings.isRecording)
@@ -64,7 +74,6 @@ final class ToolShortcutTests: XCTestCase {
         for key in [kVK_ANSI_B, kVK_ANSI_Z, kVK_ANSI_0, kVK_ANSI_9, kVK_ANSI_Minus, kVK_ANSI_Slash,
                     kVK_Space, kVK_LeftArrow, kVK_RightArrow, kVK_UpArrow, kVK_DownArrow,
                     kVK_F1, kVK_F20, kVK_ANSI_Keypad0, kVK_Return, kVK_Tab] {
-            // Shift avoids the reserved plain Option-Space Chat shortcut.
             XCTAssertNil(binding(key, optionKey | shiftKey).validationError, "Key \(key)")
         }
         XCTAssertNil(binding(kVK_ANSI_T, cmdKey).validationError)
@@ -79,14 +88,11 @@ final class ToolShortcutTests: XCTestCase {
         XCTAssertNotNil(binding(kVK_ANSI_T, optionKey | (1 << 23)).validationError)
     }
 
-    func testFixedAppShortcutsAreReservedEvenIfTheirFeatureIsCurrentlyHidden() {
-        for shortcut in [binding(kVK_Space), binding(kVK_ANSI_D), binding(kVK_ANSI_A),
-                         binding(kVK_ANSI_A, controlKey | optionKey | cmdKey)] {
-            XCTAssertNotNil(shortcut.validationError, shortcut.display)
+    func testReassignableDefaultsAreValidButBackupChatShortcutRemainsReserved() {
+        for shortcut in [binding(kVK_Space), binding(kVK_ANSI_D), binding(kVK_ANSI_A)] {
+            XCTAssertNil(shortcut.validationError, shortcut.display)
         }
-        XCTAssertTrue(binding(kVK_ANSI_A).validationError?.contains("Launcher") == true)
-        XCTAssertTrue(binding(kVK_Space).validationError?.contains("Chat") == true)
-        XCTAssertTrue(binding(kVK_ANSI_D).validationError?.contains("Dictation") == true)
+        XCTAssertTrue(binding(kVK_ANSI_A, controlKey | optionKey | cmdKey).validationError?.contains("Chat") == true)
     }
 
     func testCommonMacCommandsScreenshotsForceQuitAndDesktopNavigationAreReserved() {
@@ -156,8 +162,8 @@ final class ToolShortcutTests: XCTestCase {
         let replacement = binding(kVK_ANSI_B, controlKey | optionKey)
         XCTAssertTrue(settings.setBinding(replacement, for: .todo))
         let before = store.data(forKey: ToolShortcutSettings.storageKey)
-        XCTAssertTrue(settings.validationError(for: ToolShortcutTarget.notes.defaultBinding, target: .todo)?.contains("Notes") == true)
-        for rejected in [ToolShortcutTarget.notes.defaultBinding, binding(kVK_ANSI_A), binding(kVK_ANSI_T, 0)] {
+        XCTAssertTrue(settings.validationError(for: binding(kVK_ANSI_N), target: .todo)?.contains("Notes") == true)
+        for rejected in [binding(kVK_ANSI_N), binding(kVK_ANSI_A), binding(kVK_ANSI_T, 0)] {
             XCTAssertFalse(settings.setBinding(rejected, for: .todo))
             XCTAssertEqual(settings.binding(for: .todo), replacement)
             XCTAssertEqual(store.data(forKey: ToolShortcutSettings.storageKey), before)
@@ -190,7 +196,7 @@ final class ToolShortcutTests: XCTestCase {
     func testMalformedOrReservedStoredChoicesFallBackWithoutOverwritingStoredData() throws {
         let store = try defaults()
         for data in [Data("not json".utf8),
-                     Data(#"{"todo":{"binding":{"keyCode":49,"modifiers":2048}}}"#.utf8),
+                     Data(#"{"todo":{"binding":{"keyCode":0,"modifiers":6400}}}"#.utf8),
                      Data(#"{"todo":{"binding":{"keyCode":255,"modifiers":2048}}}"#.utf8)] {
             store.set(data, forKey: ToolShortcutSettings.storageKey)
             XCTAssertEqual(ToolShortcutSettings(defaults: store).binding(for: .todo), ToolShortcutTarget.todo.defaultBinding)
@@ -198,15 +204,27 @@ final class ToolShortcutTests: XCTestCase {
         }
     }
 
-    func testStoredOverridesCannotDuplicateAnUntouchedDefault() throws {
+    func testConflictingStoredOverridesArePreservedAndReportedWithoutRegisteringEitherOwner() throws {
         let store = try defaults()
         let entry = ["binding": ["keyCode": kVK_ANSI_N, "modifiers": optionKey]]
         let data = try JSONSerialization.data(withJSONObject: ["todo": entry])
         store.set(data, forKey: ToolShortcutSettings.storageKey)
         let settings = ToolShortcutSettings(defaults: store)
-        XCTAssertEqual(settings.binding(for: .todo), ToolShortcutTarget.todo.defaultBinding)
+        XCTAssertEqual(settings.binding(for: .todo), ToolShortcutTarget.notes.defaultBinding)
         XCTAssertEqual(settings.binding(for: .notes), ToolShortcutTarget.notes.defaultBinding)
+        let registrar = MockRegistrar()
+        let controller = ToolShortcutController(settings: settings, register: registrar.register)
+        controller.start { _ in XCTFail("Conflicting shortcuts must not fire") }
+        XCTAssertEqual(Set(settings.failures.keys), [.todo, .notes])
+        XCTAssertTrue(settings.failures[.todo]?.contains("Notes") == true)
+        XCTAssertTrue(settings.failures[.notes]?.contains("To-do") == true)
+        XCTAssertEqual(registrar.handles.count, 4)
+        XCTAssertFalse(registrar.handles.contains { $0.binding == binding(kVK_ANSI_N) })
         XCTAssertEqual(store.data(forKey: ToolShortcutSettings.storageKey), data)
+        XCTAssertTrue(settings.reset(.todo))
+        controller.refresh()
+        XCTAssertTrue(settings.failures.isEmpty)
+        controller.stop()
     }
 
     func testValidSwappedBindingsAndExplicitDisabledChoicesAreRestored() throws {
@@ -221,6 +239,134 @@ final class ToolShortcutTests: XCTestCase {
         XCTAssertEqual(settings.binding(for: .todo), ToolShortcutTarget.notes.defaultBinding)
         XCTAssertEqual(settings.binding(for: .notes), ToolShortcutTarget.todo.defaultBinding)
         XCTAssertNil(settings.binding(for: .clipboard))
+    }
+
+    func testLegacyFalseTogglesMigrateToDisabledWithoutChangingOtherDefaultsOrDeletingOldKeys() throws {
+        let store = try defaults()
+        store.set(false, forKey: "lenotch.launcher.shortcut")
+        store.set(false, forKey: DictationInputSettings.toggleShortcutKey)
+        let settings = ToolShortcutSettings(defaults: store)
+        XCTAssertNil(settings.binding(for: .launcher))
+        XCTAssertNil(settings.binding(for: .dictation))
+        XCTAssertEqual(settings.binding(for: .chat), ToolShortcutTarget.chat.defaultBinding)
+        XCTAssertEqual(settings.binding(for: .todo), ToolShortcutTarget.todo.defaultBinding)
+        XCTAssertEqual(settings.binding(for: .notes), ToolShortcutTarget.notes.defaultBinding)
+        XCTAssertEqual(settings.binding(for: .clipboard), ToolShortcutTarget.clipboard.defaultBinding)
+        XCTAssertEqual(store.object(forKey: "lenotch.launcher.shortcut") as? Bool, false)
+        XCTAssertEqual(store.object(forKey: DictationInputSettings.toggleShortcutKey) as? Bool, false)
+        XCTAssertTrue(store.bool(forKey: ToolShortcutSettings.legacyMigrationKey))
+        XCTAssertNotNil(store.data(forKey: ToolShortcutSettings.storageKey))
+        let restored = ToolShortcutSettings(defaults: store)
+        XCTAssertNil(restored.binding(for: .launcher))
+        XCTAssertNil(restored.binding(for: .dictation))
+    }
+
+    func testLegacyTrueAndAbsentTogglesKeepAllSixDefaultsWithoutCreatingChoices() throws {
+        for legacyValue in [nil, true] as [Bool?] {
+            let store = try defaults()
+            if let legacyValue {
+                store.set(legacyValue, forKey: "lenotch.launcher.shortcut")
+                store.set(legacyValue, forKey: DictationInputSettings.toggleShortcutKey)
+            }
+            let settings = ToolShortcutSettings(defaults: store)
+            for target in ToolShortcutTarget.allCases {
+                XCTAssertEqual(settings.binding(for: target), target.defaultBinding)
+            }
+            XCTAssertNil(store.data(forKey: ToolShortcutSettings.storageKey))
+            XCTAssertTrue(store.bool(forKey: ToolShortcutSettings.legacyMigrationKey))
+        }
+    }
+
+    func testLegacyMigrationPreservesEveryExistingExplicitChoice() throws {
+        let store = try defaults()
+        store.set(false, forKey: "lenotch.launcher.shortcut")
+        store.set(false, forKey: DictationInputSettings.toggleShortcutKey)
+        let replacement = binding(kVK_ANSI_B, controlKey | optionKey)
+        let entry = ["binding": ["keyCode": replacement.keyCode, "modifiers": replacement.modifiers]]
+        let data = try JSONSerialization.data(withJSONObject: [
+            "launcher": entry,
+            "dictation": entry,
+            "todo": entry,
+            "notes": [:],
+            "clipboard": ["binding": ["keyCode": kVK_ANSI_E, "modifiers": optionKey]],
+        ])
+        store.set(data, forKey: ToolShortcutSettings.storageKey)
+        let settings = ToolShortcutSettings(defaults: store)
+        for target in [ToolShortcutTarget.launcher, .dictation, .todo] {
+            XCTAssertEqual(settings.binding(for: target), replacement)
+        }
+        XCTAssertNil(settings.binding(for: .notes))
+        XCTAssertEqual(settings.binding(for: .clipboard), binding(kVK_ANSI_E))
+        XCTAssertEqual(store.data(forKey: ToolShortcutSettings.storageKey), data,
+                       "Existing choices, including collisions, must not be silently rewritten during migration")
+    }
+
+    func testLegacyMigrationPreservesExplicitDisabledLauncherAndDictationWhenOldTogglesAreTrue() throws {
+        let store = try defaults()
+        store.set(true, forKey: "lenotch.launcher.shortcut")
+        store.set(true, forKey: DictationInputSettings.toggleShortcutKey)
+        store.set(Data(#"{"launcher":{},"dictation":{}}"#.utf8), forKey: ToolShortcutSettings.storageKey)
+        let settings = ToolShortcutSettings(defaults: store)
+        XCTAssertNil(settings.binding(for: .launcher))
+        XCTAssertNil(settings.binding(for: .dictation))
+    }
+
+    func testResetAfterLegacyMigrationDoesNotReadStaleFalseTogglesAgain() throws {
+        let store = try defaults()
+        store.set(false, forKey: "lenotch.launcher.shortcut")
+        store.set(false, forKey: DictationInputSettings.toggleShortcutKey)
+        let settings = ToolShortcutSettings(defaults: store)
+        XCTAssertTrue(settings.reset(.launcher))
+        XCTAssertTrue(settings.reset(.dictation))
+        XCTAssertNil(store.data(forKey: ToolShortcutSettings.storageKey))
+        let restored = ToolShortcutSettings(defaults: store)
+        XCTAssertEqual(restored.binding(for: .launcher), ToolShortcutTarget.launcher.defaultBinding)
+        XCTAssertEqual(restored.binding(for: .dictation), ToolShortcutTarget.dictation.defaultBinding)
+        XCTAssertEqual(store.object(forKey: "lenotch.launcher.shortcut") as? Bool, false)
+        XCTAssertEqual(store.object(forKey: DictationInputSettings.toggleShortcutKey) as? Bool, false)
+    }
+
+    func testAbsentLegacyPreferencesAreOnlyReadOnTheFirstMigration() throws {
+        let store = try defaults()
+        _ = ToolShortcutSettings(defaults: store)
+        store.set(false, forKey: "lenotch.launcher.shortcut")
+        store.set(false, forKey: DictationInputSettings.toggleShortcutKey)
+        let restored = ToolShortcutSettings(defaults: store)
+        XCTAssertEqual(restored.binding(for: .launcher), ToolShortcutTarget.launcher.defaultBinding)
+        XCTAssertEqual(restored.binding(for: .dictation), ToolShortcutTarget.dictation.defaultBinding)
+    }
+
+    func testEveryToolCanBeReassignedPersistedAndResetWithoutInventingNewDefaults() throws {
+        let store = try defaults()
+        let settings = ToolShortcutSettings(defaults: store)
+        let keyCodes = [kVK_ANSI_B, kVK_ANSI_E, kVK_ANSI_F, kVK_ANSI_G, kVK_ANSI_I, kVK_ANSI_J,
+                        kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_O, kVK_ANSI_P, kVK_ANSI_R, kVK_ANSI_S, kVK_ANSI_U]
+        let replacements = keyCodes.map { binding($0, controlKey | optionKey) }
+        for (target, replacement) in zip(ToolShortcutTarget.allCases, replacements) {
+            XCTAssertTrue(settings.setBinding(replacement, for: target), target.title)
+        }
+        let restored = ToolShortcutSettings(defaults: store)
+        for (target, replacement) in zip(ToolShortcutTarget.allCases, replacements) {
+            XCTAssertEqual(restored.binding(for: target), replacement, target.title)
+            XCTAssertTrue(restored.reset(target), target.title)
+            XCTAssertEqual(restored.binding(for: target), target.defaultBinding, target.title)
+        }
+        XCTAssertNil(store.data(forKey: ToolShortcutSettings.storageKey))
+    }
+
+    func testFormerlyFixedDefaultsCanBeReleasedAndAssignedToAnyTool() throws {
+        for original in [ToolShortcutTarget.chat, .dictation, .launcher] {
+            let settings = ToolShortcutSettings(defaults: try defaults())
+            let shortcut = try XCTUnwrap(original.defaultBinding)
+            XCTAssertTrue(settings.validationError(for: shortcut, target: .notifications)?.contains(original.title) == true)
+            XCTAssertFalse(settings.setBinding(shortcut, for: .notifications))
+            XCTAssertTrue(settings.setBinding(nil, for: original))
+            XCTAssertNil(settings.validationError(for: shortcut, target: .notifications))
+            XCTAssertTrue(settings.setBinding(shortcut, for: .notifications))
+            XCTAssertFalse(settings.reset(original))
+            XCTAssertTrue(settings.reset(.notifications))
+            XCTAssertTrue(settings.reset(original))
+        }
     }
 
     func testOnlyActualBindingChangesPostSynchronousNotifications() throws {
@@ -271,17 +417,47 @@ final class ToolShortcutTests: XCTestCase {
 
     // MARK: Mock registrations: these tests never install global hotkeys
 
-    func testControllerRegistersExactlyThreeDefaultsAndRoutesEachTarget() throws {
+    func testControllerRegistersExactlySixDefaultsAndRoutesEachTarget() throws {
         let settings = ToolShortcutSettings(defaults: try defaults())
         let registrar = MockRegistrar()
         let controller = ToolShortcutController(settings: settings, register: registrar.register)
         var opened: [ToolShortcutTarget] = []
         controller.start { opened.append($0) }
-        XCTAssertEqual(registrar.handles.map(\.binding), ToolShortcutTarget.allCases.map(\.defaultBinding))
+        XCTAssertEqual(registrar.handles.map(\.binding), ToolShortcutTarget.allCases.compactMap(\.defaultBinding))
         registrar.handles.forEach { $0.fire() }
-        XCTAssertEqual(opened, [.todo, .notes, .clipboard])
+        XCTAssertEqual(opened, [.chat, .dictation, .launcher, .clipboard, .todo, .notes])
         controller.stop()
         XCTAssertTrue(registrar.handles.allSatisfy { $0.unregisterCount == 1 })
+    }
+
+    func testUnassignedTargetsNeverRegisterAndDisablingAllDefaultsInstallsNoKeys() throws {
+        let settings = ToolShortcutSettings(defaults: try defaults())
+        for target in ToolShortcutTarget.allCases {
+            XCTAssertTrue(settings.setBinding(nil, for: target))
+        }
+        let registrar = MockRegistrar()
+        let controller = ToolShortcutController(settings: settings, register: registrar.register)
+        controller.start { _ in XCTFail("All shortcuts are disabled") }
+        XCTAssertTrue(registrar.handles.isEmpty)
+        XCTAssertTrue(settings.failures.isEmpty)
+        controller.stop()
+    }
+
+    func testControllerCanRouteAllThirteenTargetsWithoutGlobalKeyRegistration() throws {
+        let settings = ToolShortcutSettings(defaults: try defaults())
+        let keyCodes = [kVK_ANSI_B, kVK_ANSI_E, kVK_ANSI_F, kVK_ANSI_G, kVK_ANSI_I, kVK_ANSI_J,
+                        kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_O, kVK_ANSI_P, kVK_ANSI_R, kVK_ANSI_S, kVK_ANSI_U]
+        for (target, code) in zip(ToolShortcutTarget.allCases, keyCodes) {
+            XCTAssertTrue(settings.setBinding(binding(code, controlKey | optionKey), for: target))
+        }
+        let registrar = MockRegistrar()
+        let controller = ToolShortcutController(settings: settings, register: registrar.register)
+        var opened: [ToolShortcutTarget] = []
+        controller.start { opened.append($0) }
+        XCTAssertEqual(registrar.handles.count, 13)
+        registrar.handles.forEach { $0.fire() }
+        XCTAssertEqual(opened, ToolShortcutTarget.allCases)
+        controller.stop()
     }
 
     func testRefreshUnregistersOldHandlesAndStaleCallbacksCannotOpenTools() throws {
@@ -291,15 +467,16 @@ final class ToolShortcutTests: XCTestCase {
         var opened: [ToolShortcutTarget] = []
         controller.start { opened.append($0) }
         let old = registrar.handles
+        let oldTodo = try XCTUnwrap(old.first { $0.binding == ToolShortcutTarget.todo.defaultBinding })
         XCTAssertTrue(settings.setBinding(binding(kVK_ANSI_B), for: .todo))
-        old[0].fire()
+        oldTodo.fire()
         XCTAssertTrue(opened.isEmpty, "Even before refresh, a callback must match the current binding")
         controller.refresh()
         XCTAssertTrue(old.allSatisfy { $0.unregisterCount == 1 })
         old.forEach { $0.fire() }
         XCTAssertTrue(opened.isEmpty)
-        XCTAssertEqual(registrar.handles[3].binding, binding(kVK_ANSI_B))
-        registrar.handles[3].fire()
+        let remappedTodo = try XCTUnwrap(registrar.handles.last { $0.binding == binding(kVK_ANSI_B) })
+        remappedTodo.fire()
         XCTAssertEqual(opened, [.todo])
         controller.stop()
     }
@@ -312,11 +489,11 @@ final class ToolShortcutTests: XCTestCase {
         controller.start { opened.append($0) }
         let old = registrar.handles
         XCTAssertTrue(settings.setBinding(nil, for: .notes))
-        old[1].fire()
+        try XCTUnwrap(old.first { $0.binding == ToolShortcutTarget.notes.defaultBinding }).fire()
         controller.refresh()
-        XCTAssertEqual(registrar.handles.count, 5)
-        XCTAssertEqual(Array(registrar.handles.suffix(2)).map(\.binding),
-                       [ToolShortcutTarget.todo.defaultBinding, ToolShortcutTarget.clipboard.defaultBinding])
+        XCTAssertEqual(registrar.handles.count, 11)
+        XCTAssertEqual(Array(registrar.handles.suffix(5)).map(\.binding),
+                       [ToolShortcutTarget.chat, .dictation, .launcher, .clipboard, .todo].compactMap(\.defaultBinding))
         XCTAssertTrue(opened.isEmpty)
         controller.stop()
     }
@@ -332,14 +509,14 @@ final class ToolShortcutTests: XCTestCase {
         old.forEach { $0.fire() }
         XCTAssertTrue(opened.isEmpty)
         controller.refresh()
-        XCTAssertEqual(registrar.handles.count, 3, "No registration is attempted while recording")
+        XCTAssertEqual(registrar.handles.count, 6, "No registration is attempted while recording")
         XCTAssertTrue(old.allSatisfy { $0.unregisterCount == 1 })
         settings.endRecording()
         controller.refresh()
         old.forEach { $0.fire() }
         XCTAssertTrue(opened.isEmpty)
         registrar.handles.last?.fire()
-        XCTAssertEqual(opened, [.clipboard])
+        XCTAssertEqual(opened, [.notes])
         controller.stop()
     }
 
@@ -353,7 +530,7 @@ final class ToolShortcutTests: XCTestCase {
         settings.endRecording()
         XCTAssertTrue(registrar.handles.isEmpty, "AppDelegate, not this owner, observes recording changes")
         controller.refresh()
-        XCTAssertEqual(registrar.handles.count, 3)
+        XCTAssertEqual(registrar.handles.count, 6)
         controller.stop()
     }
 
@@ -369,7 +546,7 @@ final class ToolShortcutTests: XCTestCase {
         controller.refresh()
         old.forEach { $0.fire() }
         XCTAssertTrue(opened.isEmpty)
-        XCTAssertEqual(registrar.handles.count, 3)
+        XCTAssertEqual(registrar.handles.count, 6)
         XCTAssertTrue(old.allSatisfy { $0.unregisterCount == 1 })
     }
 
@@ -385,7 +562,7 @@ final class ToolShortcutTests: XCTestCase {
         old.forEach { $0.fire() }
         registrar.handles.last?.fire()
         XCTAssertTrue(first.isEmpty)
-        XCTAssertEqual(second, [.clipboard])
+        XCTAssertEqual(second, [.notes])
         XCTAssertTrue(old.allSatisfy { $0.unregisterCount == 1 })
         controller.stop()
     }
@@ -393,17 +570,17 @@ final class ToolShortcutTests: XCTestCase {
     func testRegistrationFailuresAreReportedWithoutDroppingSavedMappingAndCanRecover() throws {
         let settings = ToolShortcutSettings(defaults: try defaults())
         let registrar = MockRegistrar()
-        registrar.failures = [ToolShortcutTarget.notes.defaultBinding]
+        registrar.failures = [try XCTUnwrap(ToolShortcutTarget.notes.defaultBinding)]
         let controller = ToolShortcutController(settings: settings, register: registrar.register)
         controller.start { _ in }
         XCTAssertEqual(Set(settings.failures.keys), [.notes])
         XCTAssertTrue(settings.failures[.notes]?.contains("⌥N") == true)
         XCTAssertEqual(settings.binding(for: .notes), ToolShortcutTarget.notes.defaultBinding)
-        XCTAssertEqual(registrar.handles.count, 2)
+        XCTAssertEqual(registrar.handles.count, 5)
         registrar.failures = []
         controller.refresh()
         XCTAssertTrue(settings.failures.isEmpty)
-        XCTAssertEqual(registrar.handles.count, 5)
+        XCTAssertEqual(registrar.handles.count, 11)
         controller.stop()
     }
 
@@ -420,7 +597,7 @@ final class ToolShortcutTests: XCTestCase {
     func testRecordingAndStopClearPreviouslyReportedRegistrationFailures() throws {
         let settings = ToolShortcutSettings(defaults: try defaults())
         let registrar = MockRegistrar()
-        registrar.failures = [ToolShortcutTarget.todo.defaultBinding]
+        registrar.failures = [try XCTUnwrap(ToolShortcutTarget.todo.defaultBinding)]
         let controller = ToolShortcutController(settings: settings, register: registrar.register)
         controller.start { _ in }
         XCTAssertFalse(settings.failures.isEmpty)
@@ -443,7 +620,7 @@ final class ToolShortcutTests: XCTestCase {
         controller.start { opened.append($0) }
         XCTAssertTrue(opened.isEmpty)
         registrar.handles.first?.fire()
-        XCTAssertEqual(opened, [.todo])
+        XCTAssertEqual(opened, [.chat])
         controller.stop()
     }
 

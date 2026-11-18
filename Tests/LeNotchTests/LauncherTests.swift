@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import SwiftUI
 import Vision
 import XCTest
@@ -25,6 +26,44 @@ final class LauncherTests: XCTestCase {
                              file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertThrowsError(try action(), file: file, line: line) { error in
             XCTAssertEqual(error as? LauncherError, expected, file: file, line: line)
+        }
+    }
+
+    func testSettingsReadTheSharedShortcutWithoutTheLegacyToggle() throws {
+        let defaults = try defaults()
+        defaults.set(false, forKey: "lenotch.launcher.shortcut")
+        let shortcuts = ToolShortcutSettings(defaults: defaults)
+        let remapped = ToolKeyBinding(keyCode: kVK_F12, modifiers: cmdKey | controlKey)
+        let model = LauncherModel(defaults: nil)
+
+        for binding in [remapped, nil] {
+            XCTAssertTrue(shortcuts.setBinding(binding, for: .launcher))
+            shortcuts.setRegistrationFailures(binding == nil ? [:] : [.launcher: "Shortcut registration failed"])
+            for scheme in [ColorScheme.light, .dark] {
+                let view = LauncherSettingsSection(model: model, toolMenu: ToolMenuModel(defaults: defaults),
+                                                   shortcutSettings: shortcuts)
+                    .padding(24)
+                    .frame(width: 656)
+                    .background(SetupTheme.card)
+                    .environment(\.colorScheme, scheme)
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 2
+                let image = try XCTUnwrap(renderer.cgImage)
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .accurate
+                request.usesLanguageCorrection = false
+                try VNImageRequestHandler(cgImage: image).perform([request])
+                let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+                    .joined(separator: " ").lowercased()
+                XCTAssertTrue(text.contains("keyboard shortcut"), text)
+                XCTAssertTrue(text.contains("configure"), text)
+                XCTAssertEqual(text.contains("not set"), binding == nil, text)
+                XCTAssertEqual(text.contains("shortcut registration failed"), binding != nil, text)
+                if binding != nil { XCTAssertTrue(text.contains("f12"), text) }
+                XCTAssertFalse(text.contains("open with"), "Shortcut assignment belongs only in Tools: \(text)")
+                XCTAssertFalse(defaults.bool(forKey: "lenotch.launcher.shortcut"))
+                XCTAssertEqual(shortcuts.binding(for: .launcher), binding)
+            }
         }
     }
 

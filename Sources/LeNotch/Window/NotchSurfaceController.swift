@@ -247,7 +247,8 @@ final class NotchSurfaceController {
                 return true
             }
         }
-        keys.onAskKey = { [weak self] in self?.director.toggleAsk() }
+        // Chat is registered once, through Tools, rather than also swallowing a fixed ⌥Space here.
+        keys.interceptsLegacyAskShortcut = false
         if let g = geometry { SystemBrightness.display = g.displayID }
         keys.start()
         if !keys.running {

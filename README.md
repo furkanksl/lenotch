@@ -33,7 +33,7 @@ can come back from **Setup → Tools**.
 
 ### Tools menu
 
-**Setup → Tools** has a switch for each tool in the notch's tools menu: Chat, Dictation, Prompter, Today, Launcher,
+**Settings → Tools** has one compact row for each tool in the notch's tools menu: Chat, Dictation, Prompter, Today, Launcher,
 Clipboard, Shelf, Shortcuts, Usage, System, To-do, Notes, and Notifications (shown in the menu as Inbox). Every tool is on except
 Usage and Notifications. The menu shows five tools a row and grows a row when it needs one, so turning tools off shrinks it and
 short rows stay centered. At least one tool always stays on.
@@ -41,13 +41,18 @@ short rows stay centered. At least one tool always stays on.
 Turning a tool off hides its button only. Its shortcut (⌥Space for Chat, ⌥D for Dictation, the Launcher shortcut),
 dropping files on the notch to open the Shelf, and notifications opening the inbox keep working. Your choices are stored
 in `lenotch.tools.choices` in the app's defaults, as just the tools you changed, so a tool added later starts on its
-own default.
+own default. Drag a row's grip to reorder the tools; an orange insertion line marks where it will land. The row's
+options menu also has **Move up** and **Move down**, and a focused grip supports **Option–Up/Down**. Order is stored
+separately in `lenotch.tools.order`; hidden tools keep their place. **Restore order** resets ordering only, leaving
+shortcuts and visibility intact. **Preview menu** shows the current five-column layout.
 
-**Keyboard shortcuts** at the top of **Setup → Tools** opens To-do with **⌥T**, Notes with **⌥N**, and Clipboard with
-**⌥C** by default. Click a shortcut, then press a new key combination with Option, Control, or Command. Escape
-cancels recording; Delete clears the shortcut. Each shortcut's options menu restores its default. Conflicts with
-another tool or an unavailable system-wide shortcut are reported there. The shortcuts work even when the tool's
-menu button is hidden; pressing the same shortcut again closes that tool. Launcher keeps **⌥A**.
+Every tool's row has a **Shortcut** control, independently of its **In menu** switch. Defaults are **⌥Space** for Chat,
+**⌥D** for Dictation, **⌥A** for Launcher, **⌥C** for Clipboard, **⌥T** for To-do, and **⌥N** for Notes; other tools start
+unassigned. Click the chord or **Add shortcut**, then press a combination with Option, Control, or Command. Escape or
+Tab cancels recording; Delete clears the shortcut. The row's options menu can clear or restore its default. Conflicts
+with another tool or an unavailable system-wide shortcut are reported inline. Hidden tools retain their shortcuts.
+Legacy disabled Launcher/Dictation shortcuts and saved bindings are preserved during migration. Dictation's **Fn hold**
+remains an independent setting; the reserved **⌃⌥⌘A** Chat backup remains available.
 
 ### To-do lists
 

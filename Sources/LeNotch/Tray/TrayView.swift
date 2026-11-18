@@ -86,12 +86,13 @@ private struct TrayGrid: View {
         let rows = director.toolMenu.rows
         // Independent of playback state.
         GeometryReader { proxy in
-            let cell = proxy.size.width / Double(ToolMenuModel.columns)
+            let cell = proxy.size.width / Double(director.toolMenu.columnCount)
             VStack(spacing: ToolMenuModel.rowSpacing) {
                 ForEach(rows.indices, id: \.self) { index in
                     HStack(spacing: 0) {
                         ForEach(rows[index]) { tool in
                             button(for: tool).frame(width: cell)
+                                .help(shortcutHelp(tool.title, target: ToolShortcutTarget(rawValue: tool.rawValue)!))
                         }
                     }
                 }
@@ -104,16 +105,15 @@ private struct TrayGrid: View {
     @ViewBuilder private func button(for tool: TrayTool) -> some View {
         switch tool {
         case .chat:
-            // Chat (⌥Space).
             Tool(icon: tool.icon, label: tool.menuLabel) { director.openAsk() }
-                .help("Chat with Claude or ChatGPT (⌥Space)")
+                .help(shortcutHelp("Chat with Claude or ChatGPT", target: .chat))
         case .dictation:
             Tool(icon: tool.icon, label: tool.menuLabel,
                  tint: DictationCoordinator.shared.phase == .recording ? .red : nil) {
                 DictationCoordinator.shared.toggle()
                 director.dismissTrayForDictation()
             }
-            .help("Start or finish dictation (⌥D)")
+            .help(shortcutHelp("Start or finish dictation", target: .dictation))
         case .prompter:
             Tool(icon: tool.icon, label: tool.menuLabel,
                  tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }

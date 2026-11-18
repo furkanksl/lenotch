@@ -1,43 +1,48 @@
 import AppKit
-import Carbon.HIToolbox
+import Carbon
 import Observation
 import OSLog
 
 enum ToolShortcutTarget: String, CaseIterable, Identifiable, Sendable {
-    case todo, notes, clipboard
+    case chat, dictation, prompter, today, launcher, clipboard, shelf, shortcuts, usage, system, todo, notes, notifications
 
     var id: Self { self }
 
-    var title: String {
+    var tool: TrayTool {
         switch self {
-        case .todo: "To-do"
-        case .notes: "Notes"
-        case .clipboard: "Clipboard"
-        }
-    }
-
-    var icon: ToolIcon {
-        switch self {
+        case .chat: .chat
+        case .dictation: .dictation
+        case .prompter: .prompter
+        case .today: .today
+        case .launcher: .launcher
+        case .clipboard: .clipboard
+        case .shelf: .shelf
+        case .shortcuts: .shortcuts
+        case .usage: .usage
+        case .system: .system
         case .todo: .todo
         case .notes: .notes
-        case .clipboard: .clipboard
+        case .notifications: .notifications
         }
     }
 
-    var page: TrayModel.Page {
-        switch self {
-        case .todo: .todo
-        case .notes: .notes
-        case .clipboard: .clipboard
-        }
-    }
+    var title: String { tool.title }
 
-    var defaultBinding: ToolKeyBinding {
+    var icon: ToolIcon { tool.icon }
+
+    /// Chat, Dictation and Launcher use their own routing rather than a tray page.
+    var page: TrayModel.Page? { tool.page }
+
+    var defaultBinding: ToolKeyBinding? {
         let key: Int
         switch self {
+        case .chat: key = kVK_Space
+        case .dictation: key = kVK_ANSI_D
+        case .launcher: key = kVK_ANSI_A
+        case .clipboard: key = kVK_ANSI_C
         case .todo: key = kVK_ANSI_T
         case .notes: key = kVK_ANSI_N
-        case .clipboard: key = kVK_ANSI_C
+        case .prompter, .today, .shelf, .shortcuts, .usage, .system, .notifications: return nil
         }
         return ToolKeyBinding(keyCode: key, modifiers: optionKey)
     }
@@ -101,9 +106,6 @@ struct ToolKeyBinding: Codable, Hashable, Sendable {
     }
 
     private static let appShortcuts: [ToolKeyBinding: String] = [
-        .init(keyCode: kVK_Space, modifiers: optionKey): "Chat",
-        .init(keyCode: kVK_ANSI_D, modifiers: optionKey): "Dictation",
-        .init(keyCode: kVK_ANSI_A, modifiers: optionKey): "Launcher",
         .init(keyCode: kVK_ANSI_A, modifiers: controlKey | optionKey | cmdKey): "Chat",
     ]
     private static let commandKeys: Set<Int> = [kVK_ANSI_Q, kVK_ANSI_W, kVK_ANSI_H, kVK_ANSI_M, kVK_Tab, kVK_Space]
@@ -151,6 +153,7 @@ extension Notification.Name {
 final class ToolShortcutSettings {
     static let shared = ToolShortcutSettings()
     static let storageKey = "lenotch.tools.shortcuts"
+    static let legacyMigrationKey = "lenotch.tools.shortcuts.migratedLegacy"
 
     /// Wrapping the optional distinguishes an explicit disabled shortcut from an untouched default.
     private struct Choice: Codable, Equatable {
@@ -169,17 +172,26 @@ final class ToolShortcutSettings {
         stored = stored.filter { key, choice in
             ToolShortcutTarget(rawValue: key) != nil && (choice.binding == nil || choice.binding?.validationError == nil)
         }
-        // Reject conflicting saved overrides, including collisions with another tool's untouched default.
-        // Removing overrides may expose another default, so repeat until every effective binding is unique.
-        while true {
-            let groups = Dictionary(grouping: ToolShortcutTarget.allCases.filter {
-                (stored[$0.rawValue] ?? Choice(binding: $0.defaultBinding)).binding != nil
-            }, by: { (stored[$0.rawValue] ?? Choice(binding: $0.defaultBinding)).binding! })
-            let conflicts = groups.values.filter { $0.count > 1 }.flatMap { $0 }
-            guard !conflicts.isEmpty else { break }
-            for target in conflicts { stored.removeValue(forKey: target.rawValue) }
+        let needsLegacyMigration = !defaults.bool(forKey: Self.legacyMigrationKey)
+        var migratedChoice = false
+        if needsLegacyMigration {
+            let legacyKeys: [(ToolShortcutTarget, String)] = [
+                (.launcher, "lenotch.launcher.shortcut"),
+                (.dictation, DictationInputSettings.toggleShortcutKey),
+            ]
+            for (target, key) in legacyKeys where stored[target.rawValue] == nil {
+                let enabled = defaults.object(forKey: key) as? Bool
+                if enabled == false {
+                    stored[target.rawValue] = Choice(binding: nil)
+                    migratedChoice = true
+                }
+            }
         }
+        // Preserve valid explicit choices, even if imported data contains a collision. The registration owner
+        // reports conflicts instead of silently throwing away a shortcut or exposing a previously disabled default.
         choices = stored
+        if migratedChoice { persistChoices() }
+        if needsLegacyMigration { defaults.set(true, forKey: Self.legacyMigrationKey) }
     }
 
     func binding(for target: ToolShortcutTarget) -> ToolKeyBinding? {
@@ -200,8 +212,7 @@ final class ToolShortcutSettings {
         guard self.binding(for: target) != binding else { return true }
         if binding == target.defaultBinding { choices.removeValue(forKey: target.rawValue) }
         else { choices[target.rawValue] = Choice(binding: binding) }
-        if choices.isEmpty { defaults.removeObject(forKey: Self.storageKey) }
-        else if let data = try? JSONEncoder().encode(choices) { defaults.set(data, forKey: Self.storageKey) }
+        persistChoices()
         failures.removeValue(forKey: target)
         NotificationCenter.default.post(name: .toolShortcutsChanged, object: self)
         return true
@@ -209,6 +220,11 @@ final class ToolShortcutSettings {
 
     @discardableResult
     func reset(_ target: ToolShortcutTarget) -> Bool { setBinding(target.defaultBinding, for: target) }
+
+    private func persistChoices() {
+        if choices.isEmpty { defaults.removeObject(forKey: Self.storageKey) }
+        else if let data = try? JSONEncoder().encode(choices) { defaults.set(data, forKey: Self.storageKey) }
+    }
 
     func setRegistrationFailures(_ failures: [ToolShortcutTarget: String]) {
         self.failures = failures
@@ -272,6 +288,10 @@ final class ToolShortcutController {
         var failures: [ToolShortcutTarget: String] = [:]
         for target in ToolShortcutTarget.allCases {
             guard let binding = settings.binding(for: target) else { continue }
+            if let error = settings.validationError(for: binding, target: target) {
+                failures[target] = error
+                continue
+            }
             let registration = register(binding) { [weak self] in
                 guard let self, self.isRunning, self.generation == currentGeneration,
                       !self.settings.isRecording, self.settings.binding(for: target) == binding,

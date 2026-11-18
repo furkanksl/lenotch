@@ -189,11 +189,11 @@ final class SetupTests: XCTestCase {
         switch page {
         case .permissions: (["microphone", "accessibility"], ["everyday", "calendar", "bluetooth"])
         case .appearance: (["lock screen artwork", "album colors"], ["original wallpaper"])
-        case .dictation: (["anywhere", "speech model", "fluid speech pro"], ["nemotron", "hold fn to talk", "toggle dictation"])
+        case .dictation: (["speech model", "fluid speech pro"], ["nemotron", "hold fn to talk", "keyboard shortcut"])
         case .notifications: (["notifications in the notch"], ["full disk access", "notification settings"])
         case .agents: (["chatgpt"], ["coding agents", "agent sessions"])
-        case .launcher: (["notch preview", "configure"], ["open with"])
-        case .tools: (["keyboard shortcuts", "to do", "notes", "clipboard"], ["launcher keeps"])
+        case .launcher: (["notch preview", "configure"], ["keyboard shortcut"])
+        case .tools: (["your tools", "chat", "dictation"], ["restore order", "in menu"])
         }
     }
 
@@ -258,11 +258,16 @@ final class SetupTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(false, forKey: DictationInputSettings.toggleShortcutKey)
+        let shortcuts = ToolShortcutSettings(defaults: defaults)
+        shortcuts.setBinding(nil, for: .dictation)
         for pushToTalk in [false, true] {
             defaults.set(pushToTalk, forKey: DictationInputSettings.pushToTalkKey)
             for scheme in [ColorScheme.light, .dark] {
-                let size = SetupWindowController.minimumContentSize
-                let view = SetupView(page: .dictation)
+                let size = NSSize(width: 640, height: SetupWindowController.minimumContentSize.height)
+                let view = ScrollView {
+                    SetupDictationPage(reviewAccess: {}, shortcutSettings: shortcuts).padding(24)
+                }
+                    .background(SetupTheme.card)
                     .defaultAppStorage(defaults)
                     .environment(\.colorScheme, scheme)
                     .frame(width: size.width, height: size.height)

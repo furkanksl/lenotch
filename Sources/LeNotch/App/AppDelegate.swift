@@ -12,18 +12,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let args = CommandLine.arguments
     private var askKey: HotKey?
-    private var launcherKey: HotKey?
-    private var launcherShortcutObserver: NSObjectProtocol?
     private var dictationShortcutObserver: NSObjectProtocol?
     private var toolShortcutController: ToolShortcutController?
     private var toolShortcutObserver: NSObjectProtocol?
     private var toolShortcutRecordingObserver: NSObjectProtocol?
     private let notificationReplies = NotificationReplyService()
     private let agentSocket = AgentSocket()
-    private var dictationKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        #if DEBUG
+        ToolsDragSelfTest.install()
+        #endif
         // A public build opened outside Applications moves there first and opens again (11-11).
         if ApplicationInstaller.moveIfNeeded(arguments: args) { return }
         startApplication()
@@ -44,10 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         surface?.contextMenu = { [unowned self] hit in makeMenu(hit) }
         if let d = surface?.director {
             d.onNeedsSetup = { [unowned self] in setup.show() }
+            d.onToggleDictation = { DictationCoordinator.shared.toggle() }
             d.usage.start()
-            // Quick ask (phase 3): ⌥Space (the key tap, `MediaKeyTap.onAskKey`), and ⌃⌥⌘A as a backup that needs no permission.
+            // The shared tool controller owns all configurable keys. Keep only the reserved Chat backup separate.
             configureAskShortcut()
-            configureLauncherShortcut()
             configureToolShortcuts()
             surface?.keys.onFnKey = { [weak self] action in
                 if case .pressed = action, self?.surface?.director.island.context.locked == true { return }
@@ -61,22 +61,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainActor.assumeIsolated { self?.configureDictationShortcuts() }
             }
             toolShortcutObserver = NotificationCenter.default.addObserver(forName: .toolShortcutsChanged, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.toolShortcutController?.refresh() }
+                MainActor.assumeIsolated { self?.refreshToolShortcuts() }
             }
             toolShortcutRecordingObserver = NotificationCenter.default.addObserver(forName: .toolShortcutRecordingChanged, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.configureAskShortcut()
-                    self?.configureLauncherShortcut()
                     self?.configureDictationShortcuts()
-                    self?.toolShortcutController?.refresh()
+                    self?.refreshToolShortcuts()
                 }
             }
             // Dictation is the notch's own: it takes the ears while it listens and works.
             DictationCoordinator.shared.onDisplayChange = { d.dictationChanged($0.indicator, transcript: $0.transcript) }
             DesktopTransitionsModel.shared.start()
-            launcherShortcutObserver = NotificationCenter.default.addObserver(forName: .launcherShortcutChanged, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.configureLauncherShortcut() }
-            }
             let replies = notificationReplies
             d.sendNotificationReply = { notice, text in
                 try await replies.send(text: text, to: notice).displayMessage
@@ -134,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dictation = menu.addItem(withTitle: DictationCoordinator.shared.phase == .recording ? "Finish Dictation" : "Start Dictation",
                                      action: #selector(toggleDictation), keyEquivalent: "")
         dictation.target = self
-        if DictationInputSettings().toggleShortcut { dictation.subtitle = "⌥D" }
+        dictation.subtitle = ToolShortcutSettings.shared.binding(for: .dictation)?.display
         if DictationCoordinator.shared.canCancel {
             let cancel = menu.addItem(withTitle: "Cancel Dictation", action: #selector(cancelDictation), keyEquivalent: "")
             cancel.target = self
@@ -210,11 +206,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toolShortcutController = nil
         DesktopTransitionsModel.shared.stop()
         UsageModel.shared.stop()
-        launcherKey?.unregister()
         askKey?.unregister()
-        dictationKey?.unregister()
         DictationCoordinator.shared.cancel()
-        if let launcherShortcutObserver { NotificationCenter.default.removeObserver(launcherShortcutObserver) }
         if let dictationShortcutObserver { NotificationCenter.default.removeObserver(dictationShortcutObserver) }
         LockWallpaper.shared.restoreOnQuit()   // never leave someone's wallpaper behind
         agentSocket.stop()
@@ -223,31 +216,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureDictationShortcuts() {
         let settings = DictationInputSettings()
-        dictationKey?.unregister()
-        dictationKey = nil
         DictationCoordinator.shared.shortcutUnavailable = false
         guard !ToolShortcutSettings.shared.isRecording else {
             surface?.keys.fnPushToTalkEnabled = false
             return
         }
-        if settings.toggleShortcut {
-            dictationKey = HotKey(keyCode: kVK_ANSI_D, modifiers: optionKey) { DictationCoordinator.shared.toggle() }
-            DictationCoordinator.shared.shortcutUnavailable = dictationKey == nil
-        }
         surface?.keys.fnPushToTalkEnabled = settings.pushToTalk
-    }
-
-    private func configureLauncherShortcut() {
-        launcherKey?.unregister()
-        launcherKey = nil
-        LauncherModel.shared.shortcutUnavailable = false
-        guard !ToolShortcutSettings.shared.isRecording else { return }
-        guard UserDefaults.standard.object(forKey: "lenotch.launcher.shortcut") as? Bool ?? true,
-              let director = surface?.director else { return }
-        launcherKey = HotKey(keyCode: kVK_ANSI_A, modifiers: optionKey) {
-            director.toggleLauncher()
-        }
-        LauncherModel.shared.shortcutUnavailable = launcherKey == nil
+        updateShortcutAvailability()
     }
 
     private func configureAskShortcut() {
@@ -262,6 +237,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = ToolShortcutController(settings: .shared)
         controller.start { [weak director] target in director?.toggleToolShortcut(target) }
         toolShortcutController = controller
+        updateShortcutAvailability()
+    }
+
+    private func refreshToolShortcuts() {
+        toolShortcutController?.refresh()
+        updateShortcutAvailability()
+    }
+
+    private func updateShortcutAvailability() {
+        let failures = ToolShortcutSettings.shared.failures
+        DictationCoordinator.shared.shortcutUnavailable = failures[.dictation] != nil
+        LauncherModel.shared.shortcutUnavailable = failures[.launcher] != nil
     }
 
     @objc private func toggleDebug() { debugPanel?.toggle() }

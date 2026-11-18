@@ -1664,9 +1664,16 @@ final class IslandDirector {
     func toggleToolShortcut(_ target: ToolShortcutTarget) {
         guard !island.context.locked, !island.context.presenting,
               !systemContext.locked, !systemContext.presenting else { return }
-        if island.opened, island.trayShows, tray.page == target.page {
+        switch target {
+        case .chat: toggleAsk(); return
+        case .dictation: onToggleDictation?(); return
+        case .launcher: toggleLauncher(); return
+        default: break
+        }
+        guard let page = target.page else { return }
+        if island.opened, island.trayShows, tray.page == page {
             clickOutside()
-        } else { showTool(target.page) }
+        } else { showTool(page) }
     }
 
     func toggleLauncher() {
@@ -1891,6 +1898,7 @@ final class IslandDirector {
     }
     /// The field asked for the keyboard (the panel becomes key without activating the app).
     @ObservationIgnored var onWantsKey: (() -> Void)?
+    @ObservationIgnored var onToggleDictation: (() -> Void)?
     @ObservationIgnored var onYieldsKey: (() -> Void)?
     /// Bumps when the Ask chat's field should take the keyboard (opening it from its ball, the shortcut).
     private(set) var askFocusTick = 0

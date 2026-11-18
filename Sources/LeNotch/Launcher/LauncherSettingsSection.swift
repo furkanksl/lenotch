@@ -9,26 +9,34 @@ extension Notification.Name {
 struct LauncherSettingsSection: View {
     let model: LauncherModel
     let toolMenu: ToolMenuModel
-    @AppStorage("lenotch.launcher.shortcut") private var shortcut = true
+    let shortcutSettings: ToolShortcutSettings
 
-    init(model: LauncherModel = .shared, toolMenu: ToolMenuModel = .shared) {
+    init(model: LauncherModel = .shared, toolMenu: ToolMenuModel = .shared,
+         shortcutSettings: ToolShortcutSettings = .shared) {
         self.model = model
         self.toolMenu = toolMenu
+        self.shortcutSettings = shortcutSettings
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 36) {
             LauncherPreviewCard(model: model)
             SetupGroup("Shortcut") {
-                SetupToggleRow(icon: .keyboard, title: "Open with ⌥A",
-                               detail: "Fan your places out of the notch from any app.", isOn: $shortcut) {
-                    if shortcut && model.shortcutUnavailable {
-                        SetupStatusLine(kind: .info, text: toolMenu.isEnabled(.launcher)
-                                        ? "⌥A is already in use. Launcher is still available in Tools."
-                                        : "⌥A is already in use. Turn Launcher on in the Tools page to open it from the notch's menu.")
+                SetupRow(icon: .keyboard, title: "Keyboard shortcut", detail: "Change in Settings → Tools.") {
+                    HStack(spacing: 10) {
+                        Text(shortcutSettings.binding(for: .launcher)?.display ?? "Not set")
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(SetupTheme.textSecondary)
+                        Button("Configure") {
+                            NotificationCenter.default.post(name: Notification.Name("lenotch.settings.tools.open"), object: nil)
+                        }
+                        .buttonStyle(SetupButtonStyle(kind: .secondary))
+                    }
+                } below: {
+                    if let failure = shortcutSettings.failures[.launcher] {
+                        SetupStatusLine(kind: .info, text: failure)
                     }
                 }
-                .onChange(of: shortcut) { NotificationCenter.default.post(name: .launcherShortcutChanged, object: nil) }
             }
         }
     }

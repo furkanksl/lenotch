@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// One entry of the notch's tools menu, in the order the menu lists them.
+/// One entry of the notch's tools menu, in its default order.
 enum TrayTool: String, CaseIterable, Identifiable {
     case chat, dictation, prompter, today, launcher, clipboard, shelf, shortcuts, usage, system, todo, notes, notifications
 
@@ -31,18 +31,18 @@ enum TrayTool: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .chat: "Ask Claude or ChatGPT. ⌥Space still opens it."
-        case .dictation: "Start or finish dictation. ⌥D still works."
+        case .chat: "Chat with Claude or ChatGPT."
+        case .dictation: "Turn speech into text."
         case .prompter: "Read a script from the notch."
         case .today: "Your calendar for the day."
-        case .launcher: "Open your apps, folders and websites. Its shortcut still works."
-        case .clipboard: "Your recent copies. Its keyboard shortcut still works when hidden."
+        case .launcher: "Open your apps, folders and websites."
+        case .clipboard: "Your recent copies."
         case .shelf: "Hold files for a moment. Dropping a file on the notch still opens it."
         case .shortcuts: "Run your Shortcuts from the notch."
         case .usage: "How much of your Claude and Codex limits you have used."
         case .system: "CPU, memory and storage on this Mac."
-        case .todo: "Lists of things to do, kept on this Mac. Its shortcut still works when hidden."
-        case .notes: "Write notes on this Mac. Its shortcut still works when hidden."
+        case .todo: "Lists of things to do, kept on this Mac."
+        case .notes: "Write notes on this Mac."
         case .notifications: "Your recent notifications, shown as Inbox. New ones still appear as banners."
         }
     }
@@ -93,8 +93,9 @@ enum TrayTool: String, CaseIterable, Identifiable {
 final class ToolMenuModel {
     static let shared = ToolMenuModel()
     static let storageKey = "lenotch.tools.choices"
+    static let orderStorageKey = "lenotch.tools.order"
 
-    /// Tools per row.
+    /// Maximum tools per row.
     static let columns = 5
     /// A button is a 40 pt tile, 5 pt, and its label; rows are 10 pt apart and the card keeps a 20 pt margin.
     static let rowHeight = 59.0
@@ -102,13 +103,18 @@ final class ToolMenuModel {
     static let margin = 20.0
 
     private(set) var choices: [String: Bool]
+    private(set) var orderedTools: [TrayTool]
     @ObservationIgnored private let defaults: UserDefaults
-    /// Told which tool changed, after the choice is stored.
+    /// Told which tool changed, after its visibility or menu order is stored.
     @ObservationIgnored var onChange: ((TrayTool) -> Void)?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.choices = defaults.dictionary(forKey: Self.storageKey) as? [String: Bool] ?? [:]
+        let stored = defaults.stringArray(forKey: Self.orderStorageKey) ?? []
+        var seen: Set<TrayTool> = []
+        self.orderedTools = (stored.compactMap(TrayTool.init(rawValue:)) + TrayTool.allCases)
+            .filter { seen.insert($0).inserted }
     }
 
     func isEnabled(_ tool: TrayTool) -> Bool {
@@ -122,7 +128,50 @@ final class ToolMenuModel {
     }
 
     /// The tools the menu shows, in menu order.
-    var visible: [TrayTool] { TrayTool.allCases.filter(isEnabled) }
+    var visible: [TrayTool] { orderedTools.filter(isEnabled) }
+
+    var hasCustomOrder: Bool { orderedTools != TrayTool.allCases }
+
+    func move(_ tool: TrayTool, before target: TrayTool) {
+        move(tool, relativeTo: target, after: false)
+    }
+
+    func move(_ tool: TrayTool, after target: TrayTool) {
+        move(tool, relativeTo: target, after: true)
+    }
+
+    /// Used by the accessible Move up/Move down actions. Moving beyond an edge does nothing.
+    func move(_ tool: TrayTool, by offset: Int) {
+        guard let index = orderedTools.firstIndex(of: tool) else { return }
+        let (destination, overflow) = index.addingReportingOverflow(offset)
+        guard !overflow, orderedTools.indices.contains(destination) else { return }
+        var next = orderedTools
+        next.remove(at: index)
+        next.insert(tool, at: destination)
+        storeOrder(next, changed: tool)
+    }
+
+    /// Restores menu order without changing visibility choices or keyboard shortcuts.
+    func restoreOrder() {
+        guard let changed = zip(orderedTools, TrayTool.allCases).first(where: { $0 != $1 })?.0 else { return }
+        storeOrder(TrayTool.allCases, changed: changed)
+    }
+
+    private func move(_ tool: TrayTool, relativeTo target: TrayTool, after: Bool) {
+        guard tool != target, let index = orderedTools.firstIndex(of: tool) else { return }
+        var next = orderedTools
+        next.remove(at: index)
+        guard let destination = next.firstIndex(of: target) else { return }
+        next.insert(tool, at: destination + (after ? 1 : 0))
+        storeOrder(next, changed: tool)
+    }
+
+    private func storeOrder(_ tools: [TrayTool], changed tool: TrayTool) {
+        guard orderedTools != tools else { return }
+        orderedTools = tools
+        defaults.set(tools.map(\.rawValue), forKey: Self.orderStorageKey)
+        onChange?(tool)
+    }
 
     /// The last tool can't be turned off: the menu would have nothing to open.
     func canDisable(_ tool: TrayTool) -> Bool { !isEnabled(tool) || visible.count > 1 }
@@ -138,11 +187,21 @@ final class ToolMenuModel {
         return true
     }
 
-    /// The menu's rows, five tools each, the last one holding the rest.
+    /// Six and eight tools form two balanced rows; other counts keep the five-column layout.
+    var columnCount: Int {
+        switch visible.count {
+        case 6: 3
+        case 8: 4
+        default: Self.columns
+        }
+    }
+
+    /// The menu's rows, in the saved tool order.
     var rows: [[TrayTool]] {
         let tools = visible
-        return stride(from: 0, to: tools.count, by: Self.columns).map {
-            Array(tools[$0..<min($0 + Self.columns, tools.count)])
+        let columns = columnCount
+        return stride(from: 0, to: tools.count, by: columns).map {
+            Array(tools[$0..<min($0 + columns, tools.count)])
         }
     }
 

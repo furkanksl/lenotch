@@ -118,6 +118,9 @@ final class MediaKeyTap {
     /// ⌥Space: quick ask (owner, 11-07: "give a better shortcut for asking, or override claude current shortcut"). The
     /// tap sees it before the apps do and swallows it, so Claude's own quick entry doesn't open as well.
     var onAskKey: (() -> Void)?
+    /// The application disables the historical ⌥Space tap route once Carbon owns the configurable
+    /// Chat binding. Keeping the tap route opt-in avoids swallowing an old chord after a remap.
+    var interceptsLegacyAskShortcut = true
     var onFnKey: ((FnPushToTalk.Action) -> Void)?
     var onFnAvailability: ((Bool) -> Void)?
     var fnPushToTalkEnabled = false {
@@ -196,7 +199,8 @@ final class MediaKeyTap {
                 self.onFnKey?(action)
             }
         }
-        let input = HardwareKeyEventTap(onLevel: level, onAsk: ask, onFn: fn)
+        let input = HardwareKeyEventTap(onLevel: level, onAsk: ask, onFn: fn,
+                                        interceptsLegacyAskShortcut: interceptsLegacyAskShortcut)
         input.setFnEnabled(fnPushToTalkEnabled)
         guard input.start() else {
             Self.log.notice("key tap unavailable")
@@ -237,6 +241,7 @@ final class HardwareKeyEventTap: @unchecked Sendable {
     private let onLevel: @Sendable (MediaKeyTap.HUDLevel) -> Void
     private let onAsk: (@Sendable () -> Void)?
     private let onFn: (@Sendable (FnPushToTalk.Action) -> Void)?
+    private let interceptsLegacyAskShortcut: Bool
     private let fn = Mutex(FnPushToTalk())
     private var swallowSpaceUp = false
     private let lifecycle = NSCondition()
@@ -248,10 +253,12 @@ final class HardwareKeyEventTap: @unchecked Sendable {
 
     init(onLevel: @escaping @Sendable (MediaKeyTap.HUDLevel) -> Void,
          onAsk: (@Sendable () -> Void)? = nil,
-         onFn: (@Sendable (FnPushToTalk.Action) -> Void)? = nil) {
+         onFn: (@Sendable (FnPushToTalk.Action) -> Void)? = nil,
+         interceptsLegacyAskShortcut: Bool = true) {
         self.onLevel = onLevel
         self.onAsk = onAsk
         self.onFn = onFn
+        self.interceptsLegacyAskShortcut = interceptsLegacyAskShortcut
     }
 
     func setFnEnabled(_ enabled: Bool) {
@@ -355,7 +362,7 @@ final class HardwareKeyEventTap: @unchecked Sendable {
         if type == .keyDown || type == .keyUp {
             guard event.getIntegerValueField(.keyboardEventKeycode) == 49 else { return false }   // Space
             if type == .keyUp { defer { swallowSpaceUp = false }; return swallowSpaceUp }
-            guard MediaKeyTap.isAskChord(event.flags), let onAsk else { return false }
+            guard interceptsLegacyAskShortcut, MediaKeyTap.isAskChord(event.flags), let onAsk else { return false }
             if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { onAsk() }
             swallowSpaceUp = true
             return true

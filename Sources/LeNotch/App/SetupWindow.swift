@@ -38,7 +38,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .notifications: "Show new notifications in the notch as they arrive."
         case .agents: "Chat with ChatGPT from the notch, and follow your Claude and Codex sessions."
         case .launcher: "Open your apps, folders and websites straight from the notch."
-        case .tools: "Choose which tools the notch's menu shows. A hidden tool keeps its shortcut."
+        case .tools: "Drag to reorder. Shortcuts work even when hidden."
         }
     }
 }
@@ -130,6 +130,9 @@ struct SetupView: View {
         .background(SetupWindowAppearance(scheme: scheme))
         .modifier(SetupSchemeOverride(scheme: scheme))
         .tint(SetupTheme.accent)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("lenotch.settings.tools.open"))) { _ in
+            open(.tools)
+        }
     }
 
     private var cardShape: UnevenRoundedRectangle {
