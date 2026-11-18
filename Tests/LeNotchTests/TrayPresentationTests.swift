@@ -107,7 +107,9 @@ final class TrayPresentationTests: XCTestCase {
         director.startMusic()
         if !playing { director.togglePlaying() }
         director.openTray()
-        let card = director.island.cardSize(player: CardSize(width: 520, height: 240, radius: 32))
+        let card = director.presentationCard(player: CardSize(width: 520, height: 240, radius: 32))
+        let rows = director.toolMenu.rows.count
+        XCTAssertEqual(rows, 3, "Eleven tools are on, so the menu is three rows")
         let frame = FrameModel()
         frame.cardHalfWidth = card.halfWidth
         frame.cardHeight = card.height
@@ -142,8 +144,8 @@ final class TrayPresentationTests: XCTestCase {
         let observations = request.results ?? []
         // Read the label bands separately: Vision can otherwise merge a centered outline icon with "Shelf".
         var recognizedLabels: [String] = []
-        let labelPitch = (card.height - 40 + 10) / 2
-        for row in 0..<2 {
+        let labelPitch = (card.height - 40 + 10) / Double(rows)
+        for row in 0..<rows {
             let rect = CGRect(x: FrameModel.cx - card.halfWidth + 20,
                               y: frame.cardTop + 20 + Double(row) * labelPitch + 42,
                               width: card.width - 40, height: 20)
@@ -157,7 +159,7 @@ final class TrayPresentationTests: XCTestCase {
             recognizedLabels += (labelRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         }
         let labels = recognizedLabels.joined(separator: " ").lowercased()
-        for label in ["Chat", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "System"] {
+        for label in ["Chat", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "System", "To-do"] {
             XCTAssertTrue(labels.contains(label.lowercased()), "Missing tools label \(label): \(labels)")
         }
         let words = Set(labels.split(whereSeparator: \.isWhitespace))
@@ -166,7 +168,7 @@ final class TrayPresentationTests: XCTestCase {
         XCTAssertFalse(words.contains("play"), "Playback belongs in the player, not the tools menu")
         XCTAssertFalse(words.contains("pause"), "Playback belongs in the player, not the tools menu")
 
-        // The two rows must remain inside the narrow card, not in a displaced player-side column.
+        // The three rows must remain inside the narrow card, not in a displaced player-side column.
         let cardRect = CGRect(x: FrameModel.cx - card.halfWidth, y: frame.cardTop, width: card.width, height: card.height)
         for observation in observations {
             let box = observation.boundingBox

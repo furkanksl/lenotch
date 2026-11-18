@@ -47,6 +47,8 @@ private struct TrayPages: View {
                     UsageView(model: director.usage, onClose: { tray.go(.main) }, onOpenSettings: { director.onNeedsSetup?() })
                 case .system:
                     SystemUsagePage(model: director.systemUsage, back: { tray.go(.main) })
+                case .todo:
+                    TodoPage(tray: tray, director: director, store: director.todos)
                 case .notifications:
                     if !director.notificationInbox.expanded, let notice = director.notificationInbox.selected {
                         VStack(spacing: 8) {
@@ -121,6 +123,10 @@ private struct TrayGrid: View {
         case .shortcuts: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.shortcuts) }
         case .usage: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.usage) }
         case .system: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.system) }
+        case .todo:
+            let left = director.todos.openCount
+            Tool(icon: tool.icon, label: tool.menuLabel, badge: left == 0 ? nil : min(left, 99)) { tray.go(.todo) }
+                .help(left == 0 ? "Your to-do lists" : "\(left) to do")
         case .notifications:
             Tool(icon: tool.icon, label: tool.menuLabel,
                  badge: director.notificationInbox.items.isEmpty ? nil : director.notificationInbox.items.count) {
@@ -208,7 +214,7 @@ private struct Tool: View {
 // MARK: - Pages
 
 /// A tool's page: back, the title, an optional action; the body below fills the rest.
-private struct Page<Content: View>: View {
+struct Page<Content: View>: View {
     let tray: TrayModel
     let title: String
     var action: (label: String, run: () -> Void)?

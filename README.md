@@ -34,14 +34,29 @@ can come back from **Setup → Tools**.
 ### Tools menu
 
 **Setup → Tools** has a switch for each tool in the notch's tools menu: Chat, Dictation, Prompter, Today, Launcher,
-Clipboard, Shelf, Shortcuts, Usage, System, and Notifications (shown in the menu as Inbox). Every tool is on except
+Clipboard, Shelf, Shortcuts, Usage, System, To-do, and Notifications (shown in the menu as Inbox). Every tool is on except
 Notifications. The menu shows five tools a row and grows a row when it needs one, so turning tools off shrinks it and
-turning Notifications on adds a third row. At least one tool always stays on.
+short rows stay centered. At least one tool always stays on.
 
 Turning a tool off hides its button only. Its shortcut (⌥Space for Chat, ⌥D for Dictation, the Launcher shortcut),
 dropping files on the notch to open the Shelf, and notifications opening the inbox keep working. Your choices are stored
 in `lenotch.tools.choices` in the app's defaults, as just the tools you changed, so a tool added later starts on its
 own default.
+
+### To-do lists
+
+Open **To-do** from the notch tools menu. Start typing in the empty **Tasks** list, or use **+** to make another list.
+Press Return to add a task; the field stays ready for the next one. Select a list's chip to switch between lists.
+Check a task to move it under **Done**, and uncheck it to bring it back. **Clear** removes completed tasks together.
+
+Double-click a list name or task title to rename it, or right-click for rename/delete actions. Deletions offer
+**Undo** for six seconds. The To-do menu button shows the number of unfinished tasks across all lists, capped at 99.
+Hide its button in **Setup → Tools** without deleting any lists.
+
+Lists, task titles, completion state, and the selected list are saved after every change in
+`~/Library/Application Support/lenotch/todos.json`. There is no database, account, or network sync. The file is
+written atomically; an unreadable file is preserved before replacement, and an unsupported newer format is never
+overwritten. Storage problems are reported on the To-do page.
 
 ### ChatGPT voice (experimental)
 

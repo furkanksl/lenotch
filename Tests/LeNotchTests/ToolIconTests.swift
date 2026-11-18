@@ -8,7 +8,7 @@ final class ToolIconTests: XCTestCase {
     func testEveryToolHasANonemptyVector() {
         XCTAssertEqual(ToolIcon.allCases, [
             .ask, .dictation, .timer, .prompter, .today, .launcher,
-            .clipboard, .shelf, .shortcuts, .usage, .system, .inbox,
+            .clipboard, .shelf, .shortcuts, .usage, .system, .todo, .inbox,
         ], "Every tool must have a Hugeicons vector, including newly added tools")
         for icon in ToolIcon.allCases {
             let path = ToolIconShape(icon: icon).path(in: CGRect(x: 0, y: 0, width: 24, height: 24))

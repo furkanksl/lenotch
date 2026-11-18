@@ -15,7 +15,7 @@ final class NotchSurfaceController {
     /// Room for the card plus its glow, even dragged down: at 300 pt the glow was cut off in a hard line.
     static let panelSize = CGSize(width: 760, height: 420)
 
-    let director = IslandDirector(toolMenu: .shared)
+    let director = IslandDirector(toolMenu: .shared, todos: .shared)
     /// What's playing on the Mac (P2): the adapter, else the players' notifications.
     private let nowPlaying = NowPlayingMonitor(adapter: AdapterLocation.find(sourceRoot: NotchSurfaceController.sourceRoot))
     /// Where you are on the Mac (P3).

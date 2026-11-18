@@ -3,7 +3,7 @@ import Observation
 
 /// One entry of the notch's tools menu, in the order the menu lists them.
 enum TrayTool: String, CaseIterable, Identifiable {
-    case chat, dictation, prompter, today, launcher, clipboard, shelf, shortcuts, usage, system, notifications
+    case chat, dictation, prompter, today, launcher, clipboard, shelf, shortcuts, usage, system, todo, notifications
 
     var id: Self { self }
 
@@ -20,6 +20,7 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .shortcuts: "Shortcuts"
         case .usage: "Usage"
         case .system: "System"
+        case .todo: "To-do"
         case .notifications: "Notifications"
         }
     }
@@ -39,6 +40,7 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .shortcuts: "Run your Shortcuts from the notch."
         case .usage: "How much of your Claude and Codex limits you have used."
         case .system: "CPU, memory and storage on this Mac."
+        case .todo: "Lists of things to do, kept on this Mac."
         case .notifications: "Your recent notifications, shown as Inbox. New ones still appear as banners."
         }
     }
@@ -55,6 +57,7 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .shortcuts: .shortcuts
         case .usage: .usage
         case .system: .system
+        case .todo: .todo
         case .notifications: .inbox
         }
     }
@@ -70,6 +73,7 @@ enum TrayTool: String, CaseIterable, Identifiable {
         case .shortcuts: .shortcuts
         case .usage: .usage
         case .system: .system
+        case .todo: .todo
         case .notifications: .notifications
         }
     }

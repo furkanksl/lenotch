@@ -6,7 +6,7 @@
 import SwiftUI
 
 enum ToolIcon: CaseIterable {
-    case ask, dictation, timer, prompter, today, launcher, clipboard, shelf, shortcuts, usage, system, inbox
+    case ask, dictation, timer, prompter, today, launcher, clipboard, shelf, shortcuts, usage, system, todo, inbox
 }
 
 struct ToolIconView: View {
@@ -343,6 +343,14 @@ struct ToolIconShape: Shape {
                 path.move(2, position); path.line(5, position)
                 path.move(19, position); path.line(22, position)
             }
+
+        case .todo: // A checklist: two ticked rows and one still to do, on the rounded 24-point grid.
+            for y in [5.5, 12.0] {
+                path.move(3, y + 0.3); path.line(4.7, y + 2); path.line(7.6, y - 1.6)
+                path.move(11.5, y + 0.2); path.line(21, y + 0.2)
+            }
+            path.addRoundedRect(in: CGRect(x: 3, y: 16.5, width: 4.6, height: 4.6), cornerSize: CGSize(width: 1.3, height: 1.3))
+            path.move(11.5, 18.8); path.line(21, 18.8)
 
         case .inbox: // Notification01Icon.js
             path.move(15.5, 18)

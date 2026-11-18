@@ -121,7 +121,8 @@ import XCTest
             XCTAssertEqual(d.presentationCard(player: player), size)
         }
         d.tray.go(.main)
-        XCTAssertEqual(d.presentationCard(player: player), Island.trayOnly)
+        XCTAssertEqual(d.presentationCard(player: player),
+                       CardSize(width: Island.trayOnly.width, height: d.toolMenu.cardHeight, radius: Island.trayOnly.radius))
     }
 
     func testExplicitSubmitUsesPinnedNotificationAndDoesNotAutoRetry() async {
