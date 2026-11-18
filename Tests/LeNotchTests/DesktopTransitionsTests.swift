@@ -23,7 +23,6 @@ final class DesktopTransitionsTests: XCTestCase {
         return (try XCTUnwrap(UserDefaults(suiteName: name)), name)
     }
 
-
     func testTransitionActivityIsPostedAndClearedWhenTheFeatureStops() throws {
         let (defaults, name) = try defaults()
         defer { defaults.removePersistentDomain(forName: name) }
@@ -49,12 +48,14 @@ final class DesktopTransitionsTests: XCTestCase {
         var created = 0
         let model = DesktopTransitionsModel(defaults: defaults) { created += 1; return Driver() }
         XCTAssertFalse(model.enabled)
+        XCTAssertEqual(model.options, DesktopTransitionOptions(style: .system, sensitivity: 1))
+        XCTAssertEqual(DesktopTransitionStyle.allCases, [.system, .instant])
         model.start()
         model.start()
         model.setSuspended(true)
-        model.configure(style: .hexagon, speed: 1.4)
+        model.configure(style: .instant, sensitivity: 1.4)
         model.stop()
-        XCTAssertEqual(created, 0, "No observers, taps, keyboard changes, captures or trackpad monitoring while off")
+        XCTAssertEqual(created, 0, "No switcher driver is constructed while off")
         XCTAssertEqual(model.status, .off)
     }
 
@@ -75,9 +76,8 @@ final class DesktopTransitionsTests: XCTestCase {
         XCTAssertEqual(driver.suspensions, [true], "Respect an existing lock/presentation before starting")
         driver.onStatus?(.active(keyboard: true, trackpad: false))
         XCTAssertEqual(model.status, .active(keyboard: true, trackpad: false))
-        model.configure(style: .stack, speed: 1.8, sensitivity: 1.2, roundedCorners: false, moveDock: true)
-        XCTAssertEqual(driver.updates.last?.style, .stack)
-        XCTAssertEqual(driver.updates.last?.moveDock, true)
+        model.configure(style: .instant, sensitivity: 1.2)
+        XCTAssertEqual(driver.updates, [DesktopTransitionOptions(style: .instant, sensitivity: 1.2)])
         XCTAssertTrue(defaults.bool(forKey: DesktopTransitionsModel.enabledKey))
         let restored = DesktopTransitionsModel(defaults: defaults) { XCTFail("Restoring preferences isn't activation"); return Driver() }
         XCTAssertTrue(restored.enabled)
@@ -89,7 +89,8 @@ final class DesktopTransitionsTests: XCTestCase {
         model.stop()
         XCTAssertEqual(driver.stops, 1)
         XCTAssertFalse(defaults.bool(forKey: DesktopTransitionsModel.enabledKey))
-        XCTAssertEqual(defaults.string(forKey: "lenotch.spaces.style"), "stack", "Keep visual choices when disabled")
+        XCTAssertEqual(defaults.string(forKey: "lenotch.spaces.style"), "instant", "Keep the selected style when disabled")
+        XCTAssertEqual(defaults.double(forKey: "lenotch.spaces.sensitivity"), 1.2)
     }
 
     func testLateStatusFromDisabledGenerationCannotReactivateTheUI() throws {
@@ -105,26 +106,47 @@ final class DesktopTransitionsTests: XCTestCase {
         stale?(.active(keyboard: true, trackpad: true))
         XCTAssertEqual(model.status, .off)
         model.setEnabled(true)
-        second.onStatus?(.needsScreenRecording)
+        second.onStatus?(.needsAccessibility)
         stale?(.active(keyboard: true, trackpad: true))
-        XCTAssertEqual(model.status, .needsScreenRecording)
+        XCTAssertEqual(model.status, .needsAccessibility)
         model.stop()
+    }
+
+    func testLegacyStylesFallBackToSystemWithoutDiscardingOptInOrSensitivity() throws {
+        let (defaults, name) = try defaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(true, forKey: DesktopTransitionsModel.enabledKey)
+        defaults.set(1.5, forKey: "lenotch.spaces.sensitivity")
+        defaults.set(1.8, forKey: "lenotch.spaces.speed")
+        defaults.set(false, forKey: "lenotch.spaces.rounded")
+        defaults.set(true, forKey: "lenotch.spaces.moveDock")
+        let expected = DesktopTransitionOptions(style: .system, sensitivity: 1.5)
+
+        for legacyStyle in ["lightweight", "magnetic", "hexagon", "stack"] {
+            defaults.set(legacyStyle, forKey: "lenotch.spaces.style")
+            let driver = Driver()
+            let model = DesktopTransitionsModel(defaults: defaults) { driver }
+            XCTAssertTrue(model.enabled, legacyStyle)
+            XCTAssertEqual(model.options, expected, legacyStyle)
+            XCTAssertTrue(driver.starts.isEmpty, legacyStyle)
+            model.start()
+            XCTAssertEqual(driver.starts, [expected], legacyStyle)
+            model.stop()
+        }
     }
 
     func testInvalidStoredSettingsAreBoundedAndUnknownStylesFallBack() throws {
         let (defaults, name) = try defaults()
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.set("future-style", forKey: "lenotch.spaces.style")
-        defaults.set(-100, forKey: "lenotch.spaces.speed")
         defaults.set(100, forKey: "lenotch.spaces.sensitivity")
         let model = DesktopTransitionsModel(defaults: defaults)
-        XCTAssertEqual(model.options.style, .lightweight)
-        XCTAssertEqual(model.options.speed, 0.3)
+        XCTAssertEqual(model.options.style, .system)
         XCTAssertEqual(model.options.sensitivity, 2)
-        model.configure(speed: .nan, sensitivity: .infinity)
-        XCTAssertEqual(model.options.speed, 1)
+        model.configure(sensitivity: -100)
+        XCTAssertEqual(model.options.sensitivity, 0.5)
+        model.configure(sensitivity: .infinity)
         XCTAssertEqual(model.options.sensitivity, 1)
-        XCTAssertEqual(Set(DesktopTransitionStyle.allCases.map(\.title)).count, 6)
     }
 
     func testSuspensionPreservesOptInAndReturnsToThePreviousConfiguration() throws {

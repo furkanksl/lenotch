@@ -3,6 +3,7 @@ import CoreGraphics
 
 /// Raw trackpad frames to horizontal three/four-finger drags. Distances are trackpad widths.
 final class SwipeRecognizer {
+    private static let directionSlop: CGFloat = 0.015
     var onArm: (() -> Void)?
     var onDisarm: (() -> Void)?
     var onBegin: (() -> Void)?
@@ -51,13 +52,13 @@ final class SwipeRecognizer {
             }
             let dx = centroid.x - start.x
             let dy = centroid.y - start.y
-            if abs(dx) >= Config.directionSlop, abs(dx) > abs(dy) * 1.2 {
+            if abs(dx) >= Self.directionSlop, abs(dx) > abs(dy) * 1.2 {
                 state = .active
                 origin = centroid.x
                 lastDX = 0
                 history = [(frame.timestamp, 0)]
                 onBegin?()
-            } else if abs(dy) >= Config.directionSlop {
+            } else if abs(dy) >= Self.directionSlop {
                 state = .ignored
                 onDisarm?()
             }
@@ -95,7 +96,7 @@ final class SwipeRecognizer {
         reset()
     }
 
-    /// Forget the gesture without callbacks when the owner already handles snapping or shutdown.
+    /// Forget the gesture without callbacks when the owner is shutting down.
     func reset() {
         state = .idle
         history.removeAll(keepingCapacity: true)

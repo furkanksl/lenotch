@@ -293,8 +293,10 @@ final class SetupTests: XCTestCase {
             XCTFail("Rendering settings must never create system controls")
             return DesktopTransitionsEngine()
         }
-        for enabled in [false, true] {
+        XCTAssertEqual(DesktopTransitionStyle.allCases, [.system, .instant])
+        for (enabled, style) in [(false, DesktopTransitionStyle.system), (true, .system), (true, .instant)] {
             model.setEnabled(enabled)
+            model.configure(style: style)
             for scheme in [ColorScheme.light, .dark] {
                 let view = ScrollView {
                     SetupDesktopTransitions(model: model).padding(24)
@@ -303,16 +305,19 @@ final class SetupTests: XCTestCase {
                 .environment(\.colorScheme, scheme)
                 let (window, host) = makeWindow(view, size: NSSize(width: 640, height: 760), scheme: scheme)
                 defer { window.close() }
-                let result = try await render(host, name: "desktop-transitions-\(enabled)-\(scheme)")
+                let result = try await render(host, name: "desktop-transitions-\(enabled)-\(style)-\(scheme)")
                 let words = normalized(result.transcript)
-                XCTAssertTrue(words.contains("custom desktop transitions"), words)
+                XCTAssertTrue(words.contains("desktop transition controls"), words)
                 if enabled {
-                    for text in ["transition", "lightweight", "animation speed", "swipe sensitivity", "rounded desktop corners"] {
-                        XCTAssertTrue(words.contains(text), "Missing \(text): \(words)")
-                    }
+                    XCTAssertTrue(words.contains(normalized(style.title)), words)
                 } else {
                     XCTAssertTrue(words.contains("off by default"), words)
-                    XCTAssertFalse(words.contains("animation speed"), "No configuration clutter while disabled")
+                    XCTAssertFalse(words.contains(normalized(style.title)), words)
+                }
+                XCTAssertEqual(words.contains("swipe sensitivity"), enabled && style == .instant, words)
+                XCTAssertEqual(words.contains("needs accessibility"), enabled && style == .instant, words)
+                for removed in ["animation speed", "rounded desktop corners", "move dock", "screen recording", "desktop snapshots"] {
+                    XCTAssertFalse(words.contains(removed), "Unexpected \(removed): \(words)")
                 }
             }
         }

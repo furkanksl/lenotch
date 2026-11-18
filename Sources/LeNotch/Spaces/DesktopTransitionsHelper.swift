@@ -6,7 +6,7 @@ import SpacesEngine
 /// stdin's lifetime belongs to the parent; EOF means stop, including a parent crash.
 @MainActor
 final class DesktopTransitionsHelper: NSObject, NSApplicationDelegate {
-    private let engine = DesktopTransitionsEngine(excludingProcessIDs: [getppid()])
+    private let engine = DesktopTransitionsEngine()
     private var finished = false
     private var parentSuspended = false
     private var locked = false
@@ -34,13 +34,10 @@ final class DesktopTransitionsHelper: NSObject, NSApplicationDelegate {
             let direction = Int(note.object as? String ?? "") ?? 0
             MainActor.assumeIsolated { self?.engine.debugStep(direction) }
         })
-        // `...debug.desktop-pause` simulates a lock/unlock, `...debug.desktop-restyle` a settings change.
+        // `...debug.desktop-pause` simulates a lock/unlock.
         lockObservers.append(center.addObserver(forName: Notification.Name("com.lenotch.app.debug.desktop-pause"), object: nil, queue: .main) { [weak self] note in
             let paused = (note.object as? String) == "1"
             MainActor.assumeIsolated { self?.engine.setSuspended(paused) }
-        })
-        lockObservers.append(center.addObserver(forName: Notification.Name("com.lenotch.app.debug.desktop-restyle"), object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.engine.debugRestyle() }
         })
         #endif
         engine.onStatus = { [weak self] status in
@@ -103,8 +100,8 @@ final class DesktopTransitionsHelper: NSObject, NSApplicationDelegate {
     private func receive(_ command: DesktopTransitionCommand) {
         guard !finished else { return }
         switch command {
-        case .start(let options): engine.start(Self.validated(options))
-        case .update(let options): engine.update(Self.validated(options))
+        case .start(let options): engine.start(options)
+        case .update(let options): engine.update(options)
         case .suspend(let suspended):
             parentSuspended = suspended
             engine.setSuspended(suspended || locked)
@@ -116,11 +113,6 @@ final class DesktopTransitionsHelper: NSObject, NSApplicationDelegate {
         guard !finished else { return }
         do { try FileHandle.standardOutput.write(contentsOf: DesktopTransitionWire.encode(event)) }
         catch { finish() }
-    }
-
-    private static func validated(_ value: DesktopTransitionOptions) -> DesktopTransitionOptions {
-        DesktopTransitionOptions(style: value.style, speed: value.speed, sensitivity: value.sensitivity,
-                                 roundedCorners: value.roundedCorners, moveDock: value.moveDock)
     }
 
     private func finish() {

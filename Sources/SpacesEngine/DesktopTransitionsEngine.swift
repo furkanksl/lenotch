@@ -3,7 +3,7 @@ import ApplicationServices
 import CDockSwipe
 
 public enum DesktopTransitionStatus: Equatable, Sendable, Codable {
-    case off, systemDefault, needsAccessibility, needsScreenRecording, unsupported, paused
+    case off, systemDefault, needsAccessibility, unsupported, paused
     case active(keyboard: Bool, trackpad: Bool)
 }
 
@@ -24,12 +24,6 @@ enum DesktopTransitionPollingPolicy {
         return .inspect
     }
 
-    /// Desktop pictures are plain images of the screen. A settings change keeps them unless it changes what a picture
-    /// contains (with or without the Dock) or the new style draws no pictures at all.
-    static func keepsPictures(from old: DesktopTransitionOptions, to new: DesktopTransitionOptions) -> Bool {
-        old.moveDock == new.moveDock && new.style.isDrawn
-    }
-
     static func shouldPoll(enabled: Bool, customTransition: Bool, paused: Bool, fullySetUp: Bool,
                            settingsInFront: Bool, pendingInspection: Bool) -> Bool {
         guard enabled, customTransition, !paused else { return false }
@@ -37,12 +31,11 @@ enum DesktopTransitionPollingPolicy {
     }
 }
 
-/// LeNotch's explicit lifecycle around Interspace's transition engine. No event taps, keyboard preferences,
-/// trackpad callbacks, captures, or observers exist until start(). stop() restores the native desktop controls.
+/// Owns the input hooks used by Instant. System leaves the same controls entirely with macOS.
 @MainActor
 public final class DesktopTransitionsEngine {
     public var onStatus: ((DesktopTransitionStatus) -> Void)?
-    /// A drawn transition started or ended. Always ends with false when resources are released mid-transition.
+    /// A native switch started or ended. Always ends with false when input hooks are released.
     public var onTransition: ((Bool) -> Void)?
     private var transitioning = false
     private var options = DesktopTransitionOptions()
@@ -62,11 +55,7 @@ public final class DesktopTransitionsEngine {
     private var keysInstalled = false
     private var hasTrackpad = false
     private var status = DesktopTransitionStatus.off
-    private let excludedProcessIDs: Set<pid_t>
-
-    public init(excludingProcessIDs: Set<pid_t> = []) {
-        excludedProcessIDs = excludingProcessIDs
-    }
+    public init() {}
 
     public func start(_ options: DesktopTransitionOptions) {
         guard !enabled else { update(options); return }
@@ -110,10 +99,8 @@ public final class DesktopTransitionsEngine {
 
     public func update(_ options: DesktopTransitionOptions) {
         guard options != self.options else { return }
-        let old = self.options
         self.options = options
-        // The hooks restart with the new options; the desktops' pictures stay unless they no longer fit.
-        stopResources(keepPictures: DesktopTransitionPollingPolicy.keepsPictures(from: old, to: options))
+        stopResources()
         if enabled { reconcile() }
     }
 
@@ -142,14 +129,6 @@ public final class DesktopTransitionsEngine {
         controller?.keyboardStep(direction)
     }
 
-    /// Development only: the same path as a style/speed change in Setup (speed nudged, then restored).
-    public func debugRestyle() {
-        var nudged = options
-        nudged.speed = options.speed == 1 ? 1.01 : 1
-        let original = options
-        update(nudged)
-        update(original)
-    }
     #endif
 
     private var isPaused: Bool { suspended || sleeping || reduceMotion }
@@ -198,8 +177,7 @@ public final class DesktopTransitionsEngine {
             explicit: explicit || pendingInspection
         ) {
         case .pause:
-            // Locked, asleep, presenting: no input hooks and nothing drawn. The pictures stay in memory for the return.
-            stopResources(keepPictures: true); publish(.paused); return
+            stopResources(); publish(.paused); return
         case .deferInspection:
             // Keep explicit wake/permission/app notifications until the gesture has handed back.
             pendingInspection = pendingInspection || explicit
@@ -210,10 +188,6 @@ public final class DesktopTransitionsEngine {
             pendingInspection = false
         }
         guard AXIsProcessTrusted() else { stopResources(); publish(.needsAccessibility); return }
-        // Instant does not capture or draw screenshots.
-        guard options.style == .instant || CGPreflightScreenCaptureAccess() else {
-            stopResources(); publish(.needsScreenRecording); return
-        }
         guard !active else {
             // A partial setup keeps polling for a reconnected trackpad or an installable tap.
             if !tapInstalled { tapInstalled = ds_tap_install() }
@@ -227,19 +201,12 @@ public final class DesktopTransitionsEngine {
         }
         // A live Spaces query can block while Dock is switching. It is an initial capability check,
         // never a periodic query against an already-running controller.
-        guard Spaces.isAvailable, let screen = NSScreen.underCursor, let initialLayout = Spaces.layout(for: screen) else {
+        guard Spaces.isAvailable, let screen = NSScreen.underCursor, let initialLayout = Spaces.layout(for: screen.displayID) else {
             stopResources(); publish(.unsupported); return
         }
-        AppSettings.shared.apply(options)
-        let controller: TransitionController
-        if let kept = self.controller {
-            controller = kept
-            controller.resume(with: initialLayout)
-        } else {
-            controller = TransitionController(initialLayout: initialLayout, excludingProcessIDs: excludedProcessIDs)
-            self.controller = controller
-            controller.onActivityChanged = { [weak self] active in self?.setTransitioning(active) }
-        }
+        let controller = TransitionController(initialLayout: initialLayout, sensitivity: options.sensitivity)
+        self.controller = controller
+        controller.onActivityChanged = { [weak self] active in self?.setTransitioning(active) }
         let multitouch = MultitouchMonitor()
         self.multitouch = multitouch
         multitouch.onFrame = { [weak self] fingers in
@@ -255,26 +222,18 @@ public final class DesktopTransitionsEngine {
         }
         guard keysInstalled || hasTrackpad else { stopResources(); publish(.unsupported); return }
         active = true
-        controller.isEnabled = true
-        if options.style.isDrawn { controller.prewarm() }
         ds_tap_set_suppress(hasTrackpad)
         SpaceShortcuts.update(enabled: keysInstalled)
         publish(.active(keyboard: keysInstalled, trackpad: hasTrackpad))
     }
 
-    /// Removes every input hook. `keepPictures` suspends the controller with its desktop pictures instead of
-    /// releasing it; anything else (feature off, a permission withdrawn, unsupported) releases all captured pixels.
-    private func stopResources(keepPictures: Bool = false) {
+    private func stopResources() {
         active = false
         pendingInspection = false
         ds_tap_set_suppress(false)
-        if keepPictures, let controller {
-            controller.suspend()
-        } else {
-            controller?.onActivityChanged = nil
-            controller?.shutdown()
-            controller = nil
-        }
+        controller?.onActivityChanged = nil
+        controller?.shutdown()
+        controller = nil
         setTransitioning(false)
         multitouch?.stop()
         multitouch = nil
@@ -289,6 +248,7 @@ public final class DesktopTransitionsEngine {
         guard value != transitioning else { return }
         transitioning = value
         onTransition?(value)
+        if !value, active, pendingInspection { reconcile() }
     }
 
     private func publish(_ status: DesktopTransitionStatus) {

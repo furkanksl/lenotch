@@ -103,21 +103,18 @@ commands, inspect local files, or execute coding-agent tools.
 
 ### Desktop transitions (optional)
 
-**Setup → Appearance → Desktop switching** enables Interspace-style Spaces transitions. It is **off by default**;
-when off, LeNotch installs no desktop event taps, monitors no trackpad contacts, and captures no desktop snapshots.
-Choose Instant, Lightweight, Magnetic, Hexagon, Stack, or macOS default. Speed, swipe sensitivity, rounded corners,
-and whether the Dock moves with the desktop are configurable. Existing three/four-finger trackpad gestures and the
-macOS “Move left/right a space” keyboard shortcuts are used; disabled shortcuts stay disabled.
+**Settings → Appearance → Desktop switching** is **off by default**. Choose **macOS default** to keep the standard
+Spaces animation, or **Instant** to switch quickly using Dock's desktop-swipe mechanism. macOS renders the desktops
+in both modes. Neither mode captures the screen or requires Screen Recording. Previously saved custom styles fall
+back to macOS default.
 
-Accessibility is needed for input handling; drawn transitions also need Screen Recording. Images stay in memory and
-are discarded on disable, lock, or presentation. Reduce Motion pauses custom transitions. LeNotch does not visit your
-desktops to preload them: until a desktop has been captured, its wallpaper may be shown instead. Turning the feature
-off restores native switching and the previous shortcut enable states. These private macOS APIs can change across OS
-releases; if unavailable, native switching remains in place. Do not run a second desktop-transition app simultaneously.
+Instant uses Accessibility for your existing three- or four-finger swipes and macOS “Move left/right a space” shortcuts.
+Disabled shortcuts stay disabled. Swipe sensitivity is adjustable in Settings. Instant pauses while the Mac is locked,
+presenting, or using Reduce Motion. Its private macOS APIs may change across releases; if unavailable, native switching
+remains in place. Do not run another desktop-transition app at the same time.
 
-Custom transitions run in a helper process from the signed LeNotch bundle, separate from the notch's UI and Metal
-render loop. Setup controls it through local pipes; it has no network listener. Disabling desktop switching or quitting
-LeNotch stops it, including when LeNotch exits unexpectedly. Only one helper can own the desktop input hooks at a time.
+Instant's input handling runs in a local helper from the signed LeNotch bundle. Disabling desktop switching or quitting
+LeNotch stops the helper and restores normal desktop controls.
 
 The implementation is adapted from [Interspace](https://github.com/cnrad/interspace) under the MIT license; notices are
 included in `Resources/Interspace-LICENSE.txt` and in the app bundle. `refs/interspace` is an ignored reference checkout,

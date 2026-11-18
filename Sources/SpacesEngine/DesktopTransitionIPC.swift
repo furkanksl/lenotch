@@ -10,7 +10,7 @@ public enum DesktopTransitionCommand: Codable, Equatable, Sendable {
 
 public enum DesktopTransitionEvent: Codable, Equatable, Sendable {
     case status(DesktopTransitionStatus)
-    /// A drawn transition started (true) or ended (false). Nothing about the desktops' content.
+    /// A native switch started (true) or ended (false).
     case transition(Bool)
 }
 
