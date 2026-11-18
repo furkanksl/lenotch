@@ -23,6 +23,13 @@ Edit that document in Icon Composer rather than exporting a flat PNG. The dev wa
 
 There is no Dock or menu bar icon. Right-click the notch to open Setup or quit. Grant the permissions you want LeNotch to use in Setup.
 
+### System usage
+
+Open **System** from the notch tools menu to see CPU load across all cores, memory usage, and startup-disk storage.
+CPU and memory update every two seconds while the page is visible; storage refreshes every thirty seconds. Sampling
+stops when the page closes or the Mac locks. These readings stay local and require no additional permissions.
+System replaces the menu's Inbox shortcut; notification-driven inbox access is unchanged.
+
 ### ChatGPT voice (experimental)
 
 In **Chat → ChatGPT**, the orb at the beginning of the input starts a voice conversation using

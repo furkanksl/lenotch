@@ -157,10 +157,11 @@ final class TrayPresentationTests: XCTestCase {
             recognizedLabels += (labelRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         }
         let labels = recognizedLabels.joined(separator: " ").lowercased()
-        for label in ["Chat", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "Inbox"] {
+        for label in ["Chat", "Dictation", "Prompter", "Today", "Launcher", "Clipboard", "Shelf", "Shortcuts", "Usage", "System"] {
             XCTAssertTrue(labels.contains(label.lowercased()), "Missing tools label \(label): \(labels)")
         }
         let words = Set(labels.split(whereSeparator: \.isWhitespace))
+        XCTAssertFalse(words.contains("inbox"), "Notifications have their own inbox access; System replaces only the menu entry")
         XCTAssertFalse(words.contains("ask"), "The conversation tool is named Chat")
         XCTAssertFalse(words.contains("play"), "Playback belongs in the player, not the tools menu")
         XCTAssertFalse(words.contains("pause"), "Playback belongs in the player, not the tools menu")

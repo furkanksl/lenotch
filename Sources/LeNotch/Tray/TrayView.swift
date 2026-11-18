@@ -45,6 +45,8 @@ private struct TrayPages: View {
                     EmptyView() // Launcher is an independent transparent fan, never a tray card.
                 case .usage:
                     UsageView(model: director.usage, onClose: { tray.go(.main) }, onOpenSettings: { director.onNeedsSetup?() })
+                case .system:
+                    SystemUsagePage(model: director.systemUsage, back: { tray.go(.main) })
                 case .notifications:
                     if !director.notificationInbox.expanded, let notice = director.notificationInbox.selected {
                         VStack(spacing: 8) {
@@ -97,10 +99,7 @@ private struct TrayGrid: View {
                 Tool(icon: .shelf, label: "Shelf", badge: tray.files.isEmpty ? nil : tray.files.count) { tray.go(.shelf) }
                 Tool(icon: .shortcuts, label: "Shortcuts") { tray.go(.shortcuts) }
                 Tool(icon: .usage, label: "Usage") { tray.go(.usage) }
-                Tool(icon: .inbox, label: "Inbox", badge: director.notificationInbox.items.isEmpty ? nil : director.notificationInbox.items.count) {
-                    director.expandNotices(true)
-                    tray.go(.notifications)
-                }
+                Tool(icon: .system, label: "System") { tray.go(.system) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

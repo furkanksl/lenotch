@@ -33,11 +33,12 @@ final class IslandDirector {
 
     init(prompter: PrompterModel? = nil, askVoice: ChatGPTVoiceSession? = nil,
          voiceAccountConnected: @escaping () -> Bool = { ChatGPTAccount.shared.isConnected },
-         chatDefaults: UserDefaults = .standard) {
+         chatDefaults: UserDefaults = .standard, systemUsage: SystemUsageModel? = nil) {
         self.prompter = prompter ?? PrompterModel()
         self.askVoice = askVoice ?? ChatGPTVoiceSession()
         self.voiceAccountConnected = voiceAccountConnected
         self.chatDefaults = chatDefaults
+        self.systemUsage = systemUsage ?? SystemUsageModel()
         self.askProvider = ChatPreferences.provider(in: chatDefaults)
         tray.onGo = { [weak self] page in
             guard let self else { return }
@@ -109,6 +110,7 @@ final class IslandDirector {
     let notificationInbox = NotificationInbox()
     let launcher = LauncherModel.shared
     let usage = UsageModel.shared
+    let systemUsage: SystemUsageModel
     var sendNotificationReply: ((Notice, String) async throws -> String)?
     @ObservationIgnored private var notificationReplyTask: Task<Void, Never>?
     /// The pointer is over the empty notch: it swells a little to say a press opens the tray.
@@ -321,7 +323,18 @@ final class IslandDirector {
         }
     }
 
+    private func updateSystemUsageMonitoring() {
+        if mode == .card && groups.tray && island.opened && tray.page == .system
+            && !island.context.locked && !island.context.presenting
+            && !systemContext.locked && !systemContext.presenting {
+            systemUsage.start()
+        } else {
+            systemUsage.stop()
+        }
+    }
+
     private func changed() {
+        updateSystemUsageMonitoring()
         if askVoiceActive && (island.context.locked || island.context.presenting) {
             if let voice = island.running.first(where: { $0.id == .voice }) { end(serial: voice.serial) }
             return
@@ -1456,6 +1469,7 @@ final class IslandDirector {
         if c.locked || c.presenting { onDismissLauncher?() }
         let was = systemContext
         systemContext = c
+        updateSystemUsageMonitoring()
         if liveContext { setContext(c) }
         if c.lockScreen != was.lockScreen { lockScreenChanged(c.lockScreen) }
         if c.cameraInUse && !was.cameraInUse {
@@ -1664,6 +1678,7 @@ final class IslandDirector {
             switch tray.page {
             case .notifications: return CardSize(width: 420, height: 348, radius: 36)
             case .usage: return CardSize(width: 480, height: 266, radius: 36)
+            case .system: return CardSize(width: 400, height: 208, radius: 36)
             default: break
             }
         }
@@ -2126,6 +2141,7 @@ final class IslandDirector {
     }
 
     func stopAll() {
+        systemUsage.stop()
         askVoice.stop()
         for t in [hudEnd, pulseLoop, closing, hoverOff, leaving, shownClear] { t?.cancel() }
         for t in transientEnds.values { t.cancel() }
