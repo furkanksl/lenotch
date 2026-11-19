@@ -150,10 +150,10 @@ export default function App() {
               <a
                 href={siteConfig.downloadUrl ?? "#download"}
                 download={siteConfig.downloadUrl ? "" : undefined}
-                class="group pressable relative inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] bg-neutral-950 px-3 text-xs font-semibold text-white shadow-[0_1px_2px_0_rgba(0,0,0,0.12),0_2px_6px_0_rgba(0,0,0,0.18),inset_0_0_0_1px_rgba(255,255,255,0.08)] hover:bg-neutral-900 before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:p-px before:bg-gradient-to-b before:from-white/30 before:to-transparent before:[mask-clip:content-box,border-box] before:[mask-composite:exclude] before:[mask-image:linear-gradient(#fff_0_0),linear-gradient(#fff_0_0)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:bg-gradient-to-b after:from-white after:to-transparent after:opacity-[0.14] after:transition after:duration-200 after:ease-out hover:after:opacity-[0.24] dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white dark:shadow-[0_1px_2px_0_rgba(0,0,0,0.5),0_3px_8px_0_rgba(0,0,0,0.4),inset_0_0_0_1px_rgba(255,255,255,0.2)] dark:before:from-white/60 dark:after:from-white dark:after:opacity-[0.22] dark:hover:after:opacity-[0.34]"
+                class="pressable inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-black/10 bg-neutral-950 px-3 text-xs font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:bg-neutral-800 dark:border-white/15 dark:bg-white dark:text-neutral-950 dark:shadow-[0_1px_2px_rgba(0,0,0,0.3)] dark:hover:bg-neutral-100"
               >
-                <AppleIcon class="relative z-10 h-3.5 w-auto shrink-0" />
-                <span class="relative z-10">Download</span>
+                <AppleIcon class="h-3.5 w-auto shrink-0" />
+                <span>Download</span>
               </a>
             </div>
 
