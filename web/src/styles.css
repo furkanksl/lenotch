@@ -40,17 +40,42 @@ body {
   color: #f5f4f1;
 }
 
-@keyframes fade-up {
-  from {
-    transform: translateY(8px);
+@keyframes hero-blur-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+    filter: blur(10px);
   }
-  to {
-    transform: translateY(0);
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
   }
 }
 
-.animate-fade-up {
-  animation: fade-up 420ms var(--ease-out-strong) both;
+.hero-blur-in {
+  animation: hero-blur-reveal 740ms var(--ease-out-strong) both;
+  will-change: opacity, transform, filter;
+}
+
+.hero-delay-1 {
+  animation-delay: 50ms;
+}
+
+.hero-delay-2 {
+  animation-delay: 130ms;
+}
+
+.hero-delay-3 {
+  animation-delay: 220ms;
+}
+
+.hero-delay-4 {
+  animation-delay: 310ms;
+}
+
+.hero-delay-5 {
+  animation-delay: 420ms;
 }
 
 .pressable {
@@ -71,8 +96,11 @@ body {
     scroll-behavior: auto;
   }
 
-  .animate-fade-up {
+  .hero-blur-in {
     animation: none;
+    opacity: 1;
+    filter: none;
+    transform: none;
   }
 
   .pressable {

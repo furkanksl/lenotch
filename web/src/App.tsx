@@ -174,8 +174,8 @@ export default function App() {
 
       <main class="mx-auto max-w-6xl px-5 sm:px-8">
         <section aria-labelledby="hero-title" class="border-b border-black/10 pt-20 pb-24 sm:pt-32 sm:pb-32 md:pt-40 lg:pt-48 lg:pb-40 dark:border-white/12">
-          <div class="animate-fade-up mx-auto text-center">
-            <h1 id="hero-title" class="text-[clamp(3rem,8.9vw,7.25rem)] leading-[.96] font-extralight tracking-[-0.06em]">
+          <div class="mx-auto text-center">
+            <h1 id="hero-title" class="hero-blur-in hero-delay-1 text-[clamp(3rem,8.9vw,7.25rem)] leading-[.96] font-extralight tracking-[-0.06em]">
               <span class="block -mb-[0.08em] bg-gradient-to-b from-[#111110] via-[#221d1a] to-[#574942] bg-clip-text pb-[0.08em] text-[#111110] [-webkit-text-fill-color:transparent] dark:from-white dark:via-accent-cream dark:to-[#f3cba0] dark:text-accent-cream">
                 Your Mac's notch.
               </span>
@@ -183,21 +183,23 @@ export default function App() {
                 Now useful.
               </span>
             </h1>
-            <p class="mx-auto mt-6 max-w-sm text-base leading-relaxed text-balance text-neutral-600 sm:mt-8 sm:max-w-lg sm:text-lg dark:text-neutral-300">
+            <p class="hero-blur-in hero-delay-2 mx-auto mt-6 max-w-sm text-base leading-relaxed text-balance text-neutral-600 sm:mt-8 sm:max-w-lg sm:text-lg dark:text-neutral-300">
               Media controls, live activity, and 13 tools at the top of your screen.
             </p>
-            <a
-              id="hero-download-btn"
-              href={siteConfig.downloadUrl ?? "#download"}
-              download={siteConfig.downloadUrl ? "" : undefined}
-              class={`${buttonClass} mt-8 sm:mt-10`}
-            >
-              <AppleIcon class="relative z-10 h-[17px] w-auto shrink-0" />
-              <span class="relative z-10">Download for macOS</span>
-            </a>
+            <div class="hero-blur-in hero-delay-3 mt-8 sm:mt-10">
+              <a
+                id="hero-download-btn"
+                href={siteConfig.downloadUrl ?? "#download"}
+                download={siteConfig.downloadUrl ? "" : undefined}
+                class={buttonClass}
+              >
+                <AppleIcon class="relative z-10 h-[17px] w-auto shrink-0" />
+                <span class="relative z-10">Download for macOS</span>
+              </a>
+            </div>
           </div>
 
-          <div class="mt-20 sm:mt-28 lg:mt-36">
+          <div class="hero-blur-in hero-delay-4 mt-20 sm:mt-28 lg:mt-36">
             <DemoVideo />
           </div>
         </section>
