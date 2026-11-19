@@ -1,5 +1,6 @@
 import { For, Show, createSignal, onSettled } from "solid-js";
 import { DemoVideo } from "./components/DemoVideo";
+import { HeroPixelBackground } from "./components/HeroPixelBackground";
 import { AppleIcon, BrandMark, MoonIcon, SunIcon } from "./components/Icons";
 import { ToolPreview } from "./components/ToolPreview";
 import { faqs, siteConfig, tools } from "./data/site";
@@ -172,10 +173,19 @@ export default function App() {
         </div>
       </header>
 
-      <main class="mx-auto max-w-6xl px-5 sm:px-8">
-        <section aria-labelledby="hero-title" class="border-b border-black/10 pt-20 pb-24 sm:pt-32 sm:pb-32 md:pt-40 lg:pt-48 lg:pb-40 dark:border-white/12">
-          <div class="mx-auto text-center">
-            <h1 id="hero-title" class="hero-blur-in hero-delay-1 text-[clamp(3rem,8.9vw,7.25rem)] leading-[.96] font-extralight tracking-[-0.06em]">
+      <main class="w-full">
+        {/* Full-bleed hero section edge-to-edge */}
+        <section
+          aria-labelledby="hero-title"
+          class="relative isolate w-full overflow-hidden border-b border-black/10 pt-20 pb-24 sm:pt-32 sm:pb-32 md:pt-40 lg:pt-48 lg:pb-40 dark:border-white/12"
+        >
+          <HeroPixelBackground />
+
+          <div class="mx-auto max-w-6xl px-5 text-center sm:px-8">
+            <h1
+              id="hero-title"
+              class="hero-blur-in hero-delay-1 text-[clamp(3rem,8.9vw,7.25rem)] leading-[.96] font-extralight tracking-[-0.06em]"
+            >
               <span class="block -mb-[0.08em] bg-gradient-to-b from-[#111110] via-[#221d1a] to-[#574942] bg-clip-text pb-[0.08em] text-[#111110] [-webkit-text-fill-color:transparent] dark:from-white dark:via-accent-cream dark:to-[#f3cba0] dark:text-accent-cream">
                 Your Mac's notch.
               </span>
@@ -197,12 +207,15 @@ export default function App() {
                 <span class="relative z-10">Download for macOS</span>
               </a>
             </div>
-          </div>
 
-          <div class="hero-blur-in hero-delay-4 mt-20 sm:mt-28 lg:mt-36">
-            <DemoVideo />
+            <div class="hero-blur-in hero-delay-4 mt-20 sm:mt-28 lg:mt-36">
+              <DemoVideo />
+            </div>
           </div>
         </section>
+
+        {/* Content sections constrained to max-w-6xl */}
+        <div class="mx-auto max-w-6xl px-5 sm:px-8">
 
         <section id="tools" aria-labelledby="tools-title" class="py-19 sm:py-27">
           <h2 id="tools-title" class="text-4xl leading-none font-semibold tracking-[-0.065em] sm:text-5xl lg:text-6xl">13 tools built in.</h2>
@@ -255,6 +268,7 @@ export default function App() {
             )}
           </Show>
         </section>
+        </div>
       </main>
 
       <footer class="mx-auto flex max-w-6xl items-center justify-between px-5 py-7 text-sm sm:px-8">
