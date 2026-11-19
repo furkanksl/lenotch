@@ -218,7 +218,7 @@ export default function App() {
         <div class="mx-auto max-w-6xl px-5 sm:px-8">
 
         <section id="tools" aria-labelledby="tools-title" class="py-19 sm:py-27">
-          <h2 id="tools-title" class="text-4xl leading-none font-semibold tracking-[-0.065em] sm:text-5xl lg:text-6xl">13 tools built in.</h2>
+          <h2 id="tools-title" class="text-4xl leading-none font-extralight tracking-[-0.05em] sm:text-5xl lg:text-6xl">13 tools built in.</h2>
           <ul class="mt-8 grid grid-cols-1 gap-x-5 gap-y-8 sm:mt-11 sm:grid-cols-2 sm:gap-y-12 lg:grid-cols-3">
             <For each={tools}>
               {(tool) => (
@@ -237,7 +237,7 @@ export default function App() {
         </section>
 
         <section id="faq" aria-labelledby="faq-title" class="grid gap-7 border-y border-black/10 py-16 sm:grid-cols-2 sm:gap-12 sm:py-22 dark:border-white/12">
-          <h2 id="faq-title" class="text-4xl leading-none font-semibold tracking-[-0.065em] sm:text-5xl">FAQ</h2>
+          <h2 id="faq-title" class="text-4xl leading-none font-extralight tracking-[-0.05em] sm:text-5xl">FAQ</h2>
           <div class="divide-y divide-black/10 dark:divide-white/12">
             <For each={faqs}>
               {(item) => (
@@ -257,7 +257,7 @@ export default function App() {
 
         <section id="download" aria-labelledby="download-title" class="px-2 py-21 text-center sm:py-28">
           <BrandMark class="mx-auto size-24 sm:size-28" />
-          <h2 id="download-title" class="mt-6 text-4xl leading-none font-semibold tracking-[-0.065em] sm:text-5xl">LeNotch for Mac</h2>
+          <h2 id="download-title" class="mt-6 text-4xl leading-none font-extralight tracking-[-0.05em] sm:text-5xl">LeNotch for Mac</h2>
           <p class="mt-3 text-sm text-neutral-600 dark:text-neutral-400">macOS 15+ · Apple silicon and Intel</p>
           <Show when={siteConfig.downloadUrl} keyed fallback={<p class="mt-6 text-sm font-semibold">Download coming soon</p>}>
             {(url) => (
