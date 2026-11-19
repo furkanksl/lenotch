@@ -1,9 +1,28 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scroll-pt-24 scroll-smooth sm:scroll-pt-28">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LeNotch</title>
+    <meta
+      name="description"
+      content="LeNotch turns your Mac's physical or virtual notch into media controls, live status, and 13 everyday tools."
+    />
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon.png" />
+    <title>LeNotch for Mac</title>
+    <script>
+      (() => {
+        let stored;
+        try {
+          stored = localStorage.getItem("lenotch-theme");
+        } catch {
+          // Fall back to the system preference if storage is blocked.
+        }
+        const dark =
+          stored === "dark" ||
+          (!stored && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

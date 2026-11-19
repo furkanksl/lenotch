@@ -1,6 +1,89 @@
 @import "@fontsource-variable/geist";
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-canvas: #f7f7fa;
+  --color-canvas-dark: #141317;
+  --color-surface: #ffffff;
+  --color-surface-dark: #1d1c22;
+  --color-well: #efeff4;
+  --color-well-dark: #222128;
+  --color-accent: #fe5302;
+  --color-accent-tangerine: #ff942c;
+  --color-accent-amber: #fdca6e;
+  --color-accent-cream: #fff8e2;
+}
+
+:root {
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-canvas);
+  color: #111110;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.dark body {
+  background-color: var(--color-canvas-dark);
+  color: #f5f4f1;
+}
+
+@keyframes fade-up {
+  from {
+    transform: translateY(8px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 420ms var(--ease-out-strong) both;
+}
+
+.pressable {
+  transition:
+    transform 150ms var(--ease-out-strong),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.pressable:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-fade-up {
+    animation: none;
+  }
+
+  .pressable {
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      opacity 150ms ease;
+  }
+
+  .pressable:active {
+    transform: none;
+  }
 }

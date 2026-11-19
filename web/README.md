@@ -1,16 +1,22 @@
 # LeNotch web
 
-The standalone site uses Solid 2.0, TypeScript, Vite, Tailwind CSS 4, and a self-hosted Geist Sans font. The current screen is only a scaffold for the landing page.
+Landing page for LeNotch, built with SolidJS 2.0, TypeScript, Vite, Tailwind CSS 4, and self-hosted Geist Sans.
 
 ## Development
 
-Use Node.js 22.12 or newer. From `web/`, run:
+Use Node.js 22.12 or newer. From `web/`:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Vite prints the local URL (normally `http://localhost:5173`). Use `npm run typecheck` to check TypeScript, `npm run build` to generate the static site in `dist/`, and `npm run preview` to serve that build locally.
+Run `npm run typecheck` to check TypeScript, `npm run build` to build `dist/`, and `npm run preview` to preview the production output.
 
-Use Tailwind utilities for component styling. Keep `src/styles.css` for global styles, shared theme tokens, and custom animations.
+## Adding videos, images, and the release download
+
+Edit `src/data/site.ts`:
+
+- **Main product demo video:** place your video in `public/` (for example `public/demo.mp4`) and set `siteConfig.demoVideoSrc` to `"/demo.mp4"`. Set `demoPosterSrc` if you have a poster. The player has no media until you set these paths.
+- **Per-tool clips or screenshots:** add `media: { type: "video", src: "/tools/shelf.mp4", poster: "/tools/shelf.webp" }` or `media: { type: "image", src: "/tools/shelf.webp" }` to replace a tool’s large icon with an asset from `public/`.
+- **Direct macOS download:** set `siteConfig.downloadUrl` to your signed release `.zip` or `.dmg` URL.
