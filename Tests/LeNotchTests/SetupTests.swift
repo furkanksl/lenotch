@@ -293,10 +293,11 @@ final class SetupTests: XCTestCase {
             XCTFail("Rendering settings must never create system controls")
             return DesktopTransitionsEngine()
         }
-        XCTAssertEqual(DesktopTransitionStyle.allCases, [.system, .instant])
-        for (enabled, style) in [(false, DesktopTransitionStyle.system), (true, .system), (true, .instant)] {
+        let cases: [(Bool, DesktopTransitionStyle)] = [(true, .system), (true, .instant), (true, .liveSlide),
+                                                        (false, .liveSlide)]
+        for (enabled, style) in cases {
             model.setEnabled(enabled)
-            model.configure(style: style)
+            model.configure(style: style, slideDuration: 0.475)
             for scheme in [ColorScheme.light, .dark] {
                 let view = ScrollView {
                     SetupDesktopTransitions(model: model).padding(24)
@@ -314,14 +315,60 @@ final class SetupTests: XCTestCase {
                     XCTAssertTrue(words.contains("off by default"), words)
                     XCTAssertFalse(words.contains(normalized(style.title)), words)
                 }
+                let liveSlide = enabled && style == .liveSlide
                 XCTAssertEqual(words.contains("swipe sensitivity"), enabled && style == .instant, words)
-                XCTAssertEqual(words.contains("needs accessibility"), enabled && style == .instant, words)
+                XCTAssertEqual(words.contains("slide duration"), liveSlide, words)
+                XCTAssertEqual(words.contains("475 ms"), liveSlide, words)
+                XCTAssertEqual(words.contains("needs accessibility"), enabled && style != .system, words)
+                if liveSlide {
+                    XCTAssertTrue(words.contains("trackpad swipes stay native"), words)
+                    XCTAssertTrue(words.contains("without screen capture"), words)
+                    XCTAssertTrue(words.contains("before the dock settles it"), words)
+                    XCTAssertTrue(words.contains("experimental private macos apis"), words)
+                }
                 for removed in ["animation speed", "rounded desktop corners", "move dock", "screen recording", "desktop snapshots"] {
                     XCTAssertFalse(words.contains(removed), "Unexpected \(removed): \(words)")
                 }
             }
         }
         XCTAssertEqual(model.status, .off)
+    }
+
+    func testLiveSlideStatusOnlyReportsKeyboardInterception() async throws {
+        final class Driver: DesktopTransitionsDriving {
+            var onStatus: ((DesktopTransitionStatus) -> Void)?
+            var onTransition: ((Bool) -> Void)?
+            func start(_ options: DesktopTransitionOptions) {}
+            func update(_ options: DesktopTransitionOptions) {}
+            func setSuspended(_ suspended: Bool) {}
+            func stop() {}
+        }
+        let suite = "lenotch.test.setup.slide-status.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let driver = Driver()
+        let model = DesktopTransitionsModel(defaults: defaults) { driver }
+        model.configure(style: .liveSlide)
+        model.setEnabled(true)
+        model.start()
+        defer { model.stop() }
+
+        for (status, expected) in [(DesktopTransitionStatus.needsAccessibility, "allow accessibility to pace desktop keyboard shortcuts"),
+                                   (.active(keyboard: true, trackpad: true), "ready for desktop shortcuts"),
+                                   (.active(keyboard: false, trackpad: true), "desktop shortcuts are unavailable")] {
+            driver.onStatus?(status)
+            let size = NSSize(width: 640, height: 760)
+            let view = ScrollView { SetupDesktopTransitions(model: model).padding(24) }
+                .frame(width: size.width, height: size.height).background(SetupTheme.card)
+            let (window, host) = makeWindow(view, size: size, scheme: .light)
+            defer { window.close() }
+            let rendered = try await render(host, name: "live-slide-status-\(status)")
+            let words = normalized(rendered.transcript)
+            XCTAssertTrue(words.contains(expected), words)
+            XCTAssertFalse(words.contains("ready for three four finger swipes"), words)
+            XCTAssertFalse(words.contains("no supported trackpad was found"), words)
+            XCTAssertFalse(words.contains("allow accessibility to handle desktop swipes"), words)
+        }
     }
 
     /// Checks one pixel against a hex color. `x` and `y` are in points from the top-left. The capture is color-matched

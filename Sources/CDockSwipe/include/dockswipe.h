@@ -24,6 +24,17 @@ void ds_tap_set_suppress(bool suppress);
 /** Posts a synthetic Dock swipe that makes the Dock switch one space with no visible animation. */
 bool ds_post_switch(DSDirection direction);
 
+typedef enum {
+    DSLiveSlideBegan = 1,
+    DSLiveSlideChanged = 2,
+    DSLiveSlideEnded = 4,
+    DSLiveSlideCancelled = 8,
+} DSLiveSlidePhase;
+
+/** Posts one phase of a paced Dock swipe. Delta and position use Dock gesture units. */
+bool ds_post_live_slide(DSLiveSlidePhase phase, DSDirection direction,
+                        double delta, double position, double releaseVelocity);
+
 /**
  * Called for a press of the shortcut for the space to the left or to the right.
  * It runs on the thread of the keyboard tap, not on the main thread, and must return at once.

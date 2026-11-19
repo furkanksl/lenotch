@@ -133,7 +133,9 @@ public final class DesktopTransitionsEngine {
 
     private var isPaused: Bool { suspended || sleeping || reduceMotion }
 
-    private var isFullySetUp: Bool { active && tapInstalled && keysInstalled && hasTrackpad }
+    private var isFullySetUp: Bool {
+        active && keysInstalled && (options.style != .instant || (tapInstalled && hasTrackpad))
+    }
 
     private func frontApplicationChanged(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
@@ -190,10 +192,12 @@ public final class DesktopTransitionsEngine {
         guard AXIsProcessTrusted() else { stopResources(); publish(.needsAccessibility); return }
         guard !active else {
             // A partial setup keeps polling for a reconnected trackpad or an installable tap.
-            if !tapInstalled { tapInstalled = ds_tap_install() }
+            if options.style == .instant {
+                if !tapInstalled { tapInstalled = ds_tap_install() }
+                if !hasTrackpad, tapInstalled { hasTrackpad = multitouch?.start() == true }
+                ds_tap_set_suppress(hasTrackpad)
+            }
             if !keysInstalled { keysInstalled = SpaceShortcuts.install() }
-            if !hasTrackpad, tapInstalled { hasTrackpad = multitouch?.start() == true }
-            ds_tap_set_suppress(hasTrackpad)
             // Reread the user's desktop key bindings, not hard-coded Control-arrow shortcuts.
             SpaceShortcuts.update(enabled: keysInstalled)
             publish(.active(keyboard: keysInstalled, trackpad: hasTrackpad))
@@ -204,18 +208,22 @@ public final class DesktopTransitionsEngine {
         guard Spaces.isAvailable, let screen = NSScreen.underCursor, let initialLayout = Spaces.layout(for: screen.displayID) else {
             stopResources(); publish(.unsupported); return
         }
-        let controller = TransitionController(initialLayout: initialLayout, sensitivity: options.sensitivity)
+        let controller = TransitionController(initialLayout: initialLayout, sensitivity: options.sensitivity,
+                                              slideDuration: options.style == .liveSlide ? options.slideDuration : nil)
         self.controller = controller
         controller.onActivityChanged = { [weak self] active in self?.setTransitioning(active) }
-        let multitouch = MultitouchMonitor()
-        self.multitouch = multitouch
-        multitouch.onFrame = { [weak self] fingers in
-            guard let self, self.active else { return }
-            self.controller?.receive(fingers: fingers)
+        // Live Slide only paces shortcuts; leave real trackpad swipes to macOS.
+        if options.style == .instant {
+            let multitouch = MultitouchMonitor()
+            self.multitouch = multitouch
+            multitouch.onFrame = { [weak self] fingers in
+                guard let self, self.active else { return }
+                self.controller?.receive(fingers: fingers)
+            }
+            tapInstalled = ds_tap_install()
+            hasTrackpad = tapInstalled && multitouch.start()
         }
-        tapInstalled = ds_tap_install()
         keysInstalled = SpaceShortcuts.install()
-        hasTrackpad = tapInstalled && multitouch.start()
         SpaceShortcuts.onStep = { [weak self] direction in
             guard let self, self.active else { return }
             self.controller?.keyboardStep(direction)

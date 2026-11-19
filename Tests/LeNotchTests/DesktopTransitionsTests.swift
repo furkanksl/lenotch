@@ -49,7 +49,8 @@ final class DesktopTransitionsTests: XCTestCase {
         let model = DesktopTransitionsModel(defaults: defaults) { created += 1; return Driver() }
         XCTAssertFalse(model.enabled)
         XCTAssertEqual(model.options, DesktopTransitionOptions(style: .system, sensitivity: 1))
-        XCTAssertEqual(DesktopTransitionStyle.allCases, [.system, .instant])
+        XCTAssertEqual(model.options.slideDuration, 0.35)
+        XCTAssertEqual(DesktopTransitionStyle.allCases, [.system, .instant, .liveSlide])
         model.start()
         model.start()
         model.setSuspended(true)
@@ -91,6 +92,47 @@ final class DesktopTransitionsTests: XCTestCase {
         XCTAssertFalse(defaults.bool(forKey: DesktopTransitionsModel.enabledKey))
         XCTAssertEqual(defaults.string(forKey: "lenotch.spaces.style"), "instant", "Keep the selected style when disabled")
         XCTAssertEqual(defaults.double(forKey: "lenotch.spaces.sensitivity"), 1.2)
+    }
+
+    func testLiveSlidePersistsDurationIndependentlyOfStyleAndSensitivity() throws {
+        let (defaults, name) = try defaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let driver = Driver()
+        let model = DesktopTransitionsModel(defaults: defaults) { driver }
+        model.start()
+        model.setEnabled(true)
+        model.configure(style: .liveSlide, slideDuration: 0.475)
+        XCTAssertEqual(driver.updates, [DesktopTransitionOptions(style: .liveSlide, slideDuration: 0.475)])
+        XCTAssertEqual(defaults.string(forKey: "lenotch.spaces.style"), "liveSlide")
+        XCTAssertEqual(defaults.double(forKey: "lenotch.spaces.slideDuration"), 0.475)
+
+        model.configure(style: .instant, sensitivity: 1.4)
+        XCTAssertEqual(driver.updates.last, DesktopTransitionOptions(style: .instant, sensitivity: 1.4, slideDuration: 0.475))
+        model.stop()
+
+        let restoredDriver = Driver()
+        let restored = DesktopTransitionsModel(defaults: defaults) { restoredDriver }
+        restored.configure(style: .liveSlide)
+        restored.start()
+        XCTAssertEqual(restoredDriver.starts, [DesktopTransitionOptions(style: .liveSlide, sensitivity: 1.4, slideDuration: 0.475)])
+        restored.stop()
+    }
+
+    func testRemovedCurtainSelectionFallsBackToSystemStyle() throws {
+        let (defaults, name) = try defaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(true, forKey: DesktopTransitionsModel.enabledKey)
+        defaults.set("curtain", forKey: "lenotch.spaces.style")
+        defaults.set(1.4, forKey: "lenotch.spaces.sensitivity")
+        defaults.set(0.475, forKey: "lenotch.spaces.slideDuration")
+        let driver = Driver()
+        let model = DesktopTransitionsModel(defaults: defaults) { driver }
+        model.start()
+        defer { model.stop() }
+        XCTAssertTrue(model.enabled)
+        let expected = DesktopTransitionOptions(style: .system, sensitivity: 1.4, slideDuration: 0.475)
+        XCTAssertEqual(model.options, expected)
+        XCTAssertEqual(driver.starts, [expected])
     }
 
     func testLateStatusFromDisabledGenerationCannotReactivateTheUI() throws {
@@ -140,13 +182,17 @@ final class DesktopTransitionsTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.set("future-style", forKey: "lenotch.spaces.style")
         defaults.set(100, forKey: "lenotch.spaces.sensitivity")
+        defaults.set(1.5, forKey: "lenotch.spaces.slideDuration")
         let model = DesktopTransitionsModel(defaults: defaults)
         XCTAssertEqual(model.options.style, .system)
         XCTAssertEqual(model.options.sensitivity, 2)
-        model.configure(sensitivity: -100)
+        XCTAssertEqual(model.options.slideDuration, 0.75)
+        model.configure(sensitivity: -100, slideDuration: 0.01)
         XCTAssertEqual(model.options.sensitivity, 0.5)
-        model.configure(sensitivity: .infinity)
+        XCTAssertEqual(model.options.slideDuration, 0.15)
+        model.configure(sensitivity: .infinity, slideDuration: .nan)
         XCTAssertEqual(model.options.sensitivity, 1)
+        XCTAssertEqual(model.options.slideDuration, 0.35)
     }
 
     func testSuspensionPreservesOptInAndReturnsToThePreviousConfiguration() throws {

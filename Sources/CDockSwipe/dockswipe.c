@@ -32,6 +32,7 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <mach/mach_time.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -473,9 +474,7 @@ static double modern_swipe_sign(DSDirection direction) {
     return naturalScrolling ? sign : -sign;
 }
 
-static bool post_modern(int phase, DSDirection direction) {
-    const double sign = modern_swipe_sign(direction);
-
+static bool post_modern(int phase, double delta, double position, double velocity, bool with_companion) {
     CGEventRef ev = CGEventCreate(NULL);
     if (!ev) {
         return false;
@@ -484,14 +483,14 @@ static bool post_modern(int phase, DSDirection direction) {
     CGEventSetIntegerValueField(ev, kCGEventGestureHIDType, kIOHIDEventTypeDockSwipe);
     CGEventSetIntegerValueField(ev, kCGEventGesturePhase, phase);
     CGEventSetIntegerValueField(ev, kCGEventGestureSwipeMotion, kCGGestureMotionHorizontal);
-    CGEventSetDoubleValueField(ev, kCGEventGestureSwipeProgress, sign * kMinimalProgress);
+    CGEventSetDoubleValueField(ev, kCGEventGestureSwipeProgress, delta);
     // Fields a real trackpad swipe carries.
     CGEventSetIntegerValueField(ev, kCGEventGesturePhaseAlias, phase);
     CGEventSetDoubleValueField(ev, kCGEventGestureZoomDeltaY, 3.0);
     CGEventSetDoubleValueField(ev, kCGEventSourceUnixProcessIDAlias, (double)mach_absolute_time());
-    CGEventSetDoubleValueField(ev, kCGEventGestureSwipePositionX, 0.1);
+    CGEventSetDoubleValueField(ev, kCGEventGestureSwipePositionX, position);
     if (phase == kCGSGesturePhaseEnded) {
-        CGEventSetDoubleValueField(ev, kCGEventGestureSwipeVelocityX, sign * kModernFlingVelocity);
+        CGEventSetDoubleValueField(ev, kCGEventGestureSwipeVelocityX, velocity);
     }
 
     CGEventRef augmented = augment_event(ev);
@@ -500,29 +499,28 @@ static bool post_modern(int phase, DSDirection direction) {
         return false;
     }
 
-    // The Dock ignores a DockControl event without a companion gesture event.
-    CGEventRef companion = CGEventCreate(NULL);
-    if (!companion) {
+    // Keep Instant's existing companion. macOS 27 does not need it for continuous swipes.
+    CGEventRef companion = with_companion ? CGEventCreate(NULL) : NULL;
+    if (with_companion && !companion) {
         CFRelease(augmented);
         return false;
     }
-    CGEventSetIntegerValueField(companion, kCGSEventTypeField, kCGSEventGesture);
+    if (companion) CGEventSetIntegerValueField(companion, kCGSEventTypeField, kCGSEventGesture);
 
     if (atomic_load(&gGestureTap.active)) {
         // Before the events are posted: the tap thread can get them at once.
-        atomic_fetch_add(&gSyntheticToPass, 2);
+        atomic_fetch_add(&gSyntheticToPass, companion ? 2 : 1);
     }
     CGEventPost(kCGSessionEventTap, augmented);
-    CGEventPost(kCGSessionEventTap, companion);
+    if (companion) {
+        CGEventPost(kCGSessionEventTap, companion);
+        CFRelease(companion);
+    }
     CFRelease(augmented);
-    CFRelease(companion);
     return true;
 }
 
-static bool post_legacy(int phase, DSDirection direction) {
-    const bool isRight = (direction == DSDirectionRight);
-    const double velocity = isRight ? kLegacyVelocity : -kLegacyVelocity;
-
+static bool post_legacy(int phase, double delta, double velocityX, double velocityY) {
     CGEventRef ev = CGEventCreate(NULL);
     if (!ev) {
         return false;
@@ -530,18 +528,22 @@ static bool post_legacy(int phase, DSDirection direction) {
     CGEventSetIntegerValueField(ev, kCGSEventTypeField, kCGSEventDockControl);
     CGEventSetIntegerValueField(ev, kCGEventGestureHIDType, kIOHIDEventTypeDockSwipe);
     CGEventSetIntegerValueField(ev, kCGEventGesturePhase, phase);
-    CGEventSetDoubleValueField(ev, kCGEventGestureSwipeProgress, isRight ? kMinimalProgress : -kMinimalProgress);
+    CGEventSetDoubleValueField(ev, kCGEventGestureSwipeProgress, delta);
     CGEventSetIntegerValueField(ev, kCGEventGestureSwipeMotion, kCGGestureMotionHorizontal);
-    CGEventSetDoubleValueField(ev, kCGEventGestureSwipeVelocityX, velocity);
-    CGEventSetDoubleValueField(ev, kCGEventGestureSwipeVelocityY, velocity);
+    CGEventSetDoubleValueField(ev, kCGEventGestureSwipeVelocityX, velocityX);
+    CGEventSetDoubleValueField(ev, kCGEventGestureSwipeVelocityY, velocityY);
     CGEventPost(kCGSessionEventTap, ev);
     CFRelease(ev);
     return true;
 }
 
 static bool post_phase(int phase, DSDirection direction) {
-    return ds_requires_event_augmentation() ? post_modern(phase, direction)
-                                            : post_legacy(phase, direction);
+    if (ds_requires_event_augmentation()) {
+        double sign = modern_swipe_sign(direction);
+        return post_modern(phase, sign * kMinimalProgress, 0.1, sign * kModernFlingVelocity, true);
+    }
+    double sign = direction == DSDirectionRight ? 1.0 : -1.0;
+    return post_legacy(phase, sign * kMinimalProgress, sign * kLegacyVelocity, sign * kLegacyVelocity);
 }
 
 bool ds_post_switch(DSDirection direction) {
@@ -550,6 +552,23 @@ bool ds_post_switch(DSDirection direction) {
     return post_phase(kCGSGesturePhaseBegan, direction)
         && post_phase(kCGSGesturePhaseChanged, direction)
         && post_phase(kCGSGesturePhaseEnded, direction);
+}
+
+bool ds_post_live_slide(DSLiveSlidePhase phase, DSDirection direction,
+                        double delta, double position, double releaseVelocity) {
+    if ((phase != DSLiveSlideBegan && phase != DSLiveSlideChanged && phase != DSLiveSlideEnded &&
+         phase != DSLiveSlideCancelled) || !isfinite(delta) || !isfinite(position) || !isfinite(releaseVelocity) ||
+        delta < 0 || delta > 2 || position < 0 || position > 2 || releaseVelocity < 0 || releaseVelocity > 10000) {
+        return false;
+    }
+    atomic_store(&gLastPostTime, CFAbsoluteTimeGetCurrent());
+    if (ds_requires_event_augmentation()) {
+        double sign = modern_swipe_sign(direction);
+        // The HID progress field is the total since Begin, including during release.
+        return post_modern(phase, sign * position, 0.0, sign * releaseVelocity, false);
+    }
+    double sign = direction == DSDirectionRight ? 1.0 : -1.0;
+    return post_legacy(phase, sign * delta, sign * releaseVelocity, 0);
 }
 
 // MARK: - Gesture suppression

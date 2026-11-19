@@ -18,8 +18,7 @@ let package = Package(
                 linkerSettings: [.linkedFramework("ApplicationServices"), .linkedLibrary("dl")]),
         .target(name: "SpacesEngine", dependencies: ["CDockSwipe"],
                 swiftSettings: [.swiftLanguageMode(.v5)],
-                linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("QuartzCore"),
-                                 .linkedFramework("ScreenCaptureKit"), .linkedFramework("IOSurface")]),
+                linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("QuartzCore")]),
         // The island's state model: who holds the ears, the bubble and the card, from the
         // activities and where you are on the Mac. Pure (no AppKit), so it can be unit-tested
         // and event traces replayed.

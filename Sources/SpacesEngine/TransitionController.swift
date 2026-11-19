@@ -34,13 +34,14 @@ struct InstantSpaceRun {
     }
 }
 
-/// Drives the existing Instant gesture through the Dock. LeNotch never renders the desktop.
+/// Drives Spaces switching through the Dock. LeNotch never renders the desktop.
 @MainActor
 final class TransitionController {
     var onActivityChanged: ((Bool) -> Void)?
     var isTransitioning: Bool { run?.awaitingLanding == true }
 
     private let sensitivity: CGFloat
+    private let slideDuration: Double?
     private let recognizer = SwipeRecognizer()
     private let queries = TransitionQueryCache<CGDirectDisplayID, SpaceLayout>(worker: { work in
         Spaces.queryQueue.async(execute: DispatchWorkItem(block: work))
@@ -53,9 +54,11 @@ final class TransitionController {
     private var queryAfter: CFTimeInterval = 0
     private var deadline: CFTimeInterval = 0
     private var timer: Timer?
+    private var slide: LiveSlide?
 
-    init(initialLayout: SpaceLayout, sensitivity: Double) {
+    init(initialLayout: SpaceLayout, sensitivity: Double, slideDuration: Double? = nil) {
         self.sensitivity = CGFloat(sensitivity)
+        self.slideDuration = slideDuration
         queries.seed(initialLayout, for: initialLayout.displayID)
         recognizer.onArm = { [weak self] in self?.warmLayout() }
         recognizer.onBegin = { [weak self] in self?.beginSwipe() }
@@ -73,6 +76,7 @@ final class TransitionController {
     }
 
     func spacesChanged() {
+        guard slide == nil else { return }
         if !isTransitioning { queries.invalidate() }
         if let screen { _ = readLayout(for: screen, after: queryAfter) }
     }
@@ -143,6 +147,7 @@ final class TransitionController {
         guard let screen else { finish(); return }
         let now = CACurrentMediaTime()
         guard now < deadline, NSScreen.underCursor?.displayID == screen.displayID else { finish(); return }
+        if let slide { advance(slide, at: now); return }
         guard let live = readLayout(for: screen, after: queryAfter) else { wait(); return }
         let wasTransitioning = isTransitioning
         var next = run ?? InstantSpaceRun(displayUUID: live.displayUUID, spaceIDs: live.spaceIDs, index: live.currentIndex)
@@ -158,14 +163,43 @@ final class TransitionController {
             stopTimer()
             if wasTransitioning { onActivityChanged?(false) }
         case .step(let direction):
-            guard ds_post_switch(direction > 0 ? DSDirectionRight : DSDirectionLeft) else { finish(); return }
+            let dockDirection = direction > 0 ? DSDirectionRight : DSDirectionLeft
+            if let duration = slideDuration {
+                let travel = LiveSlide.initialTravel
+                guard ds_post_live_slide(DSLiveSlideBegan, dockDirection, travel, travel, 0) else {
+                    finish(); return
+                }
+                let start = CACurrentMediaTime()
+                slide = LiveSlide(direction: dockDirection, start: start, duration: duration, spaceCount: live.spaceIDs.count)
+                deadline = start + duration + 1.2
+            } else {
+                guard ds_post_switch(dockDirection) else { finish(); return }
+                queryAfter = CACurrentMediaTime()
+                deadline = queryAfter + 1.2
+            }
             next.posted(direction)
             run = next
-            queryAfter = CACurrentMediaTime()
-            deadline = queryAfter + 1.2
             wait()
             if !wasTransitioning { onActivityChanged?(true) }
         }
+    }
+
+    private func advance(_ current: LiveSlide, at now: Double) {
+        var next = current
+        let (delta, ended) = next.advance(to: now)
+        if delta > 0 {
+            guard ds_post_live_slide(DSLiveSlideChanged, next.direction, delta, next.position, 0) else {
+                finish(); return
+            }
+            slide = next
+        }
+        guard ended else { return }
+        guard ds_post_live_slide(DSLiveSlideEnded, next.direction, 0, next.position, 2000) else {
+            finish(); return
+        }
+        slide = nil
+        queryAfter = CACurrentMediaTime()
+        deadline = queryAfter + 1.2
     }
 
     private func wait() {
@@ -181,6 +215,10 @@ final class TransitionController {
 
     private func finish() {
         let wasTransitioning = isTransitioning
+        if let slide {
+            _ = ds_post_live_slide(DSLiveSlideCancelled, slide.direction, 0, slide.position, 0)
+            self.slide = nil
+        }
         stopTimer()
         screen = nil
         run = nil

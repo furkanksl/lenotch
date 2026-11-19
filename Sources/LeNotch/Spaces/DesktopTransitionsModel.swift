@@ -19,6 +19,7 @@ extension DesktopTransitionsEngine: DesktopTransitionsDriving {}
 final class DesktopTransitionsModel {
     static let shared = DesktopTransitionsModel()
     static let enabledKey = "lenotch.spaces.enabled"
+    private static let slideDurationKey = "lenotch.spaces.slideDuration"
     /// Window-list polling waits while the Dock changes Spaces (`userInfo["active"]`).
     static let transitionChanged = Notification.Name("lenotch.spaces.transitionChanged")
     private(set) var isTransitioning = false
@@ -39,7 +40,8 @@ final class DesktopTransitionsModel {
         enabled = defaults.bool(forKey: Self.enabledKey)
         options = DesktopTransitionOptions(
             style: defaults.string(forKey: "lenotch.spaces.style").flatMap(DesktopTransitionStyle.init(rawValue:)) ?? .system,
-            sensitivity: defaults.object(forKey: "lenotch.spaces.sensitivity") as? Double ?? 1)
+            sensitivity: defaults.object(forKey: "lenotch.spaces.sensitivity") as? Double ?? 1,
+            slideDuration: defaults.object(forKey: Self.slideDurationKey) as? Double ?? DesktopTransitionOptions.defaultSlideDuration)
     }
 
     func start() { started = true; reconcile() }
@@ -52,12 +54,15 @@ final class DesktopTransitionsModel {
         reconcile()
     }
 
-    func configure(style: DesktopTransitionStyle? = nil, sensitivity: Double? = nil) {
-        let next = DesktopTransitionOptions(style: style ?? options.style, sensitivity: sensitivity ?? options.sensitivity)
+    func configure(style: DesktopTransitionStyle? = nil, sensitivity: Double? = nil, slideDuration: Double? = nil) {
+        let next = DesktopTransitionOptions(style: style ?? options.style,
+                                            sensitivity: sensitivity ?? options.sensitivity,
+                                            slideDuration: slideDuration ?? options.slideDuration)
         guard next != options else { return }
         options = next
         defaults.set(next.style.rawValue, forKey: "lenotch.spaces.style")
         defaults.set(next.sensitivity, forKey: "lenotch.spaces.sensitivity")
+        defaults.set(next.slideDuration, forKey: Self.slideDurationKey)
         driver?.update(next)
     }
 

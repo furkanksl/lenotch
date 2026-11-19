@@ -103,18 +103,23 @@ commands, inspect local files, or execute coding-agent tools.
 
 ### Desktop transitions (optional)
 
-**Settings → Appearance → Desktop switching** is **off by default**. Choose **macOS default** to keep the standard
-Spaces animation, or **Instant** to switch quickly using Dock's desktop-swipe mechanism. macOS renders the desktops
-in both modes. Neither mode captures the screen or requires Screen Recording. Previously saved custom styles fall
-back to macOS default.
+**Settings → Appearance → Desktop switching** is **off by default**. macOS renders the live desktops in every mode.
+None uses an overlay, captures the screen, or requires Screen Recording. Removed styles fall back to **macOS default**.
 
-Instant uses Accessibility for your existing three- or four-finger swipes and macOS “Move left/right a space” shortcuts.
-Disabled shortcuts stay disabled. Swipe sensitivity is adjustable in Settings. Instant pauses while the Mac is locked,
-presenting, or using Reduce Motion. Its private macOS APIs may change across releases; if unavailable, native switching
-remains in place. Do not run another desktop-transition app at the same time.
+- **macOS default** keeps the standard Spaces animation and inputs.
+- **Instant** uses the Dock's desktop-swipe mechanism to switch quickly with your existing three- or four-finger swipes
+  and macOS "Move left/right a space" shortcuts. Swipe sensitivity is adjustable.
+- **Live Slide** paces the slide for those keyboard shortcuts. Trackpad swipes stay native. **Slide duration** sets how long
+  LeNotch drives the slide before the Dock settles it, not the total transition time. It ranges from 150 to 750 ms and
+  defaults to 350 ms.
 
-Instant's input handling runs in a local helper from the signed LeNotch bundle. Disabling desktop switching or quitting
-LeNotch stops the helper and restores normal desktop controls.
+Switching via Mission Control or app activation stays native. Instant and Live Slide require Accessibility. Disabled shortcuts
+stay disabled. These modes pause while the Mac is locked,
+presenting, or using Reduce Motion. They use experimental private macOS APIs that may change across releases. If those APIs
+are unavailable, macOS handles switching as usual. Do not run another desktop-transition app at the same time.
+
+Input handling runs in a local helper from the signed LeNotch bundle. Disabling desktop switching or quitting LeNotch stops
+the helper and restores normal desktop controls.
 
 The implementation is adapted from [Interspace](https://github.com/cnrad/interspace) under the MIT license; notices are
 included in `Resources/Interspace-LICENSE.txt` and in the app bundle. `refs/interspace` is an ignored reference checkout,
