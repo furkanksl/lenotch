@@ -1,3 +1,4 @@
+#if DEBUG
 import AppKit
 import IslandCore
 import SwiftUI
@@ -353,3 +354,4 @@ private struct TuneSlider: View {
 private extension Color {
     init(srgb c: SIMD3<Double>) { self.init(.sRGB, red: c.x, green: c.y, blue: c.z) }
 }
+#endif
