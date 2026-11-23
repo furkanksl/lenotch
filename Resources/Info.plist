@@ -18,6 +18,9 @@
 	<key>SUVerifyUpdateBeforeExtraction</key><true/>
 	<key>SUEnableAutomaticChecks</key><true/>
 	<key>SUAutomaticallyUpdate</key><false/>
+	<key>LNAnalyticsEndpoint</key><string>https://umami.zely.ai/api/send</string>
+	<key>LNAnalyticsWebsiteID</key><string>3e476eb3-0aaa-4124-ae5c-5f5ed4e7da61</string>
+	<key>LNAnalyticsHostname</key><string>desktop.lenotch.app</string>
 	<key>NSCalendarsFullAccessUsageDescription</key><string>LeNotch shows your next meeting and its join link.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key><string>LeNotch shows your AirPods connecting and their battery.</string>
 	<key>NSAudioCaptureUsageDescription</key><string>LeNotch moves the music bars with the sound your Mac plays. Nothing is recorded or saved.</string>

@@ -111,7 +111,10 @@ import IslandCore
         launchTask = Task { [weak self] in
             guard let self else { return }
             defer { launchTask = nil }
-            if await state.model.launch(item), generation == current { hide() }
+            if await state.model.launch(item) {
+                Analytics.shared.trackFeature(.launcher, action: "launch", data: ["kind": .string(item.kind.rawValue)])
+                if generation == current { hide() }
+            }
         }
     }
 

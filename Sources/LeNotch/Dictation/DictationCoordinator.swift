@@ -114,7 +114,15 @@ final class DictationCoordinator {
     private let cleanup = DictationCleanup()
     private var model: DictationModel = .fluidSpeechPro
     private var provider = DictationProvider.local
+    private var runTrigger = Trigger.shortcut
     private var chatGPTConnection: ChatGPTDictation.Connection?
+
+    enum Trigger: String, Sendable {
+        case shortcut
+        case fnHold = "fn_hold"
+        case tray
+        case menu
+    }
     private var recordingTimer: Timer?
     private var streamTask: Task<Void, Never>?
     /// Core ML may finish a suspended inference after cancellation. Wait before resetting the reused models.
@@ -205,9 +213,10 @@ final class DictationCoordinator {
         statusMessage = "Loading \(name) on this Mac…"
     }
 
-    func toggle() {
+    func toggle(trigger: Trigger = .shortcut) {
         switch phase {
         case .idle, .done, .failed:
+            runTrigger = trigger
             beginRun()
         case .recording:
             finish()
@@ -220,6 +229,7 @@ final class DictationCoordinator {
         switch action {
         case .pressed(let id):
             guard phase == .idle || phase == .done || phase == .failed else { return }
+            runTrigger = .fnHold
             pushToTalkHold.begin(id)
             beginRun()
         case .released(let id):
@@ -326,6 +336,10 @@ final class DictationCoordinator {
             try audio.start { [weak self] reading in self?.heard(reading) }
             startedAt = Date()
             phase = .recording
+            Analytics.shared.trackFeature(.dictation, action: "start", data: [
+                "provider": .string(provider == .local ? "local" : "chatgpt"),
+                "trigger": .string(runTrigger.rawValue),
+            ])
             statusMessage = pushToTalkHold.id == nil ? "Finish from the shortcut or notch menu · Esc cancels" : "Release Fn to finish · Esc cancels"
             recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.30, repeats: true) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.tickRecording() }
@@ -429,17 +443,29 @@ final class DictationCoordinator {
                     cancel()
                     return
                 case .pasted:
+                    Analytics.shared.trackFeature(.dictation, action: "complete", data: [
+                        "provider": .string(provider == .local ? "local" : "chatgpt"),
+                        "delivery": "pasted",
+                    ])
                     // A beat of the check as the text lands, then the ears go back into the notch.
                     statusMessage = "Pasted"
                     notice = .note(.pasted)
                     phase = .done
                     hideAfterDelay(0.9)
                 case .copied(.needsAccessibility):
+                    Analytics.shared.trackFeature(.dictation, action: "complete", data: [
+                        "provider": .string(provider == .local ? "local" : "chatgpt"),
+                        "delivery": "copied",
+                    ])
                     statusMessage = "Copied to clipboard · allow Accessibility to paste automatically"
                     notice = .problem("Copied to the clipboard. Allow Accessibility in Setup to paste it for you.")
                     phase = .done
                     hideAfterDelay(5)
                 case .copied(.noTargetApp):
+                    Analytics.shared.trackFeature(.dictation, action: "complete", data: [
+                        "provider": .string(provider == .local ? "local" : "chatgpt"),
+                        "delivery": "copied",
+                    ])
                     statusMessage = "Copied to clipboard · paste into your app"
                     notice = .note(.copied)
                     phase = .done

@@ -46,9 +46,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // No menu bar icon (owner, 11-06): the menu opens on a right-click on the island.
         surface?.contextMenu = { [unowned self] hit in makeMenu(hit) }
+        if Bundle.main.bundleURL.pathExtension == "app", !args.contains("--no-analytics") {
+            Analytics.shared.start()
+            Analytics.shared.trackAppLaunch(hasNotch: !(NotchGeometry.current()?.1.isVirtual ?? true))
+        }
         if let d = surface?.director {
             d.onNeedsSetup = { [unowned self] in setup.show() }
-            d.onToggleDictation = { DictationCoordinator.shared.toggle() }
+            d.onToggleDictation = { DictationCoordinator.shared.toggle(trigger: .shortcut) }
             d.usage.start()
             // The shared tool controller owns all configurable keys. Keep only the reserved Chat backup separate.
             configureAskShortcut()
@@ -236,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         askKey?.unregister()
         askKey = nil
         guard !ToolShortcutSettings.shared.isRecording, let director = surface?.director else { return }
-        askKey = HotKey(keyCode: kVK_ANSI_A, modifiers: controlKey | optionKey | cmdKey) { director.toggleAsk() }
+        askKey = HotKey(keyCode: kVK_ANSI_A, modifiers: controlKey | optionKey | cmdKey) { director.toggleAsk(source: "shortcut") }
     }
 
     private func configureToolShortcuts() {
@@ -264,9 +268,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showSetup() { setup.show() }
 
-    @objc private func showPrompter() { surface?.director.editPrompter() }
+    @objc private func showPrompter() { surface?.director.editPrompter(source: "menu") }
 
-    @objc private func toggleDictation() { DictationCoordinator.shared.toggle() }
+    @objc private func toggleDictation() { DictationCoordinator.shared.toggle(trigger: .menu) }
     @objc private func cancelDictation() { DictationCoordinator.shared.cancel() }
     @objc private func copyLastDictation() { DictationCoordinator.shared.copyLastTranscript() }
 
@@ -276,7 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let raw = sender.representedObject as? String, let mode = AudioBars.Mode(rawValue: raw) { surface?.bars.mode = mode }
     }
 
-    @objc private func startTimer(_ sender: NSMenuItem) { surface?.director.startTimer(minutes: sender.tag) }
+    @objc private func startTimer(_ sender: NSMenuItem) { surface?.director.startTimer(minutes: sender.tag, source: "menu") }
 
     @discardableResult
     private func partyItem(_ menu: NSMenu, _ title: String, _ p: Party, _ action: Selector) -> NSMenuItem {

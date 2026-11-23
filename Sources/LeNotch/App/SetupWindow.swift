@@ -82,6 +82,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         window?.orderFrontRegardless()
+        Analytics.shared.trackEvent("settings_opened", url: "/app/settings", data: ["page": "permissions"])
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -202,6 +203,10 @@ private struct SetupSidebar: View {
                 ForEach(Array(SetupPage.allCases.enumerated()), id: \.element) { index, item in
                     SetupNavItem(page: item, selected: page == item) {
                         onSelect()
+                        if page != item {
+                            Analytics.shared.trackEvent("settings_opened", url: "/app/settings/\(item.rawValue)",
+                                                        data: ["page": .string(item.rawValue)])
+                        }
                         page = item
                     }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)

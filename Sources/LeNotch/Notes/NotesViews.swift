@@ -167,6 +167,7 @@ struct NotesPage: View {
     private func newNote() {
         releaseKeyboard()
         let id = store.addNote()
+        director.analytics.trackFeature(.notes, action: "add_note")
         director.onWantsKey?()
         focusTask = Task { @MainActor in
             do { try await Task.sleep(for: .milliseconds(60)) }

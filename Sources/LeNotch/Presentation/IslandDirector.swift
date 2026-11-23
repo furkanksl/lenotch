@@ -32,12 +32,15 @@ final class IslandDirector {
     let todos: TodoStore
     let notes: NotesStore
     let videoPlayback = VideoPlaybackState()
+    @ObservationIgnored var analytics: Analytics
+    @ObservationIgnored private var pendingTraySource: String?
     @ObservationIgnored private let prompterEditor = PrompterEditor()
 
     init(prompter: PrompterModel? = nil, askVoice: ChatGPTVoiceSession? = nil,
          voiceAccountConnected: @escaping () -> Bool = { ChatGPTAccount.shared.isConnected },
          chatDefaults: UserDefaults = .standard, systemUsage: SystemUsageModel? = nil,
-         toolMenu: ToolMenuModel? = nil, todos: TodoStore? = nil, notes: NotesStore? = nil) {
+         toolMenu: ToolMenuModel? = nil, todos: TodoStore? = nil, notes: NotesStore? = nil,
+         analytics: Analytics = .shared) {
         self.prompter = prompter ?? PrompterModel()
         self.todos = todos ?? TodoStore(storageURL: nil)
         self.notes = notes ?? NotesStore(storageURL: nil)
@@ -46,13 +49,19 @@ final class IslandDirector {
         self.chatDefaults = chatDefaults
         self.systemUsage = systemUsage ?? SystemUsageModel()
         self.toolMenu = toolMenu ?? ToolMenuModel(defaults: chatDefaults)
+        self.analytics = analytics
         self.askProvider = ChatPreferences.provider(in: chatDefaults)
         tray.onGo = { [weak self] page in
             guard let self else { return }
             if page == .launcher {
                 tray.go(.main)
-                showLauncher()
+                showLauncher(source: "tray")
                 return
+            }
+            if let feature = page.analyticsFeature {
+                let source = pendingTraySource ?? "tray"
+                pendingTraySource = nil
+                self.analytics.trackFeature(feature, action: "open", data: ["source": .string(source)])
             }
             if page != .notifications && notificationInbox.composing {
                 notificationInbox.cancelComposition()
@@ -459,7 +468,10 @@ final class IslandDirector {
         let on = !(shuffle ?? false)
         shuffle = on
         shuffleHeldUntil = date().addingTimeInterval(2)
-        if !sampleOn, nowPlaying != nil { sendShuffle?(on) }
+        if !sampleOn, nowPlaying != nil {
+            analytics.trackFeature(.nowPlaying, action: "shuffle")
+            sendShuffle?(on)
+        }
     }
 
     /// Opens the playing song in its player (`NowPlayingMonitor.openTrack`: Spotify's track, Music's reveal); false when it
@@ -477,6 +489,7 @@ final class IslandDirector {
     /// opens on the track, Music reveals it, any other player comes to the front; the focused view closes behind it.
     func openInPlayer() {
         guard let bundle = playerApp else { return }
+        analytics.trackFeature(.nowPlaying, action: "open_player")
         clickLog.notice("open in \(bundle, privacy: .public)")
         let activate = {
             if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first {
@@ -587,8 +600,13 @@ final class IslandDirector {
     }
 
     func togglePlaying() {
-        if secondInFocus, let app = nowPlaying2?.bundleID { sendCommandTo?(.togglePlayPause, app); return }
+        if secondInFocus, let app = nowPlaying2?.bundleID {
+            analytics.trackFeature(.nowPlaying, action: "play_pause")
+            sendCommandTo?(.togglePlayPause, app)
+            return
+        }
         if !sampleOn, var np = nowPlaying {
+            analytics.trackFeature(.nowPlaying, action: "play_pause")
             sendCommand?(.togglePlayPause)
             // Answer at once; the player confirms a moment later.
             let now = date()
@@ -618,6 +636,7 @@ final class IslandDirector {
     func scrub(_ on: Bool) {
         guard scrubbing != on else { return }
         scrubbing = on
+        if !on, !sampleOn, nowPlaying != nil { analytics.trackFeature(.nowPlaying, action: "scrub") }
         hoverOff?.cancel(); hoverOff = nil
         // Let go off the card: from now on it lingers like any other leave.
         if !on && !island.pointerOnLiquid { unhover() }
@@ -686,6 +705,7 @@ final class IslandDirector {
     /// The video's view pops out into its own floating window; the island closes behind it.
     func popOutVideo() {
         guard island.mediaFocus, island.focusVideo else { return }
+        analytics.trackFeature(.notchVideo, action: "pip")
         pipParty = island.cardOwner
         pipOpen = true
         pip.show(layer: videoMirror.pipLayer, aspect: videoMirror.aspect, playback: videoPlayback)
@@ -734,12 +754,14 @@ final class IslandDirector {
         island.focusVideo = video
         send(.focusMedia)
         if video, let np, let app = np.bundleID {
+            analytics.trackFeature(.notchVideo, action: "mirror")
             prepareVideoPlayback(np)
             videoMirror.start(app: app, title: np.title)
             if videoMirror.state == .needsPermission { onNeedsSetup?() }
             onPulse?(media.colorHex); kick(35)
             return
         }
+        if !sampleOn, nowPlaying != nil { analytics.trackFeature(.nowPlaying, action: "lyrics") }
         onPulse?(media.colorHex)
         kick(35)
         lyricsDelay = outputLatency()
@@ -787,13 +809,19 @@ final class IslandDirector {
 
     func toggleVinyl() {
         vinylOut.toggle()
+        if !sampleOn, nowPlaying != nil { analytics.trackFeature(.nowPlaying, action: "vinyl") }
         onPulse?(media.colorHex)
         kick(vinylOut ? 30 : 18)
     }
 
     func nextTrack(_ step: Int = 1) {
-        if secondInFocus, let app = nowPlaying2?.bundleID { sendCommandTo?(step < 0 ? .previous : .next, app); return }
+        if secondInFocus, let app = nowPlaying2?.bundleID {
+            analytics.trackFeature(.nowPlaying, action: step < 0 ? "previous" : "next")
+            sendCommandTo?(step < 0 ? .previous : .next, app)
+            return
+        }
         if !sampleOn, nowPlaying != nil {
+            analytics.trackFeature(.nowPlaying, action: step < 0 ? "previous" : "next")
             sendCommand?(step < 0 ? .previous : .next)
             return
         }
@@ -1060,6 +1088,7 @@ final class IslandDirector {
     /// Allow or Deny from the card.
     func answerAgent(_ id: String, allow: Bool) {
         guard approvals[id] != nil else { return }
+        analytics.trackFeature(.agentSessions, action: "permission", data: ["decision": .string(allow ? "allow" : "deny")])
         settleApproval(id, AgentHook.decision(allow: allow))
         send(.agentAnswered(id))
         kick(25)
@@ -1074,6 +1103,7 @@ final class IslandDirector {
     /// A question's option from the card: the hook lets the tool run with your pick as its answer.
     func answerQuestion(_ id: String, _ option: String) {
         guard approvals[id] != nil, let held = heldQuestions[id] else { return }
+        analytics.trackFeature(.agentSessions, action: "question")
         settleApproval(id, AgentHook.answer(input: held.input, question: held.question, option: option))
         send(.agentAnswered(id))
         agentChats[id, default: []].append(.you(option))
@@ -1161,6 +1191,9 @@ final class IslandDirector {
     /// The session itself in its app when the app has a link for it (`claude://code/continue?session=local_…`,
     /// `codex://threads/<id>`), else the app it runs in.
     func openAgentApp(_ p: AgentProvider) {
+        if p != .ask {
+            analytics.trackFeature(.agentSessions, action: "open_app", data: ["provider": .string(p.rawValue)])
+        }
         if let s = agentShown(p) { openSession(s) } else { openApp(Agents.app(p)) }
         send(.close)
     }
@@ -1234,6 +1267,7 @@ final class IslandDirector {
         guard !text.isEmpty else { return }
         switch replyRoute(s) {
         case .codexQueue:
+            analytics.trackFeature(.agentSessions, action: "reply", data: ["provider": .string(s.provider.rawValue)])
             agentChats[s.id, default: []].append(.you(text))
             agentNotes[s.id] = "Sending to Codex…"
             let queue = codexQueue
@@ -1243,6 +1277,7 @@ final class IslandDirector {
                 if ok { agentNotes[s.id] = "Queued for Codex" } else { paste(text, into: s, note: "Codex didn't take it") }
             }
         case .paste:
+            analytics.trackFeature(.agentSessions, action: "reply", data: ["provider": .string(s.provider.rawValue)])
             paste(text, into: s, note: nil)
         case .ask:
             askFollowUp(s, text)
@@ -1327,7 +1362,10 @@ final class IslandDirector {
         switch action {
         case .accept: show(.call, opened: false)
         case .join:
-            if let a = target, !isSample(a), let url = meeting?.joinURL { NSWorkspace.shared.open(url) }
+            if let a = target, !isSample(a), let url = meeting?.joinURL {
+                analytics.trackFeature(.today, action: "join_meeting")
+                NSWorkspace.shared.open(url)
+            }
             endTarget()
         case .decline, .endCall, .cancelTimer, .markRead: endTarget()
         case .mute: samples.muted.toggle(); kick(25)
@@ -1405,10 +1443,20 @@ final class IslandDirector {
         guard forcedMode == nil else { return }
         hoverOff?.cancel(); hoverOff = nil
         setIdleHover(false)
-        if groups.tray { tray.go(.today); send(.openDay); return }
+        if groups.tray {
+            pendingTraySource = "meeting"
+            tray.go(.today)
+            pendingTraySource = nil
+            send(.openDay)
+            return
+        }
         tray.nextPage = .today
         send(.openDay)
-        if !groups.tray { tray.nextPage = .main }
+        if groups.tray {
+            analytics.trackFeature(.today, action: "open", data: ["source": "meeting"])
+        } else {
+            tray.nextPage = .main
+        }
     }
 
     /// The next event came within 10 minutes (or ended).
@@ -1522,7 +1570,8 @@ final class IslandDirector {
     }
 
     /// A timer from the menu bar's Timer menu.
-    func startTimer(minutes: Int) {
+    func startTimer(minutes: Int, source: String = "tray") {
+        analytics.trackFeature(.timer, action: "start", data: ["minutes": .int(minutes), "source": .string(source)])
         samples.timerTotal = Double(minutes) * 60
         if island.activity?.id == .timer { endActivity() }
         show(.timer, sample: false)
@@ -1537,16 +1586,32 @@ final class IslandDirector {
     }
 
     /// Opens the standalone tools menu without interrupting the current activity or playback.
-    func openTray(at page: TrayModel.Page = .main) {
+    func openTray(at page: TrayModel.Page = .main, source: String = "notch") {
         guard forcedMode == nil else { return }
-        if page == .launcher { showLauncher(); return }
+        if page == .launcher { showLauncher(source: source); return }
         onDismissLauncher?()
-        if groups.tray { if page != .main { tray.go(page) }; return }
+        if groups.tray {
+            if page != .main, tray.page != page {
+                pendingTraySource = source
+                tray.go(page)
+                pendingTraySource = nil
+            }
+            return
+        }
         tray.nextPage = page
         hoverOff?.cancel(); hoverOff = nil
         setIdleHover(false)
         send(.openTray)
-        if groups.tray { onPulse?(island.mediaOn ? eventColor : "#FFFFFF") } else { tray.nextPage = .main }
+        if groups.tray {
+            onPulse?(island.mediaOn ? eventColor : "#FFFFFF")
+            if let feature = page.analyticsFeature {
+                analytics.trackFeature(feature, action: "open", data: ["source": .string(source)])
+            } else {
+                analytics.trackEvent("tray_opened", url: "/app/tray", data: ["source": .string(source)])
+            }
+        } else {
+            tray.nextPage = .main
+        }
     }
 
     func dismissTrayForDictation() {
@@ -1555,12 +1620,13 @@ final class IslandDirector {
 
     /// Files dragged onto the notch: the tray opens at the Shelf. True when it can take them.
     func fileDragEntered() -> Bool {
-        openTray(at: .shelf)
+        openTray(at: .shelf, source: "drag")
         return groups.tray
     }
 
     func filesDropped(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
+        analytics.trackFeature(.shelf, action: "drop", data: ["count": .int(urls.count)])
         tray.addFiles(urls)
         kick(35)
     }
@@ -1576,12 +1642,14 @@ final class IslandDirector {
 
     func startPrompter() {
         guard prompter.canPlay else { editPrompter(); return }
+        analytics.trackFeature(.prompter, action: "start")
         show(.prompter, opened: true, sample: false)
         // An incoming call can outrank a user-started session. Wait rather than scrolling offscreen.
         if mode == .card && island.instance(island.cardOwner)?.id == .prompter { prompter.start() }
     }
 
-    func editPrompter() {
+    func editPrompter(source: String = "tray") {
+        analytics.trackFeature(.prompter, action: "edit", data: ["source": .string(source)])
         prompter.pause()
         prompterEditor.show(model: prompter) { [weak self] in self?.startPrompter() }
     }
@@ -1655,8 +1723,8 @@ final class IslandDirector {
         send(.close)
     }
 
-    func showTool(_ page: TrayModel.Page) {
-        openTray(at: page)
+    func showTool(_ page: TrayModel.Page, source: String = "tray") {
+        openTray(at: page, source: source)
     }
 
     /// Shortcut access is independent of menu visibility. Repeating the same shortcut closes its
@@ -1665,19 +1733,19 @@ final class IslandDirector {
         guard !island.context.locked, !island.context.presenting,
               !systemContext.locked, !systemContext.presenting else { return }
         switch target {
-        case .chat: toggleAsk(); return
+        case .chat: toggleAsk(source: "shortcut"); return
         case .dictation: onToggleDictation?(); return
-        case .launcher: toggleLauncher(); return
+        case .launcher: toggleLauncher(source: "shortcut"); return
         default: break
         }
         guard let page = target.page else { return }
         if island.opened, island.trayShows, tray.page == page {
             clickOutside()
-        } else { showTool(page) }
+        } else { showTool(page, source: "shortcut") }
     }
 
-    func toggleLauncher() {
-        showLauncher(toggle: true)
+    func toggleLauncher(source: String = "shortcut") {
+        showLauncher(toggle: true, source: source)
     }
 
     @ObservationIgnored var onShowLauncher: (() -> Void)?
@@ -1685,13 +1753,17 @@ final class IslandDirector {
     @ObservationIgnored var onDismissLauncher: (() -> Void)?
     private(set) var launcherVisible = false
 
-    private func showLauncher(toggle: Bool = false) {
+    private func showLauncher(toggle: Bool = false, source: String = "tray") {
         guard forcedMode == nil, !island.context.locked, !island.context.presenting,
               !systemContext.locked, !systemContext.presenting,
               !notificationInbox.submitting else { return }
+        let opening = !(toggle && launcherVisible)
         hoverOff?.cancel(); hoverOff = nil
         setIdleHover(false)
         send(.close)
+        if opening {
+            analytics.trackFeature(.launcher, action: "open", data: ["source": .string(source)])
+        }
         if toggle { onToggleLauncher?() } else { onShowLauncher?() }
     }
 
@@ -1776,6 +1848,7 @@ final class IslandDirector {
             do {
                 try Task.checkCancellation()
                 let status = try await dispatch(target, text)
+                self?.analytics.trackFeature(.inbox, action: "reply")
                 inbox.submitting = false
                 guard inbox.selected?.id == target.id else { return }
                 inbox.draft = ""
@@ -1813,6 +1886,7 @@ final class IslandDirector {
 
     /// Opens it where it points (its app comes forward) and it leaves the notch.
     func openNotice(_ n: Notice) {
+        analytics.trackFeature(.inbox, action: "open_notice")
         dismissNotice(n)
         NoticeOpener.open(n)
     }
@@ -1872,8 +1946,10 @@ final class IslandDirector {
         replyFocused = false
         hoverOff?.cancel(); hoverOff = nil
         if let voice = island.running.first(where: { $0.id == .voice }) {
+            analytics.trackFeature(.voiceMode, action: "reopen")
             openCard(island.activity?.serial == voice.serial ? .activity : .background(voice.serial))
         } else {
+            analytics.trackFeature(.voiceMode, action: "start")
             show(.voice, opened: true, sample: false)
             // Starting from the empty Chat composer must hand its card to voice, not leave
             // askOpen in control while the ongoing call appears only as a minimized bubble.
@@ -1893,7 +1969,7 @@ final class IslandDirector {
 
     func endAskVoice() {
         if let voice = island.running.first(where: { $0.id == .voice }) { end(serial: voice.serial) }
-        openAsk(.codex)
+        openAsk(.codex, track: false)
         askFocusTick += 1
     }
     /// The field asked for the keyboard (the panel becomes key without activating the app).
@@ -1915,9 +1991,9 @@ final class IslandDirector {
     private(set) var barrelRolls = 0
 
     /// ⌥Space: opens Ask, or closes it when it's the card showing (owner, 11-07: "the shortcut again should close it").
-    func toggleAsk() {
+    func toggleAsk(source: String = "shortcut") {
         let showing = island.opened && (island.askOpen != nil || island.cardOwner == .agents(.ask))
-        if showing { closeAsk() } else { openAsk() }
+        if showing { closeAsk() } else { openAsk(source: source) }
     }
 
     /// How long a conversation stays the one Ask opens into (owner, 11-07: "if you open it it goes to the same session
@@ -1934,22 +2010,29 @@ final class IslandDirector {
 
     /// Ask from the tray, the shortcut or a chat's `+`: a recent conversation opens with its field ready; with none (or
     /// `new`), the ask card starts one.
-    func openAsk(_ backend: AgentProvider? = nil, new: Bool = false) {
+    func openAsk(_ backend: AgentProvider? = nil, new: Bool = false, source: String = "tray", track: Bool = true) {
         if let backend, backend != .ask {
             askProvider = backend
             chatDefaults.set(backend.rawValue, forKey: ChatPreferences.providerKey)
         }
         hoverOff?.cancel(); hoverOff = nil
+        let providerName = askProvider == .claude ? "claude" : "chatgpt"
         if !new, let recent = recentAsk, !island.context.menuOpen, !island.context.fullscreen {
             agentSelected[.ask] = recent.id
             if island.opened && island.cardOwner == .agents(.ask) && island.askOpen == nil { focusAsk(); return }
             if island.opened { send(.close) }
             send(.showCard(.agents(.ask)))
+            if track {
+                analytics.trackFeature(.chat, action: "open", data: ["provider": .string(providerName), "source": .string(source)])
+            }
             focusAsk()
             return
         }
         send(.openAsk(askProvider))
         guard island.askOpen != nil else { return }
+        if track {
+            analytics.trackFeature(.chat, action: "open", data: ["provider": .string(providerName), "source": .string(new ? "new" : source)])
+        }
         onWantsKey?()
     }
 
@@ -1978,6 +2061,10 @@ final class IslandDirector {
         let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         let backend = askProvider, id = "ask-" + UUID().uuidString.prefix(8).lowercased()
+        analytics.trackFeature(.chat, action: "submit", data: [
+            "provider": .string(backend == .claude ? "claude" : "chatgpt"),
+            "follow_up": false,
+        ])
         askSessions.insert(id)
         askBackend[id] = backend
         askLastUsed[id] = date()
@@ -1995,10 +2082,15 @@ final class IslandDirector {
 
     /// A follow-up from the chat's reply field goes to the same conversation.
     private func askFollowUp(_ s: AgentSession, _ text: String) {
+        let backend = askBackend[s.id] ?? .claude
+        analytics.trackFeature(.chat, action: "submit", data: [
+            "provider": .string(backend == .claude ? "claude" : "chatgpt"),
+            "follow_up": true,
+        ])
         agentChats[s.id, default: []].append(.you(text))
         askLastUsed[s.id] = date()
         askHook("UserPromptSubmit", s.id)
-        sendAsk(s.id, askBackend[s.id] ?? .claude, text)
+        sendAsk(s.id, backend, text)
     }
 
     /// Ask only sends the text the user typed, never a screen capture.

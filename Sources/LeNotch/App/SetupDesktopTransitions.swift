@@ -11,13 +11,23 @@ struct SetupDesktopTransitions: View {
         SetupGroup("Desktop switching") {
             SetupToggleRow(icon: .grid, title: "Desktop transition controls",
                            detail: "Choose how Spaces switch with trackpad swipes and your desktop shortcuts. Off by default.",
-                           isOn: Binding(get: { model.enabled }, set: { model.setEnabled($0) }))
+                           isOn: Binding(get: { model.enabled }, set: { enabled in
+                               if enabled != model.enabled {
+                                   Analytics.shared.trackFeature(.desktopTransitions, action: "toggle",
+                                                                 data: ["enabled": .bool(enabled)])
+                               }
+                               model.setEnabled(enabled)
+                           }))
             if model.enabled {
                 status
                 SetupRow(icon: .palette, title: "Transition", detail: model.options.style.detail) {
                     Menu {
                         ForEach(DesktopTransitionStyle.allCases) { style in
                             Button {
+                                if style != model.options.style {
+                                    Analytics.shared.trackFeature(.desktopTransitions, action: "style",
+                                                                  data: ["style": .string(style.rawValue)])
+                                }
                                 model.configure(style: style)
                             } label: {
                                 if style == model.options.style { Label(style.title, systemImage: "checkmark") }

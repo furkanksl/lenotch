@@ -136,7 +136,10 @@ struct TodoPage: View {
                                 switch entry {
                                 case .item(let item):
                                     TodoRow(item: item, editing: editing == .item(item.id), text: $editText, focus: $focus,
-                                            toggle: { animate { store.toggle(item.id) } },
+                                            toggle: {
+                                                director.analytics.trackFeature(.todo, action: "toggle_item")
+                                                animate { store.toggle(item.id) }
+                                            },
                                             beginEdit: { beginEdit(.item(item.id), text: item.title) },
                                             commit: commitEdit, cancel: cancelEdit,
                                             delete: { animate { store.deleteItem(item.id) } })
@@ -214,6 +217,7 @@ struct TodoPage: View {
 
     private func add(_ proxy: ScrollViewProxy) {
         guard let id = store.addItem(draft) else { return }
+        director.analytics.trackFeature(.todo, action: "add_item")
         draft = ""
         // Entry IDs are strings (the completed-section header uses the same ForEach). Use the
         // matching ID, after SwiftUI has inserted the new row, not the task's raw UUID.

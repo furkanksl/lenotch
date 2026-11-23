@@ -36,9 +36,9 @@ private struct TrayPages: View {
                 switch tray.page {
                 case .main: TrayGrid(tray: tray, director: director)
                 case .timer: TimerPage(tray: tray, director: director)
-                case .clipboard: ClipboardPage(tray: tray)
-                case .shelf: ShelfPage(tray: tray)
-                case .shortcuts: ShortcutsPage(tray: tray)
+                case .clipboard: ClipboardPage(tray: tray, analytics: director.analytics)
+                case .shelf: ShelfPage(tray: tray, analytics: director.analytics)
+                case .shortcuts: ShortcutsPage(tray: tray, analytics: director.analytics)
                 case .today: DayPage(tray: tray, director: director)
                 case .prompter: PrompterPage(tray: tray, director: director)
                 case .launcher:
@@ -105,12 +105,12 @@ private struct TrayGrid: View {
     @ViewBuilder private func button(for tool: TrayTool) -> some View {
         switch tool {
         case .chat:
-            Tool(icon: tool.icon, label: tool.menuLabel) { director.openAsk() }
+            Tool(icon: tool.icon, label: tool.menuLabel) { director.openAsk(source: "tray") }
                 .help(shortcutHelp("Chat with Claude or ChatGPT", target: .chat))
         case .dictation:
             Tool(icon: tool.icon, label: tool.menuLabel,
                  tint: DictationCoordinator.shared.phase == .recording ? .red : nil) {
-                DictationCoordinator.shared.toggle()
+                DictationCoordinator.shared.toggle(trigger: .tray)
                 director.dismissTrayForDictation()
             }
             .help(shortcutHelp("Start or finish dictation", target: .dictation))
@@ -118,7 +118,7 @@ private struct TrayGrid: View {
             Tool(icon: tool.icon, label: tool.menuLabel,
                  tint: director.prompter.phase == .playing ? IslandColor.green : nil) { tray.go(.prompter) }
         case .today: Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.today) }
-        case .launcher: Tool(icon: tool.icon, label: tool.menuLabel) { director.showTool(.launcher) }
+        case .launcher: Tool(icon: tool.icon, label: tool.menuLabel) { director.showTool(.launcher, source: "tray") }
         case .clipboard:
             Tool(icon: tool.icon, label: tool.menuLabel) { tray.go(.clipboard) }
                 .help(shortcutHelp("Recent clipboard items", target: .clipboard))
@@ -459,6 +459,7 @@ private struct TimerPage: View {
 
 private struct ShortcutsPage: View {
     let tray: TrayModel
+    let analytics: Analytics
     private static let colors = [IslandColor.orange, IslandColor.cyan, IslandColor.green, IslandColor.red]
 
     var body: some View {
@@ -478,7 +479,10 @@ private struct ShortcutsPage: View {
                                 .frame(width: 22, height: 22)
                                 .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
                                     .fill(done ? IslandColor.green : Self.colors[i % Self.colors.count]))
-                        } action: { tray.run(name) }
+                        } action: {
+                            tray.run(name)
+                            analytics.trackFeature(.shortcuts, action: "run")
+                        }
                     }
                 }
             }
@@ -488,6 +492,7 @@ private struct ShortcutsPage: View {
 
 private struct ClipboardPage: View {
     let tray: TrayModel
+    let analytics: Analytics
     @Environment(\.presenting) private var presenting
 
     var body: some View {
@@ -497,7 +502,10 @@ private struct ClipboardPage: View {
             } else {
                 VStack(spacing: 6) {
                     ForEach(tray.clips.prefix(3)) { clip in
-                        Button { tray.copy(clip) } label: {
+                        Button {
+                            tray.copy(clip)
+                            analytics.trackFeature(.clipboard, action: "copy")
+                        } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: clip.isLink ? "link" : "text.alignleft")
                                     .font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).frame(width: 15)
@@ -524,6 +532,7 @@ private struct ClipboardPage: View {
 
 private struct ShelfPage: View {
     let tray: TrayModel
+    let analytics: Analytics
 
     var body: some View {
         Page(tray: tray, title: "Shelf", action: tray.files.isEmpty ? nil : ("Clear", { tray.clearFiles() })) {
@@ -532,7 +541,7 @@ private struct ShelfPage: View {
             } else {
                 let shown = Array(tray.files.prefix(4)), more = tray.files.count - shown.count
                 HStack(spacing: 6) {
-                    ForEach(shown, id: \.self) { ShelfTile(url: $0) }
+                    ForEach(shown, id: \.self) { ShelfTile(url: $0, analytics: analytics) }
                     if more > 0 {
                         Text("+\(more)").font(.system(size: 13, weight: .semibold))
                             .frame(width: 40, height: 44)
@@ -549,6 +558,7 @@ private struct ShelfPage: View {
 /// A file on the shelf: its Finder icon and name. Drag it out to put it somewhere; click to open it.
 private struct ShelfTile: View {
     let url: URL
+    let analytics: Analytics
     @State var over = false
 
     var body: some View {
@@ -562,7 +572,10 @@ private struct ShelfTile: View {
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(over ? 0.08 : 0)))
         .contentShape(Rectangle())
         .onHover { over = $0 }
-        .onTapGesture { NSWorkspace.shared.open(url) }
+        .onTapGesture {
+            NSWorkspace.shared.open(url)
+            analytics.trackFeature(.shelf, action: "open_file")
+        }
         .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
         .accessibilityLabel(url.lastPathComponent)
     }

@@ -18,6 +18,12 @@ struct SetupAppearancePage: View {
             SetupNote(icon: .refresh, text: "Your original wallpaper is saved first and restored automatically.")
             SetupDesktopTransitions()
         }
+        .onChange(of: lockArt) { _, enabled in
+            Analytics.shared.trackFeature(.appearance, action: "lock_art", data: ["enabled": .bool(enabled)])
+        }
+        .onChange(of: desktopColors) { _, enabled in
+            Analytics.shared.trackFeature(.appearance, action: "album_colors", data: ["enabled": .bool(enabled)])
+        }
     }
 }
 
