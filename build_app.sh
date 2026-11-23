@@ -27,8 +27,6 @@ if [[ "${LN_PUBLIC_RELEASE:-}" == 1 ]]; then
 fi
 # LiquidRenderer compiles this at launch; MLX's shaders require Xcode's Metal Toolchain at build time.
 cp Sources/LeNotch/Render/LiquidShape.metal "$APP/Contents/Resources/"
-cp Resources/Hugeicons-LICENSE.txt "$APP/Contents/Resources/"
-cp Resources/Interspace-LICENSE.txt "$APP/Contents/Resources/"
 # SwiftPM dependency resources, including MLX's compiled Metal shaders and Hub tokenizer files.
 for bundle in "$BIN_DIR"/*.bundle(N); do
   ditto "$bundle" "$APP/Contents/Resources/${bundle:t}"
@@ -47,10 +45,12 @@ else
   echo "note: no Now Playing adapter (run tools/build_adapter.sh); using the notification fallback"
 fi
 # Updates (1.1): Sparkle's framework (universal), symlinks kept.
-SPARKLE=.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework
+SPARKLE_ROOT=.build/artifacts/sparkle/Sparkle
+SPARKLE=$SPARKLE_ROOT/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework
 [[ -d $SPARKLE ]] || swift package resolve
 mkdir -p "$APP/Contents/Frameworks"
 ditto $SPARKLE "$APP/Contents/Frameworks/Sparkle.framework"
+bash tools/copy_notices.sh "$APP/Contents/Resources" "$SPARKLE_ROOT"
 
 # Signing. An ad-hoc signature changes with every build, so macOS treats each build as a new app
 # and forgets the permissions given to the last one; a real identity keeps them. LN_SIGN_IDENTITY

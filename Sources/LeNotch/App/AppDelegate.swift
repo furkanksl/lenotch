@@ -6,7 +6,9 @@ import ServiceManagement
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var surface: NotchSurfaceController?
+    #if DEBUG
     private var debugPanel: DebugPanelController?
+    #endif
     private let setup = SetupWindowController()
     private let tuning = TuningStore()
 
@@ -34,7 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let renderer = try LiquidRenderer()
             let surface = NotchSurfaceController(renderer: renderer, tuning: tuning)
             self.surface = surface
+            #if DEBUG
             debugPanel = DebugPanelController(store: tuning, surface: surface)
+            #endif
         } catch {
             NSLog("LeNotch: \(error)")
             NSApp.terminate(nil)
@@ -86,14 +90,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if HookInstaller.needsUpgrade() { try? HookInstaller.install() }
             agentSocket.start()
         }
-        if args.contains("--debug") { debugPanel?.toggle() }
         if (setup.needed && !args.contains("--no-setup")) || args.contains("--setup") { setup.show() }
+        #if DEBUG
+        if args.contains("--debug") { debugPanel?.toggle() }
         if args.contains("--spike") {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2))
                 Spikes.run()
             }
         }
+        #endif
     }
 
     /// Opening the app again (Finder, Spotlight) while it runs shows Setup, the way back in
@@ -178,10 +184,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotchMenu.shared.add(to: menu)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings", action: #selector(showSetup), keyEquivalent: "").target = self
-        // The debug panel (samples, chess, tuning) is for development: ⌥ held while the menu opens, or `--debug` (v1).
+        #if DEBUG
         if NSEvent.modifierFlags.contains(.option) || CommandLine.arguments.contains("--debug") {
             menu.addItem(withTitle: "Debug Panel", action: #selector(toggleDebug), keyEquivalent: "d").target = self
         }
+        #endif
         let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin(_:)), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -251,7 +258,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LauncherModel.shared.shortcutUnavailable = failures[.launcher] != nil
     }
 
+    #if DEBUG
     @objc private func toggleDebug() { debugPanel?.toggle() }
+    #endif
 
     @objc private func showSetup() { setup.show() }
 

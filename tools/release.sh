@@ -17,18 +17,13 @@ MINIMUM=$(plist LSMinimumSystemVersion)
 [[ "$VERSION" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' && "$BUILD" =~ '^[1-9][0-9]*$' && "$MINIMUM" =~ '^[0-9]+(\.[0-9]+){1,2}$' ]] ||
   die "Expected a three-part version, a positive integer build, and a macOS minimum version in $PLIST."
 
-# Read a local shell config, if present. Never export these credentials to the build.
+# Read local release settings. Notary credentials stay in Keychain.
 [[ ! -f .env.release ]] || source ./.env.release
-typeset +x LN_NOTARY_APPLE_ID LN_NOTARY_PASSWORD
+unset LN_NOTARY_APPLE_ID LN_NOTARY_PASSWORD
 TEAM=${LN_NOTARY_TEAM_ID:-}
 [[ "$TEAM" =~ '^[A-Z0-9]{10}$' ]] || die "Set LN_NOTARY_TEAM_ID in .env.release (see .env.release.example)."
-if [[ -n "${LN_NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
-  NOTARY_AUTH=(--keychain-profile "$LN_NOTARY_KEYCHAIN_PROFILE")
-else
-  [[ -n "${LN_NOTARY_APPLE_ID:-}" && -n "${LN_NOTARY_PASSWORD:-}" ]] ||
-    die "Fill in LN_NOTARY_APPLE_ID and LN_NOTARY_PASSWORD in .env.release, or set LN_NOTARY_KEYCHAIN_PROFILE."
-  NOTARY_AUTH=(--apple-id "$LN_NOTARY_APPLE_ID" --team-id "$TEAM" --password "$LN_NOTARY_PASSWORD")
-fi
+PROFILE=${LN_NOTARY_KEYCHAIN_PROFILE:-}
+[[ -n "$PROFILE" ]] || die "Store notarization credentials in Keychain and set LN_NOTARY_KEYCHAIN_PROFILE in .env.release."
 
 # Select by fingerprint so refreshed certificates with the same name are unambiguous.
 IDENTITY=$(security find-identity -v -p codesigning | awk -F '"' -v team="$TEAM" -v requested="${LN_SIGN_IDENTITY:-}" '
@@ -82,7 +77,7 @@ codesign --verify --deep --strict "$APP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$NOTARY_ZIP"
 
 print "Submitting LeNotch $VERSION to Apple's notary service…"
-xcrun notarytool submit "$NOTARY_ZIP" "${NOTARY_AUTH[@]}" --wait --output-format json > "$NOTARY_RESULT" ||
+xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$PROFILE" --wait --output-format json > "$NOTARY_RESULT" ||
   die "Notarization submission failed. See the notarytool error above."
 STATUS=$(plutil -extract status raw -o - "$NOTARY_RESULT")
 if [[ "$STATUS" != Accepted ]]; then

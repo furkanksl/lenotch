@@ -88,7 +88,7 @@ enum Spikes {
             FROM app a JOIN record r ON r.app_id = a.app_id LEFT JOIN delivered d ON d.app_id = a.app_id GROUP BY a.app_id
             """) { st in
             let age = Int(Date().timeIntervalSinceReferenceDate - sqlite3_column_double(st, 3))
-            log.notice("notifications: app \(text(st, 0), privacy: .public) records \(sqlite3_column_int(st, 1), privacy: .public) delivered \(sqlite3_column_int(st, 2), privacy: .public) newest \(age / 3600, privacy: .public) h ago style \(sqlite3_column_int(st, 4), privacy: .public)-\(sqlite3_column_int(st, 5), privacy: .public) presented \(sqlite3_column_int(st, 6), privacy: .public)")
+            log.notice("notifications: app \(text(st, 0), privacy: .private) records \(sqlite3_column_int(st, 1), privacy: .private) delivered \(sqlite3_column_int(st, 2), privacy: .private) newest \(age / 3600, privacy: .private) h ago style \(sqlite3_column_int(st, 4), privacy: .private)-\(sqlite3_column_int(st, 5), privacy: .private) presented \(sqlite3_column_int(st, 6), privacy: .private)")
         }
         // Where macOS 27 keeps each app's notification settings (ncprefs moved out of ~/Library/Preferences): file names,
         // and for a plist with an `apps` array, the flags of the apps that have records (bundle IDs and numbers only).
@@ -141,10 +141,10 @@ enum Spikes {
                 }
             }
             guard let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) else {
-                log.notice("notifications: data \(data.count, privacy: .public) bytes, not a plist (first \(data.prefix(8).map { String(format: "%02x", $0) }.joined(), privacy: .public))")
+                log.notice("notifications: record data was not a plist")
                 return
             }
-            log.notice("notifications: uuid \(sqlite3_column_int(st, 1), privacy: .public) bytes; data \(shape(plist, 0), privacy: .public)")
+            log.notice("notifications: uuid \(sqlite3_column_int(st, 1), privacy: .public) bytes; data \(shape(plist, 0), privacy: .private)")
         }
     }
 
