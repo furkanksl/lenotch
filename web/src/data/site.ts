@@ -1,10 +1,15 @@
 export type ToolId =
+  | "now-playing"
+  | "chat"
+  | "voice-mode"
+  | "timer"
+  | "notch-video"
+  | "agent-sessions"
   | "shelf"
   | "launcher"
   | "clipboard"
   | "dictation"
   | "prompter"
-  | "chat"
   | "today"
   | "todo"
   | "notes"
@@ -13,18 +18,10 @@ export type ToolId =
   | "usage"
   | "inbox";
 
-export interface MediaAsset {
-  type: "video" | "image";
-  src: string;
-  poster?: string;
-  alt?: string;
-}
-
 export interface ToolItem {
   id: ToolId;
   name: string;
   description: string;
-  media?: MediaAsset;
 }
 
 export interface FaqItem {
@@ -41,6 +38,36 @@ export const siteConfig = {
 };
 
 export const tools: readonly ToolItem[] = [
+  {
+    id: "now-playing",
+    name: "Now Playing",
+    description: "See what’s playing and pause, skip, or scrub from the notch.",
+  },
+  {
+    id: "chat",
+    name: "AI Chat",
+    description: "Ask Claude or ChatGPT a question without leaving your current app.",
+  },
+  {
+    id: "voice-mode",
+    name: "ChatGPT Voice Mode",
+    description: "Have a spoken conversation with ChatGPT. Experimental; requires a connected account and microphone access.",
+  },
+  {
+    id: "timer",
+    name: "Timer",
+    description: "Start a countdown and see how much time is left in the notch.",
+  },
+  {
+    id: "notch-video",
+    name: "Video in the Notch",
+    description: "Mirror a supported video into the notch or pop it out into picture-in-picture.",
+  },
+  {
+    id: "agent-sessions",
+    name: "Agent Sessions",
+    description: "Follow Claude and Codex coding sessions and respond to permission prompts after setting up hooks.",
+  },
   {
     id: "shelf",
     name: "Shelf",
@@ -65,11 +92,6 @@ export const tools: readonly ToolItem[] = [
     id: "prompter",
     name: "Prompter",
     description: "Scroll your script below the camera.",
-  },
-  {
-    id: "chat",
-    name: "Chat",
-    description: "Chat with Claude or ChatGPT from the notch.",
   },
   {
     id: "today",

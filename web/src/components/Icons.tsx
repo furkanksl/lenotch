@@ -26,10 +26,38 @@ export function ToolIcon(props: { id: ToolId; class?: string }) {
       aria-hidden="true"
       class={cls()}
     >
+      {props.id === "now-playing" && (
+        <>
+          <path d="M9 17.5V5l12-2.5V15M9 9l12-2.5" />
+          <ellipse cx="6" cy="17.5" rx="3" ry="2.5" />
+          <ellipse cx="18" cy="15" rx="3" ry="2.5" />
+        </>
+      )}
       {props.id === "chat" && (
         <>
           <path d="M9.85 4.87 8.76 8.7A3.5 3.5 0 0 1 6.7 10.76L2.87 11.85a1.19 1.19 0 0 0 0 2.3l3.83 1.09a3.5 3.5 0 0 1 2.06 2.06l1.09 3.83a1.19 1.19 0 0 0 2.3 0l1.09-3.83a3.5 3.5 0 0 1 2.06-2.06l3.83-1.09a1.19 1.19 0 0 0 0-2.3L15.3 10.76A3.5 3.5 0 0 1 13.24 8.7l-1.09-3.83a1.19 1.19 0 0 0-2.3 0Z" />
           <path d="M19.5 2.5v4M17.5 4.5h4" />
+        </>
+      )}
+      {props.id === "voice-mode" && (
+        <path d="M2 11v2m4-5v8m4-12v16m4-14v12m4-10v8m4-5v2" />
+      )}
+      {props.id === "timer" && (
+        <>
+          <circle cx="12" cy="13.5" r="7.5" />
+          <path d="M12 6V2m-2.5 0h5M17.7 8.5l2-2M12 10v4l2.2 1.4" />
+        </>
+      )}
+      {props.id === "notch-video" && (
+        <>
+          <rect x="2.5" y="4.5" width="19" height="15" rx="3" />
+          <path d="m10 8.5 5 3.5-5 3.5z" />
+        </>
+      )}
+      {props.id === "agent-sessions" && (
+        <>
+          <rect x="2.5" y="4.5" width="19" height="15" rx="3" />
+          <path d="m6.5 9 3 3-3 3m6-1h5" />
         </>
       )}
       {props.id === "dictation" && (

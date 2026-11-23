@@ -194,7 +194,7 @@ export default function App() {
               </span>
             </h1>
             <p class="hero-blur-in hero-delay-2 mx-auto mt-6 max-w-sm text-base leading-relaxed text-balance text-neutral-600 sm:mt-8 sm:max-w-lg sm:text-lg dark:text-neutral-300">
-              Media controls, live activity, and 13 tools at the top of your screen.
+              Control your music, chat with AI, and keep everyday tools at the top of your screen.
             </p>
             <div class="hero-blur-in hero-delay-3 mt-8 sm:mt-10">
               <a
@@ -218,7 +218,7 @@ export default function App() {
         <div class="mx-auto max-w-6xl px-5 sm:px-8">
 
         <section id="tools" aria-labelledby="tools-title" class="py-19 sm:py-27">
-          <h2 id="tools-title" class="text-4xl leading-none font-extralight tracking-[-0.05em] sm:text-5xl lg:text-6xl">13 tools built in.</h2>
+          <h2 id="tools-title" class="text-4xl leading-none font-extralight tracking-[-0.05em] sm:text-5xl lg:text-6xl">What’s in the notch</h2>
           <ul class="mt-8 grid grid-cols-1 gap-x-5 gap-y-8 sm:mt-11 sm:grid-cols-2 sm:gap-y-12 lg:grid-cols-3">
             <For each={tools}>
               {(tool) => (
