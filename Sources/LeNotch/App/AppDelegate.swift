@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toolShortcutController: ToolShortcutController?
     private var toolShortcutObserver: NSObjectProtocol?
     private var toolShortcutRecordingObserver: NSObjectProtocol?
+    private var activeObserver: NSObjectProtocol?
+    private var openAtLogin = false
     private let notificationReplies = NotificationReplyService()
     private let agentSocket = AgentSocket()
 
@@ -46,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // No menu bar icon (owner, 11-06): the menu opens on a right-click on the island.
         surface?.contextMenu = { [unowned self] hit in makeMenu(hit) }
+        refreshOpenAtLogin()
+        activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshOpenAtLogin() }
+        }
         if Bundle.main.bundleURL.pathExtension == "app", !args.contains("--no-analytics") {
             Analytics.shared.start()
             Analytics.shared.trackAppLaunch(hasNotch: !(NotchGeometry.current()?.1.isVirtual ?? true))
@@ -195,7 +201,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin(_:)), keyEquivalent: "")
         login.target = self
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        login.state = openAtLogin ? .on : .off
+        // Refresh off the main thread so System Settings changes still sync without blocking menu popup.
+        refreshOpenAtLogin(updating: login)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Uninstall LeNotch…", action: #selector(uninstall), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Quit LeNotch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -212,6 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         if let toolShortcutObserver { NotificationCenter.default.removeObserver(toolShortcutObserver) }
         if let toolShortcutRecordingObserver { NotificationCenter.default.removeObserver(toolShortcutRecordingObserver) }
+        if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
         ToolShortcutSettings.shared.endRecording()
         toolShortcutController?.stop()
         toolShortcutController = nil
@@ -302,16 +311,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let p = sender.representedObject as? Party { surface?.director.openCard(p) }
     }
 
-    @objc private func toggleLogin(_ sender: NSMenuItem) {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            NSLog("LeNotch: launch at login: \(error)")
+    private func refreshOpenAtLogin(updating item: NSMenuItem? = nil) {
+        Task { @MainActor [weak self, weak item] in
+            let enabled = await Task.detached(priority: .utility) { SMAppService.mainApp.status == .enabled }.value
+            self?.openAtLogin = enabled
+            item?.state = enabled ? .on : .off
         }
-        sender.state = SMAppService.mainApp.status == .enabled ? .on : .off
+    }
+
+    @objc private func toggleLogin(_ sender: NSMenuItem) {
+        let wantEnabled = !openAtLogin
+        openAtLogin = wantEnabled
+        sender.state = wantEnabled ? .on : .off
+        Task { @MainActor [weak self] in
+            let actual = await Task.detached(priority: .userInitiated) { () -> Bool in
+                do {
+                    if wantEnabled {
+                        try SMAppService.mainApp.register()
+                    } else {
+                        try SMAppService.mainApp.unregister()
+                    }
+                } catch {
+                    NSLog("LeNotch: launch at login: \(error)")
+                }
+                return SMAppService.mainApp.status == .enabled
+            }.value
+            self?.openAtLogin = actual
+        }
     }
 }

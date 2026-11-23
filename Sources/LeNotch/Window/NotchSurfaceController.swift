@@ -5,6 +5,34 @@ import OSLog
 import QuartzCore
 import SwiftUI
 
+/// Pure routing and coordinate rules for right-clicking the notch, kept free of AppKit globals so they can be tested.
+enum NotchContextMenuPolicy {
+    static func isContextClick(type: NSEvent.EventType, modifiers: NSEvent.ModifierFlags) -> Bool {
+        switch type {
+        case .rightMouseDown: true
+        case .leftMouseDown: modifiers.intersection([.control, .command, .option, .shift]) == .control
+        default: false
+        }
+    }
+
+    /// Converts a screen point to top-left panel coordinates, clamping tiny top-edge overshoots (up to 2 pt) when
+    /// no display sits directly above this screen.
+    static func clampedPanelPoint(_ global: NSPoint, panelFrame: NSRect, hasScreenAbove: Bool) -> SIMD2<Double> {
+        let x = Double(global.x - panelFrame.minX)
+        let rawY = Double(panelFrame.maxY - global.y)
+        let y = (!hasScreenAbove && rawY < 0 && rawY >= -2) ? 0 : rawY
+        return SIMD2(x, y)
+    }
+
+    static func shouldShowIslandMenu(region: HitRegion?, isTextInput: Bool, cardHasOwnContextMenu: Bool) -> Bool {
+        guard let region else { return false }
+        switch region {
+        case .ears, .bubble: return true
+        case .card: return !isTextInput && !cardHasOwnContextMenu
+        }
+    }
+}
+
 /// Owns the panel on the notched screen and wires the island -> presentation -> motion
 /// -> render, with the SwiftUI content layer riding on top of the liquid.
 ///
@@ -58,6 +86,8 @@ final class NotchSurfaceController {
     private var intentCheck: Timer?
     /// Until then the panel keeps the pointer (a double-click's second press after the player opened).
     private var holdMouseUntil = 0.0
+    private var contextMenuOpen = false
+    private var lastContextMenuTimestamp: TimeInterval = -1
     /// Faster than this (points a second) over the island is passing through.
     static let hoverIntentSpeed = 450.0
     /// The lock screen: the island joins the lock space while it's up, and the music card shows below the clock.
@@ -366,9 +396,12 @@ final class NotchSurfaceController {
         context.peekPlace = peek
         context.peekCard = peekCard
         animator.dragging = d.drag != nil
-        // The panel took the keyboard for a field (quick ask, a reply): once its card closes, the app you were in gets it
-        // back (the panel never activated anything, so that app is still the front one).
-        if panel.isKeyWindow, !island.opened { NSWorkspace.shared.frontmostApplication?.activate() }
+        // The panel took the keyboard for a field (quick ask, a reply): once its card closes, resign key explicitly
+        // and hand focus back so key state never blocks future clicks or right-clicks.
+        if panel.isKeyWindow, !island.opened {
+            panel.resignKey()
+            NSWorkspace.shared.frontmostApplication?.activate()
+        }
         // Menus only need watching while the island has something to show (and pull back from).
         desktop.watchMenus = island.live && !island.context.locked
         if d.holdsShape {
@@ -625,12 +658,81 @@ final class NotchSurfaceController {
 
 
     private func panelPoint(_ global: NSPoint) -> SIMD2<Double> {
-        let f = panel.frame
-        return SIMD2(Double(global.x - f.minX), Double(f.maxY - global.y))
+        NotchContextMenuPolicy.clampedPanelPoint(global, panelFrame: panel.frame, hasScreenAbove: hasScreenAbove(x: global.x))
+    }
+
+    private func hasScreenAbove(x: CGFloat) -> Bool {
+        guard let current = geometry?.screenFrame else { return false }
+        return NSScreen.screens.contains { screen in
+            let f = screen.frame
+            return f.minY >= current.maxY - 1 && x >= f.minX && x <= f.maxX
+        }
+    }
+
+    private func contextMenuRegion(at global: NSPoint) -> HitRegion? {
+        guard !launcherFan.isOpen,
+              !director.island.context.fullscreen,
+              !director.island.context.locked,
+              let u = uniforms else { return nil }
+        let p = panelPoint(global)
+        if let h = hit(p) { return h }
+        // Right-clicking the resting notch still opens the menu even if a stale menuOpen poll briefly cleared canOpenEmptyTray.
+        guard mode == .idle else { return nil }
+        return ShapeSDF.hit(p, u, earPad: tuningStore.tuning.hitPad)
+    }
+
+    private var cardHasOwnContextMenu: Bool {
+        director.groups.tray && (director.tray.page == .notes || director.tray.page == .todo)
+    }
+
+    private func isTextInput(at screenPoint: NSPoint) -> Bool {
+        let windowPoint = panel.convertPoint(fromScreen: screenPoint)
+        var view = panel.contentView?.hitTest(windowPoint)
+        while let current = view {
+            if let text = current as? NSTextView, text.isEditable || text.isSelectable { return true }
+            if let field = current as? NSTextField, field.isEditable { return true }
+            view = current.superview
+        }
+        return false
+    }
+
+    private func handleContextClick(_ event: NSEvent, local: Bool) -> Bool {
+        guard NotchContextMenuPolicy.isContextClick(type: event.type, modifiers: event.modifierFlags) else { return false }
+        if local, event.window !== panel { return false }
+        let screenPoint = NSEvent.mouseLocation
+        let region = contextMenuRegion(at: screenPoint)
+        guard NotchContextMenuPolicy.shouldShowIslandMenu(
+            region: region,
+            isTextInput: isTextInput(at: screenPoint),
+            cardHasOwnContextMenu: cardHasOwnContextMenu
+        ) else { return false }
+        guard !contextMenuOpen, event.timestamp != lastContextMenuTimestamp else { return true }
+        guard let menu = contextMenu?(region) else { return false }
+        lastContextMenuTimestamp = event.timestamp
+        contextMenuOpen = true
+        intentCheck?.invalidate()
+        intentCheck = nil
+        let windowPoint = panel.convertPoint(fromScreen: screenPoint)
+        let rawPoint = container.convert(windowPoint, from: nil)
+        let viewPoint = NSPoint(
+            x: min(max(rawPoint.x, 0), container.bounds.maxX),
+            y: min(max(rawPoint.y, 0), container.bounds.maxY)
+        )
+        // Pop up outside the event-monitor callback so AppKit finishes dispatching the event before
+        // entering modal menu tracking, and so local, Control-click, and global fallback clicks share one path.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.panel.orderFrontRegardless()
+            menu.popUp(positioning: nil, at: viewPoint, in: self.container)
+            self.contextMenuOpen = false
+            self.updateMouse()
+        }
+        return true
     }
 
     private func updateMouse(still: Bool = false) {
         guard !launcherFan.isOpen else { panel.ignoresMouseEvents = true; return }
+        guard !contextMenuOpen else { return }
         let p = panelPoint(NSEvent.mouseLocation)
         let h = hit(p)
         // While pressed the drag is ours, wherever the pointer goes.
@@ -702,13 +804,11 @@ final class NotchSurfaceController {
             self?.updateMouse()
             return e
         }) { monitors.append(l) }
-        // A right-click on the island opens the app's menu, except while the reply field is typing
-        // (the panel is key only then) so the text menu still works there.
-        if let l = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown, handler: { [weak self] e in
-            guard let self, e.window === panel, !panel.isKeyWindow, let region = hit(panelPoint(NSEvent.mouseLocation)),
-                  let menu = contextMenu?(region), let v = panel.contentView else { return e }
-            NSMenu.popUpContextMenu(menu, with: e, for: v)
-            return nil
+        // A right-click (or Control-click) on the island opens the app's menu; editable text inputs and card
+        // pages with their own item context menus still receive their native/SwiftUI menus.
+        if let l = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown], handler: { [weak self] e in
+            guard let self else { return e }
+            return self.handleContextClick(e, local: true) ? nil : e
         }) { monitors.append(l) }
         // The Konami code (easter egg): keys are only looked at while the pointer rests on the island (a global key
         // monitor needs Accessibility, which the app already asks for; without it this stays silent).
@@ -728,9 +828,14 @@ final class NotchSurfaceController {
         delights.pulse = { [weak self] hex in self?.pulse(hex) }
         delights.aura = { [weak self] hex in self?.auraOverride = hex; self?.activitiesChanged() }
         delights.reduceMotion = { [weak self] in self?.animator.reduceMotion ?? true }
-        // A click anywhere else closes the open card.
-        if let g = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.director.clickOutside() }
+        // A click anywhere else closes the open card; if a fast flick to the notch right-clicked before
+        // ignoresMouseEvents flipped in WindowServer, catch it here and still open the context menu.
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] e in
+            MainActor.assumeIsolated {
+                guard let self, !self.contextMenuOpen else { return }
+                if self.handleContextClick(e, local: false) { return }
+                self.director.clickOutside()
+            }
         }) { monitors.append(g) }
 
         let nc = NotificationCenter.default
@@ -744,7 +849,10 @@ final class NotchSurfaceController {
         readWallpaperTint()
         for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.screensDidWakeNotification] {
             observers.append(wc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.readWallpaperTint() }
+                MainActor.assumeIsolated {
+                    self?.readWallpaperTint()
+                    self?.updateMouse()
+                }
             })
         }
         // Displays connected or gone, a resolution change, the lid closed, or the Show on / Notch settings.

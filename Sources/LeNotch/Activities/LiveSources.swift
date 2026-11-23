@@ -77,6 +77,7 @@ final class MeetingWatcher {
     var onAgenda: (([AgendaItem]) -> Void)?
     private(set) var current: MeetingInfo?
     private(set) var agenda: [AgendaItem] = []
+    private var cachedCalendarChoices: [CalendarChoice] = []
     private let store = EKEventStore()
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -126,7 +127,13 @@ final class MeetingWatcher {
     }
 
     func check() {
-        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { publish(nil); publishAgenda([]); return }
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+            cachedCalendarChoices = []
+            publish(nil)
+            publishAgenda([])
+            return
+        }
+        refreshCalendarChoices()
         let now = Date()
         let dayStart = Calendar.current.startOfDay(for: now)
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? now.addingTimeInterval(86400)
@@ -176,11 +183,13 @@ final class MeetingWatcher {
         let shown: Bool
     }
 
-    /// Every event calendar, by account then title, with whether it shows.
-    func calendarChoices() -> [CalendarChoice] {
-        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
+    /// Every event calendar, by account then title, with whether it shows. Cached on refresh so opening
+    /// the right-click menu never blocks on EventKit IPC.
+    func calendarChoices() -> [CalendarChoice] { cachedCalendarChoices }
+
+    private func refreshCalendarChoices() {
         let hidden = Self.hidden
-        return store.calendars(for: .event)
+        cachedCalendarChoices = store.calendars(for: .event)
             .map { CalendarChoice(id: $0.calendarIdentifier, title: $0.title.trimmingCharacters(in: .whitespaces),
                                   account: $0.source?.title ?? "Other", color: NSColor(cgColor: $0.cgColor) ?? .gray,
                                   shown: !hidden.contains($0.calendarIdentifier)) }
