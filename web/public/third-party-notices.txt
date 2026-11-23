@@ -1,12 +1,16 @@
 Solid and @solidjs/web
 Source: https://github.com/solidjs/solid
 
+Solid Router
+Source: https://github.com/solidjs/solid-router
+
 Tailwind CSS
 Source: https://github.com/tailwindlabs/tailwindcss
 
 MIT License
 
 Copyright (c) 2016-2025 Ryan Carniato
+Copyright (c) 2020-2022 Ryan Carniato
 Copyright (c) Tailwind Labs, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

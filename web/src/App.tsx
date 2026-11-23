@@ -14,7 +14,9 @@ const navigation = [
   ["FAQ", "#faq"],
 ] as const;
 
-export default function App() {
+const homeUrl = import.meta.env.BASE_URL;
+
+export function SiteHeader(props: { home: boolean }) {
   const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
   const [dark, setDark] = createSignal(document.documentElement.classList.contains("dark"));
   const [showNavCta, setShowNavCta] = createSignal(false);
@@ -55,22 +57,8 @@ export default function App() {
 
     const checkVisibility = () => {
       const heroBtn = document.getElementById("hero-download-btn");
-      if (!heroBtn) return;
-      const rect = heroBtn.getBoundingClientRect();
-      setShowNavCta(rect.bottom < 60);
+      setShowNavCta(!!heroBtn && heroBtn.getBoundingClientRect().bottom < 60);
     };
-
-    let observer: IntersectionObserver | undefined;
-    const heroBtn = document.getElementById("hero-download-btn");
-    if (heroBtn && typeof IntersectionObserver !== "undefined") {
-      observer = new IntersectionObserver(
-        () => {
-          checkVisibility();
-        },
-        { threshold: [0, 0.5, 1], rootMargin: "-60px 0px 0px 0px" }
-      );
-      observer.observe(heroBtn);
-    }
 
     checkVisibility();
     window.addEventListener("scroll", checkVisibility, { passive: true });
@@ -81,7 +69,6 @@ export default function App() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("scroll", checkVisibility);
       window.removeEventListener("resize", checkVisibility);
-      observer?.disconnect();
     };
   });
 
@@ -97,10 +84,9 @@ export default function App() {
   };
 
   return (
-    <div id="top" class="flow-root min-h-screen bg-canvas font-sans text-neutral-950 selection:bg-accent/35 dark:bg-canvas-dark dark:text-neutral-50">
       <header class="sticky top-3 z-30 mx-auto mt-3 w-[calc(100%_-_1.5rem)] max-w-4xl sm:top-5 sm:mt-5 sm:w-[calc(100%_-_3rem)]">
         <div class="flex min-h-[50px] items-center justify-between gap-3 rounded-[16px] border border-black/[0.08] bg-well/90 px-2.5 py-1 shadow-[inset_0_1.5px_4px_rgba(20,16,40,0.08),inset_0_0_0_1px_rgba(33,27,55,0.04),0_1px_0_rgba(255,255,255,0.7)] backdrop-blur-xl dark:border-black/50 dark:bg-[#121117]/90 dark:shadow-[inset_0_2px_6px_rgba(0,0,0,0.55),inset_0_0_0_1px_rgba(0,0,0,0.4),0_1px_0_rgba(255,255,255,0.05)]">
-          <a href="#top" class="inline-flex shrink-0 items-center gap-2 text-[15px] font-semibold tracking-[-0.035em]">
+          <a href={props.home ? "#top" : homeUrl} class="inline-flex shrink-0 items-center gap-2 text-[15px] font-semibold tracking-[-0.035em]">
             <BrandMark class="size-7" />
             LeNotch
           </a>
@@ -109,7 +95,7 @@ export default function App() {
             <nav aria-label="Sections" class="hidden items-center gap-0.5 text-[13px] font-medium md:flex">
               <For each={navigation}>
                 {([label, href]) => (
-                  <a href={href} class="rounded-lg px-3 py-1.5 text-neutral-600 transition-colors hover:bg-well hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-well-dark dark:hover:text-white">
+                  <a href={props.home ? href : homeUrl + href} class="rounded-lg px-3 py-1.5 text-neutral-600 transition-colors hover:bg-well hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-well-dark dark:hover:text-white">
                     {label}
                   </a>
                 )}
@@ -133,7 +119,7 @@ export default function App() {
               <nav aria-label="Sections" class="absolute top-11 -right-12 z-20 grid w-44 rounded-2xl border border-black/10 bg-surface p-1.5 text-sm font-medium shadow-xl sm:-right-14 dark:border-white/10 dark:bg-surface-dark">
                 <For each={navigation}>
                   {([label, href]) => (
-                    <a href={href} onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")} class="rounded-xl px-3 py-2 hover:bg-well dark:hover:bg-well-dark">
+                    <a href={props.home ? href : homeUrl + href} onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")} class="rounded-xl px-3 py-2 hover:bg-well dark:hover:bg-well-dark">
                       {label}
                     </a>
                   )}
@@ -142,6 +128,8 @@ export default function App() {
             </details>
 
             <div
+              hidden={!props.home}
+              inert={!showNavCta()}
               class={`overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                 showNavCta()
                   ? "max-w-[140px] opacity-100 translate-x-0"
@@ -172,7 +160,11 @@ export default function App() {
           </div>
         </div>
       </header>
+  );
+}
 
+export default function App() {
+  return (
       <main class="w-full">
         {/* Full-bleed hero section edge-to-edge */}
         <section
@@ -270,11 +262,19 @@ export default function App() {
         </section>
         </div>
       </main>
+  );
+}
 
-      <footer class="mx-auto flex max-w-6xl items-center justify-between px-5 py-7 text-sm sm:px-8">
-        <a href="#top" class="inline-flex items-center gap-2 font-semibold tracking-tight"><BrandMark class="size-6" /> LeNotch</a>
-        <a href="#top" class="text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white">Back to top ↑</a>
-      </footer>
-    </div>
+export function SiteFooter(props: { home: boolean }) {
+  const linkClass = "inline-flex min-h-10 items-center text-neutral-600 hover:text-neutral-950 aria-[current=page]:text-neutral-950 dark:text-neutral-400 dark:hover:text-white dark:aria-[current=page]:text-white";
+  return (
+    <footer class="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 px-5 py-5 text-sm sm:px-8">
+      <a href={props.home ? "#top" : homeUrl} class="inline-flex items-center gap-2 font-semibold tracking-tight"><BrandMark class="size-6" /> LeNotch</a>
+      <nav aria-label="Footer" class="flex flex-wrap items-center gap-x-4 sm:gap-x-6">
+        <a href={`${homeUrl}privacy`} class={linkClass}>Privacy policy</a>
+        <a href={`${homeUrl}terms`} class={linkClass}>Terms of use</a>
+        <Show when={props.home}><a href="#top" class={linkClass}>Back to top ↑</a></Show>
+      </nav>
+    </footer>
   );
 }

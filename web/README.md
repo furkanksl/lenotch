@@ -13,6 +13,8 @@ npm run dev
 
 Run `npm run typecheck` to check TypeScript, `npm run build` to build `dist/`, and `npm run preview` to preview the production output.
 
+For direct links and refreshes, configure the host to serve `index.html` for `/privacy` and `/terms` (with or without a trailing slash). Vite’s dev and preview servers already do this.
+
 ## Adding videos, images, and the release download
 
 Set these paths in `src/data/site.ts`:
