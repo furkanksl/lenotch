@@ -1,0 +1,8 @@
+{
+  "name": "lenotch-release-tools",
+  "private": true,
+  "scripts": {
+    "bump": "node tools/bump-version.mjs",
+    "test": "node --test tools/bump-version.test.mjs"
+  }
+}

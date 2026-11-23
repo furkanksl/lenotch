@@ -215,7 +215,9 @@ LeNotch uses Sparkle and checks [furkanksl/lenotch](https://github.com/furkanksl
 
 ### Each release
 
-Set `CFBundleShortVersionString` in `Resources/Info.plist`, increase `CFBundleVersion`, and add a matching `## <version>` section with bullet points in `CHANGELOG.md`. Commit and push the release inputs before publishing so the GitHub tag points at the same commit used to build the app. Then run:
+From the repo root, run `npm run bump patch`, `npm run bump minor`, or `npm run bump major`. To set an exact version, pass a higher `X.Y.Z` version, for example `npm run bump 2.1.0`. No `npm install` is needed. Each bump updates `CFBundleShortVersionString` and adds one to Sparkle's `CFBundleVersion` in `Resources/Info.plist`.
+
+Add a matching `## <version>` section with bullet points in `CHANGELOG.md`. Commit and push the release inputs before publishing so the GitHub tag points at the same commit used to build the app. Then run:
 
 ```sh
 ./tools/release.sh            # Build, sign, notarize, and package. Does not publish.
