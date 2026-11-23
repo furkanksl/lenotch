@@ -3,6 +3,9 @@
   "private": true,
   "scripts": {
     "bump": "node tools/bump-version.mjs",
+    "release": "./tools/release.sh",
+    "publish:dry": "./tools/publish.sh --dry-run",
+    "publish": "./tools/publish.sh",
     "test": "node --test tools/bump-version.test.mjs"
   }
 }
