@@ -30,8 +30,6 @@ export interface FaqItem {
 }
 
 export const siteConfig = {
-  /** Set to your signed release ZIP/DMG URL when published (for example "/LeNotch-1.1.2.zip"). */
-  downloadUrl: null as string | null,
   /** Set to your product demo MP4/WebM path when ready (for example "/demo.mp4"). */
   demoVideoSrc: null as string | null,
   demoPosterSrc: null as string | null,
