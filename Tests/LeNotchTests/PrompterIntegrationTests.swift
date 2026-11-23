@@ -193,4 +193,20 @@ final class PrompterIntegrationTests: XCTestCase {
         model.advance(by: 0.25)
         XCTAssertEqual(model.offset, offset)
     }
+
+    func testStartingPrompterFromTrayPrompterPageOpensReaderAndStartsImmediately() {
+        let (director, model, _) = makeDirector()
+        director.openTray(at: .prompter)
+        XCTAssertTrue(director.groups.tray)
+        XCTAssertEqual(director.tray.page, .prompter)
+
+        director.startPrompter()
+
+        XCTAssertEqual(director.mode, .card)
+        XCTAssertTrue(director.island.opened)
+        XCTAssertFalse(director.groups.tray)
+        XCTAssertTrue(director.groups.activityCard)
+        XCTAssertEqual(director.island.instance(director.island.cardOwner)?.id, .prompter)
+        XCTAssertEqual(model.phase, .playing)
+    }
 }

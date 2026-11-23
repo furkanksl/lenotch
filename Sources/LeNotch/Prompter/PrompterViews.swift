@@ -5,6 +5,7 @@ import SwiftUI
 struct PrompterCard: View {
     let director: IslandDirector
     @Environment(\.islandMotion) private var motion
+    @Environment(\.revealed) private var revealed
     @State private var visible = false
     @State private var words = 0
 
@@ -50,7 +51,7 @@ struct PrompterCard: View {
                         } else {
                             PrompterReader(
                                 model: model, text: model.text, fontSize: model.fontSize,
-                                offset: model.offset, advancing: playing, visible: visible,
+                                offset: model.offset, advancing: playing, visible: visible && revealed,
                                 onStop: { director.stopPrompter() },
                                 onEdit: { model.pause(); director.editPrompter() }
                             )

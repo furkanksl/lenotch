@@ -192,4 +192,38 @@ final class TrayPresentationTests: XCTestCase {
             XCTAssertTrue(cardRect.insetBy(dx: -1, dy: -1).contains(rendered), "A tools label extends outside the standalone card")
         }
     }
+
+    func testNotesAndTodoStayOpenWhenHoveringAwayAndCloseOnClickOutside() {
+        for page in [TrayModel.Page.notes, .todo] {
+            let director = director()
+            let scheduler = ManualScheduler()
+            director.schedule = scheduler.schedule
+            director.openTray(at: page)
+            XCTAssertTrue(director.island.opened)
+            XCTAssertEqual(director.tray.page, page)
+
+            // Moving the pointer outside the card must not auto-collapse Notes or To-do.
+            director.pointerMoved(hit: .card, corridor: false, buttonDown: false)
+            director.pointerMoved(hit: nil, corridor: false, buttonDown: false)
+            scheduler.advance(10)
+            XCTAssertTrue(director.island.opened, "\(page) should remain open after unhover")
+            XCTAssertTrue(director.groups.tray)
+            XCTAssertEqual(director.tray.page, page)
+
+            // Clicking outside closes the expanded card.
+            director.clickOutside()
+            XCTAssertFalse(director.island.opened, "\(page) should close when clicking outside")
+        }
+    }
+
+    func testOtherTrayPagesStillAutoCollapseOnUnhover() {
+        let director = director()
+        let scheduler = ManualScheduler()
+        director.schedule = scheduler.schedule
+        director.openTray(at: .clipboard)
+        director.pointerMoved(hit: .card, corridor: false, buttonDown: false)
+        director.pointerMoved(hit: nil, corridor: false, buttonDown: false)
+        scheduler.advance(Tuning().closeDelay + 0.5)
+        XCTAssertFalse(director.island.opened)
+    }
 }

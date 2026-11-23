@@ -507,6 +507,12 @@ public struct Island: Equatable, Sendable {
         // Typing: nothing opens by itself; the liquid nudges instead.
         opened = open ?? (spec.opens && !context.typing)
         if spec.opens && context.typing && open == nil { effects.append(.nudge) }
+        // An activity taking the ears replaces any open tools/ask/media card instead of hiding behind trayOver.
+        trayOpen = false
+        trayOver = false
+        askOpen = nil
+        mediaFocus = false
+        questionOnly = false
         cardFor = opened ? .activity : nil
         hovered = opened
         if wasEars && (mode == .compact || mode == .duo) { effects.append(.takeover) }

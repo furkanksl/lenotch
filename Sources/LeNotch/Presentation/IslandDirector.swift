@@ -2417,6 +2417,8 @@ final class IslandDirector {
         guard island.hovered || island.peekBall != nil, hoverOff == nil, !pressed, !scrubbing else { return }
         if island.holdsOpen { return }      // closes by its buttons, the notch or a click outside
         if askVoiceOpen { return }
+        // Notes and To-do stay open when the pointer moves away; clicking outside, the notch, or their shortcut closes them.
+        if island.opened && groups.tray && (tray.page == .notes || tray.page == .todo) { return }
         if island.opened && (replyFocused || notificationInbox.composing || notificationInbox.submitting) { return }
         let t = tuning()
         hoverOff = schedule(island.opened ? t.closeDelay : t.leaveDelay) { [weak self] in

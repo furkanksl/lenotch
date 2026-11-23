@@ -83,4 +83,25 @@ final class PrompterLifecycleTests: XCTestCase {
         XCTAssertEqual(island.instance(island.cardOwner)?.id, .call)
         XCTAssertFalse(island.running.contains { $0.id == .prompter })
     }
+
+    func testStartingPrompterFromOpenTrayReplacesToolsWithPrompterCard() {
+        for withMedia in [false, true] {
+            var island = Island()
+            if withMedia { island.apply(.startMedia) }
+            island.apply(.openTray)
+            XCTAssertTrue(island.trayShows)
+
+            island.apply(.show(.prompter, opened: true))
+
+            XCTAssertEqual(island.mode, .card)
+            XCTAssertTrue(island.opened)
+            XCTAssertFalse(island.trayOpen)
+            XCTAssertFalse(island.trayOver)
+            XCTAssertFalse(island.trayShows)
+            XCTAssertEqual(island.cardOwner, .activity)
+            XCTAssertEqual(island.instance(island.cardOwner)?.id, .prompter)
+            XCTAssertTrue(island.groups(.card).activityCard)
+            XCTAssertFalse(island.groups(.card).tray)
+        }
+    }
 }
