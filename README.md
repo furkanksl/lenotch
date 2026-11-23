@@ -205,10 +205,22 @@ swift test
 
 ## Updates and releases
 
-Updates and releases use [furkanksl/lenotch](https://github.com/furkanksl/lenotch). The updater's `SUFeedURL` is `https://github.com/furkanksl/lenotch/releases/latest/download/appcast.xml`.
+LeNotch uses Sparkle and checks [furkanksl/lenotch](https://github.com/furkanksl/lenotch) for updates. Right-click the notch and choose **Check for Updates…** to check immediately. Sparkle shows the release notes and can install the update and relaunch. Copies shipped before `SUPublicEDKey` was added need a one-time manual upgrade.
 
-Automatic update checks remain disabled until you add LeNotch's own `SUPublicEDKey` to `Resources/Info.plist` and rebuild. Use `tools/updates.sh keygen` to create a signing key for a new release setup, or `tools/updates.sh pubkey` to read the public key from an existing local signing key. Keep the private key at `~/.config/lenotch/update-signing.key` backed up and out of the repository. Do not use the upstream project's signing key.
+### One-time setup
 
-`tools/release.sh` defaults to `https://github.com/furkanksl/lenotch`. It only builds release artifacts and prints a publish command targeting `furkanksl/lenotch`; it does not publish them. Attach both the signed `LeNotch-<version>.zip` and `appcast.xml` to each GitHub release so the updater can check it. An optional `LN_RELEASE_REPO_URL` override requires a matching `SUFeedURL`.
+1. Back up `.release/keys/ed25519-private.key` securely. Restore that same key on a new release Mac instead of generating a replacement. The matching public key is in `.release/keys/ed25519-public.key` and `Resources/Info.plist`. Only the public key is committed.
+2. Install a **Developer ID Application** certificate and its private key in your login Keychain. Copy `.env.release.example` to `.env.release` if it doesn't exist. Fill in `LN_NOTARY_TEAM_ID` and either `LN_NOTARY_APPLE_ID` and `LN_NOTARY_PASSWORD` (an [Apple app-specific password](https://account.apple.com/)), or store the credentials with `xcrun notarytool store-credentials lenotch` and set `LN_NOTARY_KEYCHAIN_PROFILE='lenotch'`. Using Keychain avoids keeping a password in the file.
+3. Sign in with `gh auth login` using an account that can publish to `furkanksl/lenotch`. The GitHub CLI uses its own credentials; the publish script doesn't need the Apple password or Sparkle private key.
 
-Releases also require a Git checkout with committed app sources, a `CHANGELOG.md` section for the app version, and the signing key matching `SUPublicEDKey`. The local debug build does not need these release settings.
+### Each release
+
+Set `CFBundleShortVersionString` in `Resources/Info.plist`, increase `CFBundleVersion`, and add a matching `## <version>` section with bullet points in `CHANGELOG.md`. Commit and push the release inputs before publishing so the GitHub tag points at the same commit used to build the app. Then run:
+
+```sh
+./tools/release.sh            # Build, sign, notarize, and package. Does not publish.
+./tools/publish.sh --dry-run  # Validate local artifacts without writing to GitHub.
+./tools/publish.sh            # Upload both assets to a draft, then publish as latest.
+```
+
+Build output is `dist/release/<version>/`: the stapled `LeNotch-<version>.zip`, `appcast.xml`, and a local `commit.txt` that identifies the source revision. The GitHub release must include both the ZIP and appcast because installed copies read `releases/latest/download/appcast.xml`. Don't replace the ZIP on an existing public release; bump the version and build instead. The local debug build does not need these release settings.

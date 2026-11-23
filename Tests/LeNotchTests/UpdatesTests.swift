@@ -7,9 +7,13 @@ final class UpdatesTests: XCTestCase {
         let data = try Data(contentsOf: root.appendingPathComponent("Resources/Info.plist"))
         let info = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
         let feed = try XCTUnwrap(info["SUFeedURL"] as? String)
+        let publicKey = try XCTUnwrap(info["SUPublicEDKey"] as? String)
         XCTAssertEqual(feed, "https://github.com/furkanksl/lenotch/releases/latest/download/appcast.xml")
+        XCTAssertEqual(Data(base64Encoded: publicKey)?.count, 32, "Sparkle needs a valid Ed25519 public key")
+        XCTAssertEqual(info["SUVerifyUpdateBeforeExtraction"] as? Bool, true)
         XCTAssertEqual(info["SUEnableAutomaticChecks"] as? Bool, true)
-        XCTAssertTrue(Updates.isConfigured(feedURL: feed, publicKey: "configured-signing-key"))
+        XCTAssertEqual(info["SUAutomaticallyUpdate"] as? Bool, false)
+        XCTAssertTrue(Updates.isConfigured(feedURL: feed, publicKey: publicKey))
         XCTAssertFalse(Updates.isConfigured(feedURL: feed, publicKey: nil),
                        "a repository URL alone must not enable unsigned updates")
     }

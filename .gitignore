@@ -1,5 +1,7 @@
 .build/
 dist/
+/.release/
+/.env.release
 /refs/
 .swiftpm/
 *.xcodeproj/

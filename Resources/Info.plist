@@ -14,8 +14,10 @@
 	<key>NSHighResolutionCapable</key><true/>
 	<key>NSPrincipalClass</key><string>NSApplication</string>
 	<key>SUFeedURL</key><string>https://github.com/furkanksl/lenotch/releases/latest/download/appcast.xml</string>
-	<!-- Add LeNotch's SUPublicEDKey before enabling Sparkle updates (tools/updates.sh). -->
+	<key>SUPublicEDKey</key><string>iSGEDxpfRl7PGp1IlofqT0BjLigY6+awlGo1Nc+fdR0=</string>
+	<key>SUVerifyUpdateBeforeExtraction</key><true/>
 	<key>SUEnableAutomaticChecks</key><true/>
+	<key>SUAutomaticallyUpdate</key><false/>
 	<key>NSCalendarsFullAccessUsageDescription</key><string>LeNotch shows your next meeting and its join link.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key><string>LeNotch shows your AirPods connecting and their battery.</string>
 	<key>NSAudioCaptureUsageDescription</key><string>LeNotch moves the music bars with the sound your Mac plays. Nothing is recorded or saved.</string>

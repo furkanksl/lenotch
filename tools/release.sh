@@ -1,56 +1,104 @@
 #!/bin/zsh
-# Builds a public release and its update feed, ready to attach to a GitHub release. Publishes nothing.
-#   tools/release.sh
-# Defaults to furkanksl/lenotch; LN_RELEASE_REPO_URL can override it with a matching SUFeedURL.
-# Requires this repository's own SUFeedURL and SUPublicEDKey in Resources/Info.plist.
-# Makes dist/release/<version>/LeNotch-<version>.zip (ad-hoc signed, universal) and appcast.xml, whose notes are
-# CHANGELOG.md's "## <version>" section. Installed copies read the appcast from the latest release
-# (SUFeedURL: releases/latest/download/appcast.xml), so every release must carry both files:
-#   gh release create v<version> dist/release/<version>/LeNotch-<version>.zip dist/release/<version>/appcast.xml --repo furkanksl/lenotch
+# Builds the signed, notarized release ZIP and Sparkle appcast. Publishes nothing.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+die() { print -u2 -r -- "$*"; exit 1; }
+(( $# == 0 )) || die "Usage: tools/release.sh"
+
 PLIST=Resources/Info.plist
-REPO=${LN_RELEASE_REPO_URL:-https://github.com/furkanksl/lenotch}
-REPO=${REPO%/}
-[[ "$REPO" =~ '^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' ]] || {
-  print -u2 "LN_RELEASE_REPO_URL must be a GitHub repository URL (default: https://github.com/furkanksl/lenotch)."
-  exit 1
-}
-FEED_URL=$(/usr/libexec/PlistBuddy -c "Print SUFeedURL" $PLIST 2>/dev/null || true)
-FEED_KEY=$(/usr/libexec/PlistBuddy -c "Print SUPublicEDKey" $PLIST 2>/dev/null || true)
-[[ "$FEED_URL" == "$REPO/releases/latest/download/appcast.xml" && -n "$FEED_KEY" ]] || {
-  print -u2 "Configure SUFeedURL as $REPO/releases/latest/download/appcast.xml and your own SUPublicEDKey in $PLIST first."
-  exit 1
-}
-VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" $PLIST)
-BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" $PLIST)
-MINIMUM=$(/usr/libexec/PlistBuddy -c "Print LSMinimumSystemVersion" $PLIST)
+REPO=https://github.com/furkanksl/lenotch
+plist() { /usr/libexec/PlistBuddy -c "Print $1" "$PLIST"; }
+[[ "$(plist SUFeedURL)" == "$REPO/releases/latest/download/appcast.xml" ]] || die "Unexpected SUFeedURL in $PLIST."
+FEED_KEY=$(plist SUPublicEDKey)
+VERSION=$(plist CFBundleShortVersionString)
+BUILD=$(plist CFBundleVersion)
+MINIMUM=$(plist LSMinimumSystemVersion)
+[[ "$VERSION" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' && "$BUILD" =~ '^[1-9][0-9]*$' && "$MINIMUM" =~ '^[0-9]+(\.[0-9]+){1,2}$' ]] ||
+  die "Expected a three-part version, a positive integer build, and a macOS minimum version in $PLIST."
+
+# Read a local shell config, if present. Never export these credentials to the build.
+[[ ! -f .env.release ]] || source ./.env.release
+typeset +x LN_NOTARY_APPLE_ID LN_NOTARY_PASSWORD
+TEAM=${LN_NOTARY_TEAM_ID:-}
+[[ "$TEAM" =~ '^[A-Z0-9]{10}$' ]] || die "Set LN_NOTARY_TEAM_ID in .env.release (see .env.release.example)."
+if [[ -n "${LN_NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
+  NOTARY_AUTH=(--keychain-profile "$LN_NOTARY_KEYCHAIN_PROFILE")
+else
+  [[ -n "${LN_NOTARY_APPLE_ID:-}" && -n "${LN_NOTARY_PASSWORD:-}" ]] ||
+    die "Fill in LN_NOTARY_APPLE_ID and LN_NOTARY_PASSWORD in .env.release, or set LN_NOTARY_KEYCHAIN_PROFILE."
+  NOTARY_AUTH=(--apple-id "$LN_NOTARY_APPLE_ID" --team-id "$TEAM" --password "$LN_NOTARY_PASSWORD")
+fi
+
+# Select by fingerprint so refreshed certificates with the same name are unambiguous.
+IDENTITY=$(security find-identity -v -p codesigning | awk -F '"' -v team="$TEAM" -v requested="${LN_SIGN_IDENTITY:-}" '
+  !found && $2 ~ "^Developer ID Application: .* \\(" team "\\)$" {
+    split($1, fields, /[[:space:]]*[0-9]+\)[[:space:]]+/)
+    hash = fields[2]
+    sub(/[[:space:]]+$/, "", hash)
+    if (requested == "" || requested == $2 || tolower(requested) == tolower(hash)) {
+      print hash
+      found = 1
+    }
+  }')
+[[ "$IDENTITY" =~ '^[A-Fa-f0-9]{40}$' ]] || die "No matching Developer ID Application signing identity for team $TEAM in Keychain."
 
 # Only committed code ships: anything uncommitted in what goes into the app stops the release.
-DIRTY=$(git status --porcelain -- Sources Resources Vendor tools Package.swift Package.resolved build_app.sh CHANGELOG.md)
-[[ -z "$DIRTY" ]] || { print -u2 "Uncommitted changes would ship:\n$DIRTY"; exit 1; }
+INPUTS=(Sources Resources Vendor tools Package.swift Package.resolved build_app.sh lenotch.icon CHANGELOG.md)
+COMMIT=$(git rev-parse HEAD)
+DIRTY=$(git status --porcelain --untracked-files=normal -- "${INPUTS[@]}")
+[[ -z "$DIRTY" ]] || die "Commit the release inputs before building:"$'\n'"$DIRTY"
 
-# The key that signs must be the one the app trusts, or no installed copy will take the update.
-[[ "$(tools/updates.sh pubkey)" == "$FEED_KEY" ]] || { print -u2 "The signing key doesn't match SUPublicEDKey in $PLIST"; exit 1; }
+[[ "$(tools/updates.sh pubkey)" == "$FEED_KEY" ]] || die "The signing key doesn't match SUPublicEDKey in $PLIST."
 
-# The notes: the changelog's section for this version, as HTML.
-NOTES=$(awk -v v="## $VERSION" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md | sed '/^[[:space:]]*$/d')
-[[ -n "$NOTES" ]] || { print -u2 "CHANGELOG.md has no \"## $VERSION\" section"; exit 1; }
-HTML=$(print -r -- "$NOTES" | sed -E 's/^- (.*)$/<li>\1<\/li>/; s/\*\*([^*]+)\*\*/<b>\1<\/b>/g')
-
-[[ -d .build/adapter/MediaRemoteAdapter.framework ]] || tools/build_adapter.sh
-LN_ADHOC=1 ./build_app.sh
+# Render version notes inline so Sparkle never has to load a GitHub release page into its dialog.
+HTML=$(awk -v heading="## $VERSION" '
+  $0 == heading { in_version = 1; next }
+  /^## / { in_version = 0 }
+  in_version && /[^[:space:]]/ {
+    sub(/^- /, "")
+    gsub(/&/, "\\&amp;")
+    gsub(/</, "\\&lt;")
+    gsub(/>/, "\\&gt;")
+    print "<li>" $0 "</li>"
+  }' CHANGELOG.md)
+[[ -n "$HTML" ]] || die "Add release notes under '## $VERSION' in CHANGELOG.md."
 
 OUT=dist/release/$VERSION
-ZIP=$OUT/LeNotch-$VERSION.zip
-rm -rf $OUT
-mkdir -p $OUT
-ditto -c -k --sequesterRsrc --keepParent dist/LeNotch.app $ZIP
-SIG=$(tools/updates.sh sign $ZIP)
+[[ ! -e "$OUT" ]] || die "$OUT already exists. Move it aside to rebuild this version."
+mkdir -p dist/release
+STAGING=$(mktemp -d "dist/release/.build-$VERSION.XXXXXX")
+trap 'rm -rf "$STAGING"' EXIT
+APP=$STAGING/LeNotch.app
+ARTIFACTS=$STAGING/artifacts
+mkdir "$ARTIFACTS"
+ZIP=$ARTIFACTS/LeNotch-$VERSION.zip
+NOTARY_ZIP=$STAGING/notary.zip
+NOTARY_RESULT=$STAGING/notary.json
+
+tools/build_adapter.sh
+CONFIG=release APP_OUTPUT_DIR="$STAGING" LN_PUBLIC_RELEASE=1 LN_ADHOC= LN_SIGN_IDENTITY="$IDENTITY" ./build_app.sh
+codesign --verify --deep --strict "$APP"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$NOTARY_ZIP"
+
+print "Submitting LeNotch $VERSION to Apple's notary service…"
+xcrun notarytool submit "$NOTARY_ZIP" "${NOTARY_AUTH[@]}" --wait --output-format json > "$NOTARY_RESULT" ||
+  die "Notarization submission failed. See the notarytool error above."
+STATUS=$(plutil -extract status raw -o - "$NOTARY_RESULT")
+if [[ "$STATUS" != Accepted ]]; then
+  SUBMISSION=$(plutil -extract id raw -o - "$NOTARY_RESULT")
+  die "Apple returned '$STATUS' for submission $SUBMISSION. Retrieve the report with 'xcrun notarytool log $SUBMISSION' and your notary credentials."
+fi
+xcrun stapler staple "$APP"
+xcrun stapler validate "$APP"
+codesign --verify --deep --strict "$APP"
+
+# Sparkle must sign the final archive, including the stapled ticket.
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+SIG=$(tools/updates.sh sign "$ZIP")
 DATE=$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")
 
-cat > $OUT/appcast.xml <<XML
+cat > "$ARTIFACTS/appcast.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
@@ -64,7 +112,6 @@ cat > $OUT/appcast.xml <<XML
       <sparkle:version>$BUILD</sparkle:version>
       <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>$MINIMUM</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>$REPO/releases/tag/v$VERSION</sparkle:releaseNotesLink>
       <description><![CDATA[<ul>
 $HTML
 </ul>]]></description>
@@ -73,6 +120,11 @@ $HTML
   </channel>
 </rss>
 XML
-xmllint --noout $OUT/appcast.xml
-print "Built $ZIP and $OUT/appcast.xml (LeNotch $VERSION, build $BUILD). To publish:"
-print "  gh release create v$VERSION $ZIP $OUT/appcast.xml --repo ${REPO#https://github.com/} --title \"LeNotch $VERSION\" --notes-file <(awk -v v=\"## $VERSION\" '\$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md)"
+xmllint --noout "$ARTIFACTS/appcast.xml"
+[[ "$(git rev-parse HEAD)" == "$COMMIT" && -z "$(git status --porcelain --untracked-files=normal -- "${INPUTS[@]}")" ]] ||
+  die "Release inputs changed during the build. Build again from the intended commit."
+print -r -- "$COMMIT" > "$ARTIFACTS/commit.txt"
+[[ ! -e "$OUT" ]] || die "$OUT already exists."
+mv "$ARTIFACTS" "$OUT"
+print "Built notarized release in $OUT (LeNotch $VERSION, build $BUILD). Nothing was published."
+print "Preview publishing with: tools/publish.sh --dry-run"

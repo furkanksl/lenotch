@@ -1,9 +1,9 @@
 #!/bin/zsh
-# Builds dist/LeNotch.app from the SwiftPM target and ad-hoc signs it.
+# Builds and signs dist/LeNotch.app from the SwiftPM target.
 #   ./build_app.sh            release build
 #   CONFIG=debug ./build_app.sh
 #   LN_SIGN_IDENTITY="Developer ID Application: …" ./build_app.sh   (hardened runtime)
-#   LN_ADHOC=1 ./build_app.sh                (ad-hoc, for public release zips)
+#   LN_ADHOC=1 ./build_app.sh  (force a local ad-hoc build)
 set -euo pipefail
 cd "$(dirname "$0")"
 CONFIG=${CONFIG:-release}
@@ -22,7 +22,9 @@ cp "$BIN" "$APP/Contents/MacOS/LeNotch"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 zsh tools/build_icon.sh "$APP/Contents/Resources" "$APP/Contents/Info.plist"
 # Public release builds move themselves into Applications on first launch (ApplicationInstaller); your own don't.
-[[ -n "${LN_ADHOC:-}" ]] && /usr/libexec/PlistBuddy -c "Add :LNMovesToApplications bool true" "$APP/Contents/Info.plist"
+if [[ "${LN_PUBLIC_RELEASE:-}" == 1 ]]; then
+  /usr/libexec/PlistBuddy -c 'Add :LNMovesToApplications bool true' "$APP/Contents/Info.plist"
+fi
 # LiquidRenderer compiles this at launch; MLX's shaders require Xcode's Metal Toolchain at build time.
 cp Sources/LeNotch/Render/LiquidShape.metal "$APP/Contents/Resources/"
 cp Resources/Hugeicons-LICENSE.txt "$APP/Contents/Resources/"
@@ -70,7 +72,6 @@ sign_frameworks() {
 }
 DEV_ID=$(security find-identity -p codesigning -v 2>/dev/null | sed -nE 's/.*"(Apple Development: [^"]+)".*/\1/p' | head -1)
 if [[ -n "${LN_ADHOC:-}" ]]; then
-  # Public release builds: ad-hoc, so no personal certificate (name, team ID) ships inside the app.
   sign_frameworks --sign -
   codesign --force --sign - "$APP"
 elif [[ -n "${LN_SIGN_IDENTITY:-}" ]]; then

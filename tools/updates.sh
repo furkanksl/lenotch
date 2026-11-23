@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Signs LeNotch update files for Sparkle. See tools/updates/main.swift for the commands.
-# The signing key lives in ~/.config/lenotch/update-signing.key, never in the repo.
+# The signing keys live in the gitignored .release/keys directory.
 set -euo pipefail
+umask 077
 cd "$(dirname "$0")/.."
 
 BIN=.build/tools/lenotch-updates
