@@ -110,7 +110,7 @@ struct ActivityEars: View {
                     .font(.system(size: 14)).foregroundStyle(IslandColor.cyan).entrance(side, 0)
             case (.incoming, .left):
                 Caller(size: 24).entrance(side, 0)
-                Text(presenting ? "Call" : "Marina").font(IslandType.ear).entrance(side, 1)
+                Text(presenting ? "Call" : "Daniel").font(IslandType.ear).entrance(side, 1)
             case (.incoming, .right):
                 Text("mobile").font(.body.weight(.medium)).foregroundStyle(IslandColor.secondary).entrance(side, 0)
                 Ringing { Image(systemName: "phone.fill").font(.system(size: 15)).foregroundStyle(IslandColor.green) }
@@ -168,8 +168,8 @@ struct ActivityEars: View {
             case (.messages, .left):
                 MessagesIcon(size: 22).entrance(side, 0)
             case (.messages, .right):
-                Text(presenting ? "Message" : "Marina").font(IslandType.ear).entrance(side, 0)
-                Avatar(initials: "MC", colors: ("#FF9F6B", "#E0567A"), size: 22).entrance(side, 1)
+                Text(presenting ? "Message" : "Hannah").font(IslandType.ear).entrance(side, 0)
+                Avatar(initials: "HP", colors: ("#FF9F6B", "#E0567A"), size: 22).entrance(side, 1)
             case (.chess, _), (.agentLimit, _), (.agentBack, _):
                 SessionAlertEars(instance: instance, side: side, director: director)
             case (.lockScreen, _), (.unlocked, _):
@@ -252,7 +252,7 @@ struct ActivityCard: View {
             Caller(size: 44).overlay(RingingHalo()).rise(0)
             VStack(alignment: .leading, spacing: 0) {
                 Text("mobile").font(IslandType.secondary).foregroundStyle(IslandColor.secondary)
-                Text(presenting ? "Incoming call" : "Marina Duarte").font(IslandType.title).lineLimit(1)
+                Text(presenting ? "Incoming call" : "Daniel Brooks").font(IslandType.title).lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .rise(1)
@@ -331,9 +331,9 @@ private struct CallCard: View {
         let s = director.samples
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                Avatar(initials: "MD", colors: ("#F6B26B", "#C2457E"), size: 44)
+                Avatar(initials: "DB", colors: ("#F6B26B", "#C2457E"), size: 44)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Marina Duarte").font(IslandType.title).lineLimit(1)
+                    Text("Daniel Brooks").font(IslandType.title).lineLimit(1)
                     Text((s.muted ? "Muted · " : "FaceTime Audio · ") + clockText(s.callSeconds))
                         .font(IslandType.secondary.monospacedDigit()).foregroundStyle(IslandColor.secondary)
                 }
@@ -538,7 +538,7 @@ private struct MessagesCard: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                Avatar(initials: "MC", colors: ("#FF9F6B", "#E0567A"), size: 40)
+                Avatar(initials: "HP", colors: ("#FF9F6B", "#E0567A"), size: 40)
                     .overlay(alignment: .bottomTrailing) {
                         MessagesIcon(size: 16)
                             .background(RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(.black, lineWidth: 4))
@@ -546,13 +546,13 @@ private struct MessagesCard: View {
                     }
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(presenting ? "Message" : "Marina Costa").font(IslandType.title).lineLimit(1)
+                        Text(presenting ? "Message" : "Hannah Park").font(IslandType.title).lineLimit(1)
                         Spacer()
                         Text("now").font(IslandType.secondary).foregroundStyle(IslandColor.dim)
                     }
                     // Never show message text while presenting.
                     Text(presenting ? "Message hidden while presenting"
-                                    : "Still on for dinner tonight? I booked the place on the corner for 8:30 🍝")
+                                    : "Still on for lunch at 1? I grabbed us a table by the window.")
                         .font(IslandType.body).foregroundStyle(.white.opacity(0.85))
                         .lineLimit(2).lineSpacing(1.5)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -571,7 +571,7 @@ private struct MessagesCard: View {
                             .font(IslandType.body)
                             .focused($focused)
                             .onSubmit(send)
-                            .accessibilityLabel(presenting ? "Reply" : "Reply to Marina Costa")
+                            .accessibilityLabel(presenting ? "Reply" : "Reply to Hannah Park")
                     }
                     Button(action: send) {
                         Image(systemName: "arrow.up").font(.system(size: 13, weight: .bold))
@@ -613,7 +613,7 @@ private struct Caller: View {
             Image(systemName: "phone.fill").font(.system(size: size * 0.42)).foregroundStyle(.white)
                 .frame(width: size, height: size).background(Circle().fill(Color(hex: "#3A3A3C")))
         } else {
-            Avatar(initials: "MD", colors: ("#F6B26B", "#C2457E"), size: size)
+            Avatar(initials: "DB", colors: ("#F6B26B", "#C2457E"), size: size)
         }
     }
 }

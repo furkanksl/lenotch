@@ -16,11 +16,11 @@ struct FakeTrack: Equatable, Sendable {
     let dotSize: Double
 
     static let samples: [FakeTrack] = [
-        FakeTrack(title: "Glass Harbor", artist: "Mirela Sun", colorHex: "#FF7A3D", length: 204,
+        FakeTrack(title: "Golden Hour", artist: "Linden Ave", colorHex: "#FF7A3D", length: 204,
                   gradient: ["#FF7A3D", "#A3245A", "#2B2D6E"], dotHex: "#FFD08A", dotAt: SIMD2(0.7, 0.3), dotSize: 0.36),
-        FakeTrack(title: "Night Ferry", artist: "The Low Tides", colorHex: "#3DD6C6", length: 251,
+        FakeTrack(title: "Midnight Swim", artist: "Coastline Club", colorHex: "#3DD6C6", length: 251,
                   gradient: ["#3DD6C6", "#136F86", "#0F2233"], dotHex: "#E8FFFB", dotAt: SIMD2(0.3, 0.65), dotSize: 0.18),
-        FakeTrack(title: "Paper Moons", artist: "Ana Vell", colorHex: "#FF4FA3", length: 188,
+        FakeTrack(title: "Velvet Sky", artist: "Slow Stereo", colorHex: "#FF4FA3", length: 188,
                   gradient: ["#FFB3D6", "#7C5CFF"], dotHex: "#3A1240", dotAt: SIMD2(0.5, 0.5), dotSize: 0.44),
     ]
 }

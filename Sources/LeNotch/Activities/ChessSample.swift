@@ -3,7 +3,7 @@
 /// The live route (the chess.com page through the browser extension) isn't built: only the sample shows. Fair play:
 /// the notch shows the position and the move played, never anything computed about it.
 enum ChessSample {
-    static let opponent = "Marta Reis"
+    static let opponent = "Owen Clark"
     static let line: [(mine: String, theirs: String, san: String, myClock: Double, theirClock: Double)] = [
         ("e2e4", "c7c5", "c5", 171, 176), ("g1f3", "d7d6", "d6", 160, 167), ("d2d4", "c5d4", "cxd4", 142, 161),
         ("f3d4", "g8f6", "Nf6", 118, 150), ("b1c3", "a7a6", "a6", 24, 132),

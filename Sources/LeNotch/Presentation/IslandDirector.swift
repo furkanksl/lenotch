@@ -1405,12 +1405,12 @@ final class IslandDirector {
         return PowerInfo(level: 75, charging: true, onAdapter: true, watts: 70, minutesToFull: 42)
     }
 
-    /// The meeting for its ears and card: live, or the sample's ("Design review" in 5 min).
+    /// The meeting for its ears and card: live, or the sample's ("Product Sync" in 5 min).
     func meetingFor(_ a: ActivityInstance) -> MeetingInfo {
         if !isSample(a), let meeting { return meeting }
         let start = date().addingTimeInterval(samples.meetingLeft)
-        return MeetingInfo(title: "Design review", start: start, end: start.addingTimeInterval(1800), joinURL: nil,
-                           initials: ["MC", "JP", "AL"], more: 2)
+        return MeetingInfo(title: "Product Sync", start: start, end: start.addingTimeInterval(1800), joinURL: nil,
+                           initials: ["HP", "DB", "KT"], more: 2)
     }
 
     /// Seconds until the meeting starts (0 once it has).
@@ -1482,7 +1482,7 @@ final class IslandDirector {
         if !isSample(a), let transfer { return transfer }
         let s = samples, total = Int64(SampleState.downloadGB * 1_000_000_000)
         let left = (1 - s.download) * SampleState.downloadGB * 1024 / 42 / 6
-        return TransferInfo(name: "Wallpapers-4K.zip", totalBytes: total, doneBytes: Int64(Double(total) * s.download),
+        return TransferInfo(name: "Design-Assets.zip", totalBytes: total, doneBytes: Int64(Double(total) * s.download),
                             bytesPerSecond: s.downloadPaused ? nil : s.downloadSpeed * 1_000_000, secondsLeft: left,
                             paused: s.downloadPaused, finished: s.download >= 1)
     }
