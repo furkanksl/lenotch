@@ -4,7 +4,7 @@ import { HeroPixelBackground } from "./components/HeroPixelBackground";
 import { HeroScreenshot } from "./components/HeroScreenshot";
 import { AppleIcon, BrandMark, MoonIcon, SunIcon } from "./components/Icons";
 import { ToolPreview } from "./components/ToolPreview";
-import { getLatestDownload, releasesUrl, type LatestDownload } from "./data/latest-release";
+import { getLatestDownload, githubRepoUrl, releasesUrl, type LatestDownload } from "./data/latest-release";
 import { faqs, tools } from "./data/site";
 
 const buttonClass =
@@ -209,7 +209,7 @@ export default function App() {
             <p class="hero-blur-in hero-delay-2 mx-auto mt-6 max-w-sm text-base leading-relaxed text-balance text-neutral-600 sm:mt-8 sm:max-w-lg sm:text-lg dark:text-neutral-300">
               Control your music, chat with AI, and keep everyday tools at the top of your screen.
             </p>
-            <div class="hero-blur-in hero-delay-3 mt-8 sm:mt-10">
+            <div class="hero-blur-in hero-delay-3 mt-8 flex flex-wrap items-center justify-center gap-3 sm:mt-10">
               <DownloadLink
                 id="hero-download-btn"
                 placement="hero"
@@ -218,6 +218,17 @@ export default function App() {
                 <AppleIcon class="relative z-10 h-[17px] w-auto shrink-0" />
                 <span class="relative z-10">Download for macOS</span>
               </DownloadLink>
+              <a
+                href={githubRepoUrl}
+                data-umami-event="github_click"
+                data-umami-event-placement="hero"
+                class="pressable inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-black/12 bg-surface/80 px-5 text-sm font-semibold tracking-tight text-neutral-800 shadow-sm hover:border-black/20 hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-white/15 dark:bg-surface-dark/90 dark:text-neutral-100 dark:hover:border-white/25 dark:hover:bg-well-dark"
+              >
+                <svg viewBox="0 0 24 24" class="size-[17px] shrink-0" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m12 3 2.8 5.8 6.4.9-4.6 4.5 1.1 6.4-5.7-3-5.7 3 1.1-6.4-4.6-4.5 6.4-.9L12 3Z" />
+                </svg>
+                Star on GitHub
+              </a>
             </div>
 
             <div class="hero-blur-in hero-delay-4 mt-20 sm:mt-28 lg:mt-36">
@@ -295,6 +306,7 @@ export function SiteFooter(props: { home: boolean }) {
     <footer class="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 px-5 py-5 text-sm sm:px-8">
       <a href={props.home ? "#top" : homeUrl} class="inline-flex items-center gap-2 font-semibold tracking-tight"><BrandMark class="size-6" /> LeNotch</a>
       <nav aria-label="Footer" class="flex flex-wrap items-center gap-x-4 sm:gap-x-6">
+        <a href={githubRepoUrl} class={linkClass} data-umami-event="github_click" data-umami-event-placement="footer">GitHub</a>
         <a href={`${homeUrl}privacy`} class={linkClass}>Privacy policy</a>
         <a href={`${homeUrl}terms`} class={linkClass}>Terms of use</a>
         <Show when={props.home}><a href="#top" class={linkClass}>Back to top ↑</a></Show>

@@ -1,4 +1,5 @@
-export const releasesUrl = "https://github.com/furkanksl/lenotch/releases";
+export const githubRepoUrl = "https://github.com/furkanksl/lenotch";
+export const releasesUrl = `${githubRepoUrl}/releases`;
 
 export type LatestDownload =
   | { status: "available"; url: string }
