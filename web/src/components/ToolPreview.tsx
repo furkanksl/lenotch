@@ -34,7 +34,7 @@ const palettes: Record<ToolId, string> = {
   "status-alerts": "bg-[#dfe7ec] text-[#3c5b6e] dark:bg-[#253440] dark:text-[#b5d5e5]",
 };
 
-function ToolClip(props: { src: string; name: string }) {
+function ToolClip(props: { src: string }) {
   const [playback, setPlayback] = createSignal<"idle" | "starting" | "playing" | "ended" | "unavailable">("idle");
   const active = () => playback() === "starting" || playback() === "playing";
   let video!: HTMLVideoElement;
@@ -50,52 +50,34 @@ function ToolClip(props: { src: string; name: string }) {
     if (video.currentTime > 0) video.currentTime = 0;
     setPlayback("starting");
     void video.play().catch((error: DOMException) => {
-      // Leaving before the clip loads aborts play(); a blocked hover can still be retried by tapping.
+      // Leaving before the clip loads aborts play().
       if (error.name !== "AbortError" && active()) stop();
     });
   };
 
   return (
-    <>
-      <video
-        ref={video}
-        src={props.src}
-        aria-hidden="true"
-        muted
-        playsinline
-        preload="none"
-        onPlaying={() => {
-          if (active()) setPlayback("playing");
-        }}
-        onEnded={() => {
-          if (video.ended && active()) setPlayback("ended");
-        }}
-        onError={() => setPlayback("unavailable")}
-        class={`absolute inset-0 h-full w-full bg-black object-contain ${playback() === "playing" || playback() === "ended" ? "" : "opacity-0"}`}
-      />
-      <button
-        type="button"
-        aria-label={`${active() ? "Stop" : "Play"} ${props.name} demo`}
-        hidden={playback() === "unavailable"}
-        onPointerEnter={(event) => {
-          if (event.pointerType === "mouse" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) play();
-        }}
-        onPointerLeave={(event) => {
-          if (event.pointerType === "mouse") stop();
-        }}
-        onClick={() => (active() ? stop() : play())}
-        onBlur={stop}
-        class="absolute inset-0 cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white"
-      >
-        <span aria-hidden="true" class="absolute right-3 bottom-3 grid size-9 place-items-center rounded-full border border-white/30 bg-black/80 text-white">
-          <svg viewBox="0 0 16 16" fill="currentColor" class="size-4">
-            <Show when={active()} fallback={<path d="M6 3.5a.7.7 0 0 0-1 .6v7.8a.7.7 0 0 0 1 .6l6.1-3.9a.7.7 0 0 0 0-1.2Z" />}>
-              <rect x="4" y="4" width="8" height="8" rx="1" />
-            </Show>
-          </svg>
-        </span>
-      </button>
-    </>
+    <video
+      ref={video}
+      src={props.src}
+      aria-hidden="true"
+      muted
+      playsinline
+      preload="none"
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) play();
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") stop();
+      }}
+      onPlaying={() => {
+        if (active()) setPlayback("playing");
+      }}
+      onEnded={() => {
+        if (video.ended && active()) setPlayback("ended");
+      }}
+      onError={() => setPlayback("unavailable")}
+      class={`absolute inset-0 h-full w-full bg-black object-contain ${playback() === "playing" || playback() === "ended" ? "" : "opacity-0"}`}
+    />
   );
 }
 
@@ -104,7 +86,7 @@ export function ToolPreview(props: { tool: ToolItem }) {
   const poster = () => posters[`../../assets/tools/${props.tool.id}.webp`];
 
   return (
-    <div class="relative isolate aspect-[1.52] w-full overflow-hidden rounded-[22px] bg-well dark:bg-well-dark">
+    <div class="relative isolate aspect-[1280/784] w-full overflow-hidden rounded-[22px] bg-well dark:bg-well-dark">
       <Show when={poster()} keyed fallback={
         <div aria-hidden="true" class={`absolute inset-0 grid place-items-center ${palettes[props.tool.id]}`}>
           <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_16%,white,transparent_74%)] opacity-43 dark:opacity-8" />
@@ -117,7 +99,7 @@ export function ToolPreview(props: { tool: ToolItem }) {
         )}
       </Show>
       <Show when={clip()} keyed>
-        {(src) => <ToolClip src={src} name={props.tool.name} />}
+        {(src) => <ToolClip src={src} />}
       </Show>
     </div>
   );
