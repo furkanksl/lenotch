@@ -1,5 +1,7 @@
 # LeNotch
 
+> This project is inspired by [fellipegoncalvesleite/liquid-notch](https://github.com/fellipegoncalvesleite/liquid-notch).
+
 LeNotch turns your Mac’s notch into a place to control music, see what’s running, and open tools like dictation, notes, and timers. It works with a physical or virtual notch.
 
 ## Install
@@ -19,7 +21,3 @@ open dist/LeNotch.app
 ```
 
 Run `swift test` for the app or `swift tools/dev.swift` to rebuild on save. See [third-party notices](Resources/Third-Party-Notices.md) for credits.
-
-## Release
-
-Set up `.env.release` from [.env.release.example](.env.release.example) and back up the Sparkle private key in `.release/keys/`. Run `npm run bump patch` (or `minor`, `major`, or `X.Y.Z`), add the version to [CHANGELOG.md](CHANGELOG.md), then commit and push. Build locally with `./tools/release.sh`, verify with `./tools/publish.sh --dry-run`, and publish with `./tools/publish.sh`.
