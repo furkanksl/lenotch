@@ -643,7 +643,7 @@ private struct PlayerButton: View {
 // MARK: - HUD
 
 /// Volume or brightness takes over the ears: the icon (following the level) and the percentage on the
-/// left, a 6 pt white bar on the right. The icon bounces on each press.
+/// left, and a native macOS pill slider with thumb on the right.
 private struct HUDLayer: View {
     let frame: FrameModel
     let director: IslandDirector
@@ -657,37 +657,115 @@ private struct HUDLayer: View {
         let textX: CGFloat = frame.left + 13 + 24 * e
         let bright = director.island.hud == .brightness
         let level = director.hudLevel
-        let tint = Color.white              // white for brightness too (owner, 11-01)
+        let muted = !bright && level <= 0.001
         let icon = bright ? (level < 0.5 ? "sun.min.fill" : "sun.max.fill")
-                          : (level <= 0 ? "speaker.slash.fill" : "speaker.wave.3.fill")
+                          : (muted ? "speaker.slash.fill" : "speaker.wave.3.fill")
+        let held = director.hudHeld
+        let readOnly = director.hudReadOnly
+        let controlX = frame.right - 14 - IslandDirector.hudBarWidth
         ZStack(alignment: .topLeading) {
-            Image(systemName: icon, variableValue: bright || level <= 0 ? nil : level)
+            Image(systemName: icon, variableValue: bright || muted ? nil : level)
                 .font(.system(size: iconFont, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.white.opacity(muted ? 0.6 : 1))
                 .symbolEffect(.bounce, options: .nonRepeating, value: motion.reduce ? 0 : level)
                 .frame(width: box, height: box)
                 .offset(x: frame.left + 13, y: iconY)
             // Quieter than the icon (12 pt medium, the % smaller and dimmer), and nudged so the digits'
             // middle sits on the ears' midline with the icon (measured on the 2x snapshot).
             (Text("\(Int((level * 100).rounded()))").font(.system(size: digits, weight: .medium).monospacedDigit())
-             + Text("%").font(.system(size: percent, weight: .medium)).foregroundColor(.white.opacity(0.6)))
-                .foregroundStyle(.white.opacity(0.9))
+             + Text("%").font(.system(size: percent, weight: .medium)).foregroundColor(.white.opacity(muted ? 0.35 : 0.6)))
+                .foregroundStyle(.white.opacity(muted ? 0.55 : 0.9))
                 .frame(height: box)
                 .offset(x: textX, y: textY)
-            // A slider (v1): under the pointer or held it thickens from 6 to 10 pt like the player's scrubber, and follows
-            // the drag without a spring (the spring is for key presses). Read-only, it dims.
-            let held = director.hudHeld
-            let bar = (held ? 10.0 : 6.0) * e
-            Capsule().fill(tint.opacity(0.22))
-                .overlay(alignment: .leading) {
-                    Capsule().fill(tint.opacity(director.hudReadOnly ? 0.5 : 1)).frame(width: IslandDirector.hudBarWidth * level)
-                        .animation(motion.reduce || held ? nil : .spring(response: 0.25, dampingFraction: 0.6), value: level)
-                }
-                .frame(width: IslandDirector.hudBarWidth, height: bar)
-                .animation(motion.reduce ? nil : .snappy(duration: 0.18), value: held)
-                .offset(x: frame.right - 14 - IslandDirector.hudBarWidth, y: nh / 2 - bar / 2)
+            HUDLevelSlider(
+                label: bright ? "Brightness" : "Volume",
+                level: level,
+                held: held,
+                readOnly: readOnly,
+                scale: e,
+                motion: motion
+            )
+            .offset(x: controlX, y: nh / 2 - HUDLevelSlider.containerHeight(scale: e) / 2)
         }
         .frame(width: NotchContentView.size.width, height: NotchContentView.size.height, alignment: .topLeading)
+    }
+}
+
+/// Native macOS-style horizontal pill slider matching the MacBook Control Center / Sound HUD bar:
+/// a slim recessed track, continuous white fill, and a crisp white pill thumb that stays within the
+/// 62 pt drag span.
+struct HUDLevelSlider: View {
+    static let totalWidth = IslandDirector.hudBarWidth
+
+    let label: String
+    let level: Double
+    let held: Bool
+    let readOnly: Bool
+    let scale: Double
+    let motion: IslandMotion
+
+    static func containerHeight(scale: Double) -> Double { 16.0 * scale }
+    static func trackHeight(held: Bool, scale: Double) -> Double { (held ? 6.5 : 5.0) * scale }
+    static func thumbSize(held: Bool, scale: Double) -> CGSize {
+        CGSize(width: (held ? 15.0 : 12.0) * scale, height: (held ? 10.5 : 8.5) * scale)
+    }
+
+    /// Leading x offset of the thumb inside `totalWidth` (always within `0...(totalWidth - thumbWidth)`).
+    static func thumbOffset(level: Double, thumbWidth: Double) -> Double {
+        let clamped = min(max(level, 0), 1)
+        return max(0, totalWidth - thumbWidth) * clamped
+    }
+
+    /// Fill width inside the track: 0 when muted/zero, otherwise reaching the thumb's center so the fill
+    /// meets the thumb cleanly without pinching at low levels.
+    static func fillWidth(level: Double, thumbWidth: Double) -> Double {
+        let clamped = min(max(level, 0), 1)
+        guard clamped > 0.001 else { return 0 }
+        return min(totalWidth, thumbOffset(level: clamped, thumbWidth: thumbWidth) + thumbWidth / 2)
+    }
+
+    var body: some View {
+        let clamped = min(max(level, 0), 1)
+        let containerH = Self.containerHeight(scale: scale)
+        let trackH = Self.trackHeight(held: held, scale: scale)
+        let thumb = Self.thumbSize(held: held, scale: scale)
+        let thumbX = Self.thumbOffset(level: clamped, thumbWidth: Double(thumb.width))
+        let fillW = Self.fillWidth(level: clamped, thumbWidth: Double(thumb.width))
+        let levelAnim: Animation? = (motion.reduce || held) ? nil : .easeOut(duration: 0.10)
+        let heldAnim: Animation? = motion.reduce ? nil : .easeOut(duration: 0.14)
+        let fillOpacity = readOnly ? 0.5 : 1.0
+
+        ZStack(alignment: .leading) {
+            Capsule(style: .continuous)
+                .fill(.white.opacity(held ? 0.28 : 0.22))
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(.white.opacity(fillOpacity))
+                        .frame(width: fillW)
+                }
+                .clipShape(Capsule(style: .continuous))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(.white.opacity(held ? 0.14 : 0.08), lineWidth: 0.5)
+                )
+                .frame(width: Self.totalWidth, height: trackH)
+
+            Capsule(style: .continuous)
+                .fill(.white.opacity(readOnly ? 0.6 : 1.0))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(.black.opacity(0.14), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.35), radius: 2 * scale, y: 0.5 * scale)
+                .frame(width: thumb.width, height: thumb.height)
+                .offset(x: thumbX)
+        }
+        .frame(width: Self.totalWidth, height: containerH, alignment: .leading)
+        .animation(levelAnim, value: clamped)
+        .animation(heldAnim, value: held)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue("\(Int((clamped * 100).rounded())) percent")
     }
 }
 

@@ -1,5 +1,7 @@
+import AppKit
 import IslandCore
 import NowPlaying
+import SwiftUI
 import XCTest
 @testable import Lenotch
 
@@ -262,5 +264,55 @@ final class LiveTests: XCTestCase {
             scheduler.advance(10)
             XCTAssertTrue(d.island.running.isEmpty, "the connection popup must not schedule a follow-up promotion")
         }
+    }
+
+    func testHUDLevelSliderFitsNotchStaysInBoundsAndRendersLevels() throws {
+        XCTAssertEqual(HUDLevelSlider.totalWidth, IslandDirector.hudBarWidth, accuracy: 0.001)
+
+        // Thumb stays within the 62 pt bar width and fits inside both physical (37.5 pt) and virtual (24 pt) notches.
+        for notchHeight in [37.5, 24.0] {
+            let scale = EarMetrics.scale(notchHeight: notchHeight)
+            let containerH = HUDLevelSlider.containerHeight(scale: scale)
+            XCTAssertLessThanOrEqual(containerH, notchHeight - 2 * EarMetrics.minInset + 0.01)
+            for held in [false, true] {
+                let thumb = HUDLevelSlider.thumbSize(held: held, scale: scale)
+                let trackH = HUDLevelSlider.trackHeight(held: held, scale: scale)
+                XCTAssertLessThanOrEqual(Double(thumb.height), containerH)
+                XCTAssertLessThan(trackH, Double(thumb.height))
+                XCTAssertEqual(HUDLevelSlider.thumbOffset(level: 0, thumbWidth: Double(thumb.width)), 0, accuracy: 0.001)
+                XCTAssertEqual(HUDLevelSlider.thumbOffset(level: 1, thumbWidth: Double(thumb.width)) + Double(thumb.width),
+                               HUDLevelSlider.totalWidth, accuracy: 0.001)
+                XCTAssertEqual(HUDLevelSlider.fillWidth(level: 0, thumbWidth: Double(thumb.width)), 0, accuracy: 0.001)
+                XCTAssertGreaterThan(HUDLevelSlider.fillWidth(level: 0.5, thumbWidth: Double(thumb.width)), 0)
+            }
+        }
+
+        // Visual brightness increases monotonically across muted, half, and full states.
+        func averageLuminance(level: Double) throws -> Double {
+            let view = HUDLevelSlider(label: "Volume", level: level, held: false, readOnly: false, scale: 1,
+                                      motion: IslandMotion(reduce: true, stills: true))
+                .padding(8)
+                .background(.black)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            let image = try XCTUnwrap(renderer.cgImage)
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            var sum = 0.0, count = 0
+            for x in stride(from: 0, to: image.width, by: 2) {
+                for y in stride(from: 0, to: image.height, by: 2) {
+                    if let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) {
+                        sum += Double(c.redComponent)
+                        count += 1
+                    }
+                }
+            }
+            return sum / Double(max(count, 1))
+        }
+
+        let muted = try averageLuminance(level: 0)
+        let half = try averageLuminance(level: 0.5)
+        let full = try averageLuminance(level: 1)
+        XCTAssertGreaterThan(half, muted)
+        XCTAssertGreaterThan(full, half)
     }
 }
