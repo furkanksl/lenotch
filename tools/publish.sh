@@ -29,9 +29,11 @@ TITLE="LeNotch $VERSION"
 OUT="dist/release/$VERSION"
 ZIP_NAME="LeNotch-$VERSION.zip"
 ZIP="$OUT/$ZIP_NAME"
+DMG_NAME="LeNotch-$VERSION.dmg"
+DMG="$OUT/$DMG_NAME"
 APPCAST="$OUT/appcast.xml"
 SOURCE="$OUT/commit.txt"
-for artifact in "$ZIP" "$APPCAST" "$SOURCE"; do
+for artifact in "$ZIP" "$DMG" "$APPCAST" "$SOURCE"; do
   [[ -f "$artifact" && -s "$artifact" ]] || die "Missing $artifact. Run tools/release.sh first."
 done
 
@@ -55,6 +57,7 @@ NOTES=$(awk -v heading="## $VERSION" '
 file_digest() { /usr/bin/shasum -a 256 < "$1" | awk '{ print "sha256:" $1 }'; }
 if (( ! DRY_RUN )); then
   ZIP_DIGEST=$(file_digest "$ZIP")
+  DMG_DIGEST=$(file_digest "$DMG")
   APPCAST_DIGEST=$(file_digest "$APPCAST")
 fi
 
@@ -72,6 +75,7 @@ xpath() { /usr/bin/xmllint --nonet --xpath "$1" "$APPCAST"; }
    "$(xpath "string($ITEM/$(sparkle_field minimumSystemVersion))")" == "$MINIMUM" ]] ||
   die "Appcast version, build or macOS minimum does not match $PLIST."
 ZIP_SIZE=$(/usr/bin/stat -f %z "$ZIP")
+DMG_SIZE=$(/usr/bin/stat -f %z "$DMG")
 APPCAST_SIZE=$(/usr/bin/stat -f %z "$APPCAST")
 [[ "$(xpath "string($ENCLOSURE/@length)")" == "$ZIP_SIZE" ]] || die "Appcast byte length does not match $ZIP."
 SIGNATURE=$(xpath "string($ENCLOSURE/@$(sparkle_field edSignature))")
@@ -85,8 +89,10 @@ for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion LSMinim
     die "Archived LeNotch.app has a different $key than $PLIST."
 done
 
+hdiutil verify "$DMG" >/dev/null || die "Disk image verification failed for $DMG."
+
 print "Ready: $TITLE (build $BUILD), $TAG at $COMMIT, on $REPO."
-print "Assets: $ZIP and $APPCAST"
+print "Assets: $ZIP, $DMG, and $APPCAST"
 if (( DRY_RUN )); then
   print "Release notes:"
   print -r -- "$NOTES"
@@ -140,8 +146,8 @@ else
   print "No appcast on the latest release; skipping the previous-build check."
 fi
 
-print "Creating a draft and uploading both assets…"
-gh release create "$TAG" "$ZIP" "$APPCAST" --repo "$GITHUB_REPO" --target "$COMMIT" --draft \
+print "Creating a draft and uploading the release assets…"
+gh release create "$TAG" "$ZIP" "$DMG" "$APPCAST" --repo "$GITHUB_REPO" --target "$COMMIT" --draft \
   --title "$TITLE" --notes-file - <<< "$NOTES" ||
   die "Draft creation or upload failed. Check $REPO_URL/releases for an incomplete draft before retrying."
 
@@ -153,6 +159,7 @@ TARGET_CHECK="(.target_commitish == \"$COMMIT\")"
 [[ -z "$REMOTE_TAG_COMMIT" ]] || TARGET_CHECK=true
 DRAFT_OK=$(gh_api "$API_REPO/releases/$DRAFT" --jq ".draft and (.tag_name == \"$TAG\") and $TARGET_CHECK and (
   any(.assets[]; .state == \"uploaded\" and .name == \"$ZIP_NAME\" and .size == $ZIP_SIZE and .digest == \"$ZIP_DIGEST\") and
+  any(.assets[]; .state == \"uploaded\" and .name == \"$DMG_NAME\" and .size == $DMG_SIZE and .digest == \"$DMG_DIGEST\") and
   any(.assets[]; .state == \"uploaded\" and .name == \"appcast.xml\" and .size == $APPCAST_SIZE and .digest == \"$APPCAST_DIGEST\")
 )") || die "Could not verify uploaded assets. $TAG was left as a draft."
 [[ "$DRAFT_OK" == true ]] || die "Draft or uploaded assets do not match the prepared release. $TAG was not published."

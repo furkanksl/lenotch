@@ -6,7 +6,9 @@ LeNotch turns your Mac’s notch into a place to control music, see what’s run
 
 ## Install
 
-Requires **macOS 15 or later**. Download the ZIP from [GitHub Releases](https://github.com/furkanksl/lenotch/releases), unzip it, and move `LeNotch.app` to Applications. Right-click the notch for **Settings**, **Check for Updates…**, or **Quit**. There’s no Dock or menu bar icon.
+Requires **macOS 15 or later**. Open the DMG from [GitHub Releases](https://github.com/furkanksl/lenotch/releases) and drag `LeNotch.app` to Applications. If your release only has a ZIP, unzip it and move the app to Applications.
+
+Right-click the notch for **Settings**, **Check for Updates…**, or **Quit**. There’s no Dock or menu bar icon.
 
 Permissions are optional. Notifications and Messages use Full Disk Access. Local dictation runs on Apple silicon; choosing ChatGPT dictation sends the recording to OpenAI.
 

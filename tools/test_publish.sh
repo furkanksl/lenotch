@@ -41,10 +41,14 @@ git add .
 git -c user.name=Test -c user.email=test@example.invalid -c commit.gpgsign=false commit -qm fixture
 export FIXTURE_HEAD=$(git rev-parse HEAD)
 OUT=dist/release/1.2.3
-export ZIP="$OUT/LeNotch-1.2.3.zip" APPCAST="$OUT/appcast.xml"
+export ZIP="$OUT/LeNotch-1.2.3.zip" DMG="$OUT/LeNotch-1.2.3.dmg" APPCAST="$OUT/appcast.xml"
 print -r -- "$FIXTURE_HEAD" > "$OUT/commit.txt"
 cp Resources/Info.plist LeNotch.app/Contents/
 zip -q -r "$ZIP" LeNotch.app
+mkdir "$TMP/dmg"
+ditto LeNotch.app "$TMP/dmg/LeNotch.app"
+ln -s /Applications "$TMP/dmg/Applications"
+hdiutil create -srcfolder "$TMP/dmg" -volname LeNotch -fs HFS+ -format UDZO "$DMG" >/dev/null
 SIGNATURE=$(tools/updates.sh sign "$ZIP")
 WRONG_SIGNATURE=$(tools/updates.sh sign CHANGELOG.md | awk '{ print $1 }')
 export ZIP_SIZE=$(/usr/bin/stat -f %z "$ZIP")
@@ -121,13 +125,16 @@ case "$1:$2" in
           [[ "$1" == --jq && -f "$DRAFT_STATE" ]]
           print verify >> "$LOG"
           zip_digest="sha256:$(shasum -a 256 < "$ZIP" | awk '{print $1}')"
+          dmg_digest="sha256:$(shasum -a 256 < "$DMG" | awk '{print $1}')"
           appcast_digest="sha256:$(shasum -a 256 < "$APPCAST" | awk '{print $1}')"
+          dmg_size=$(/usr/bin/stat -f %z "$DMG")
           appcast_size=$(/usr/bin/stat -f %z "$APPCAST")
           [[ "$SCENARIO" != corrupt_upload ]] || appcast_digest=wrong
+          [[ "$SCENARIO" != corrupt_dmg ]] || dmg_digest=wrong
           real_target=$FIXTURE_HEAD
           [[ "$SCENARIO" != annotated_tag ]] || real_target=main
-          printf '{"draft":true,"tag_name":"v1.2.3","target_commitish":"%s","assets":[{"state":"uploaded","name":"LeNotch-1.2.3.zip","size":%s,"digest":"%s"},{"state":"uploaded","name":"appcast.xml","size":%s,"digest":"%s"}]}\n' \
-            "$real_target" "$ZIP_SIZE" "$zip_digest" "$appcast_size" "$appcast_digest" | jq -r "$2"
+          printf '{"draft":true,"tag_name":"v1.2.3","target_commitish":"%s","assets":[{"state":"uploaded","name":"LeNotch-1.2.3.zip","size":%s,"digest":"%s"},{"state":"uploaded","name":"LeNotch-1.2.3.dmg","size":%s,"digest":"%s"},{"state":"uploaded","name":"appcast.xml","size":%s,"digest":"%s"}]}\n' \
+            "$real_target" "$ZIP_SIZE" "$zip_digest" "$dmg_size" "$dmg_digest" "$appcast_size" "$appcast_digest" | jq -r "$2"
         fi
         ;;
       *) print -u2 "Unexpected API call: $endpoint"; exit 99 ;;
@@ -139,7 +146,7 @@ case "$1:$2" in
     cat "$PREVIOUS_FEED_FILE"
     ;;
   release:create)
-    [[ "$*" == "release create v1.2.3 $ZIP $APPCAST --repo github.com/furkanksl/lenotch --target $FIXTURE_HEAD --draft --title LeNotch 1.2.3 --notes-file -" ]]
+    [[ "$*" == "release create v1.2.3 $ZIP $DMG $APPCAST --repo github.com/furkanksl/lenotch --target $FIXTURE_HEAD --draft --title LeNotch 1.2.3 --notes-file -" ]]
     [[ "$(cat)" == "$FIXTURE_NOTES" ]]
     print create >> "$LOG"
     touch "$DRAFT_STATE"
@@ -168,6 +175,11 @@ reset() { : > "$LOG"; rm -f "$DRAFT_STATE"; export SCENARIO=$1; }
 reset normal
 tools/publish.sh --dry-run | grep -q 'Dry run: no GitHub requests made.'
 assert_calls ''
+mv "$DMG" "$TMP/valid.dmg"
+expect_failure "Missing $DMG" --dry-run
+print 'Not a disk image' > "$DMG"
+expect_failure 'Disk image verification failed' --dry-run
+mv "$TMP/valid.dmg" "$DMG"
 mv "$OUT/commit.txt" "$TMP/commit.txt"
 expect_failure 'Missing dist/release/1.2.3/commit.txt'
 print wrong > "$OUT/commit.txt"
@@ -200,6 +212,11 @@ assert_calls 'auth list commit tag latest create'
 [[ -f "$DRAFT_STATE" ]]
 
 reset corrupt_upload
+expect_failure 'uploaded assets do not match'
+assert_calls 'auth list commit tag latest create list tag verify'
+[[ -f "$DRAFT_STATE" ]]
+
+reset corrupt_dmg
 expect_failure 'uploaded assets do not match'
 assert_calls 'auth list commit tag latest create list tag verify'
 [[ -f "$DRAFT_STATE" ]]

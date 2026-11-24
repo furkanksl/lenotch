@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds the signed, notarized release ZIP and Sparkle appcast. Publishes nothing.
+# Builds the notarized installer DMG, Sparkle update ZIP, and appcast. Publishes nothing.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -68,22 +68,28 @@ APP=$STAGING/LeNotch.app
 ARTIFACTS=$STAGING/artifacts
 mkdir "$ARTIFACTS"
 ZIP=$ARTIFACTS/LeNotch-$VERSION.zip
+DMG=$ARTIFACTS/LeNotch-$VERSION.dmg
 NOTARY_ZIP=$STAGING/notary.zip
 NOTARY_RESULT=$STAGING/notary.json
+
+notarize() {
+  local artifact=$1 description=$2 notary_status submission
+  print "Submitting $description to Apple's notary service…"
+  xcrun notarytool submit "$artifact" --keychain-profile "$PROFILE" --wait --output-format json > "$NOTARY_RESULT" ||
+    die "Notarization submission failed for $description. See the notarytool error above."
+  notary_status=$(plutil -extract status raw -o - "$NOTARY_RESULT")
+  if [[ "$notary_status" != Accepted ]]; then
+    submission=$(plutil -extract id raw -o - "$NOTARY_RESULT")
+    die "Apple returned '$notary_status' for $description (submission $submission). Retrieve the report with 'xcrun notarytool log $submission' and your notary credentials."
+  fi
+}
 
 tools/build_adapter.sh
 CONFIG=release APP_OUTPUT_DIR="$STAGING" LN_PUBLIC_RELEASE=1 LN_ADHOC= LN_SIGN_IDENTITY="$IDENTITY" ./build_app.sh
 codesign --verify --deep --strict "$APP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$NOTARY_ZIP"
 
-print "Submitting LeNotch $VERSION to Apple's notary service…"
-xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$PROFILE" --wait --output-format json > "$NOTARY_RESULT" ||
-  die "Notarization submission failed. See the notarytool error above."
-STATUS=$(plutil -extract status raw -o - "$NOTARY_RESULT")
-if [[ "$STATUS" != Accepted ]]; then
-  SUBMISSION=$(plutil -extract id raw -o - "$NOTARY_RESULT")
-  die "Apple returned '$STATUS' for submission $SUBMISSION. Retrieve the report with 'xcrun notarytool log $SUBMISSION' and your notary credentials."
-fi
+notarize "$NOTARY_ZIP" "LeNotch $VERSION app"
 xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
 codesign --verify --deep --strict "$APP"
@@ -91,6 +97,19 @@ codesign --verify --deep --strict "$APP"
 # Sparkle must sign the final archive, including the stapled ticket.
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 SIG=$(tools/updates.sh sign "$ZIP")
+
+# Use the same stapled app for the drag-to-Applications installer.
+DMG_ROOT=$STAGING/dmg
+mkdir "$DMG_ROOT"
+mv "$APP" "$DMG_ROOT/"
+ln -s /Applications "$DMG_ROOT/Applications"
+hdiutil create -srcfolder "$DMG_ROOT" -volname LeNotch -fs HFS+ -format UDZO "$DMG"
+codesign --sign "$IDENTITY" --timestamp "$DMG"
+notarize "$DMG" "LeNotch $VERSION DMG"
+xcrun stapler staple "$DMG"
+xcrun stapler validate "$DMG"
+codesign --verify --strict "$DMG"
+
 DATE=$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")
 
 cat > "$ARTIFACTS/appcast.xml" <<XML
