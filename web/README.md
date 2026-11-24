@@ -15,11 +15,9 @@ Run `npm run typecheck` to check TypeScript, `npm run build` to build `dist/`, a
 
 ## Adding videos, images, and the release download
 
-Edit `src/data/site.ts`:
-
-- **Main product demo video:** place your video in `public/` (for example `public/demo.mp4`) and set `siteConfig.demoVideoSrc` to `"/demo.mp4"`. Set `demoPosterSrc` if you have a poster. The player has no media until you set these paths.
-- **Per-tool clips or screenshots:** put the MP4 in `public/` and set the tool's `recording` to its filename (for example, `"shelf.mp4"`). Put a still at `assets/tools/<tool-id>.webp` if you have one. Tools without a still show their icon until the video plays.
-- **Direct macOS download:** set `siteConfig.downloadUrl` to your signed release `.zip` or `.dmg` URL.
+- **Hero screenshot:** replace `assets/hero-notch.webp`. If its dimensions change, update the image's `width` and `height` in `src/components/HeroScreenshot.tsx`.
+- **Per-tool clips or screenshots:** put the MP4 in `public/` and set the tool's `recording` in `src/data/site.ts` to its filename (for example, `"shelf.mp4"`). Put a still at `assets/tools/<tool-id>.webp` if you have one. Tools without a still show their icon until the video plays.
+- **Direct macOS download:** attach a signed `.dmg` to the latest published GitHub release. The landing page picks it up automatically.
 
 ## Self-hosting on Dokploy
 

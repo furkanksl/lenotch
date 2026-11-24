@@ -35,12 +35,6 @@ export interface FaqItem {
   answer: string;
 }
 
-export const siteConfig = {
-  /** Set to your product demo MP4/WebM path when ready (for example "/demo.mp4"). */
-  demoVideoSrc: null as string | null,
-  demoPosterSrc: null as string | null,
-};
-
 export const tools: readonly ToolItem[] = [
   {
     id: "now-playing",

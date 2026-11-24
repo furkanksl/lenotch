@@ -1,7 +1,7 @@
 import { For, Show, createSignal, onSettled } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { DemoVideo } from "./components/DemoVideo";
 import { HeroPixelBackground } from "./components/HeroPixelBackground";
+import { HeroScreenshot } from "./components/HeroScreenshot";
 import { AppleIcon, BrandMark, MoonIcon, SunIcon } from "./components/Icons";
 import { ToolPreview } from "./components/ToolPreview";
 import { getLatestDownload, releasesUrl, type LatestDownload } from "./data/latest-release";
@@ -221,7 +221,7 @@ export default function App() {
             </div>
 
             <div class="hero-blur-in hero-delay-4 mt-20 sm:mt-28 lg:mt-36">
-              <DemoVideo />
+              <HeroScreenshot />
             </div>
           </div>
         </section>
