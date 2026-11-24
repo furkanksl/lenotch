@@ -2,7 +2,7 @@ import { Show, createSignal } from "solid-js";
 import type { ToolId, ToolItem } from "../data/site";
 import { ToolIcon } from "./Icons";
 
-const previewAssets = import.meta.glob<string>("../../assets/tools/*.{mp4,webp}", {
+const posters = import.meta.glob<string>("../../assets/tools/*.webp", {
   eager: true,
   import: "default",
   query: "?url&no-inline",
@@ -27,6 +27,11 @@ const palettes: Record<ToolId, string> = {
   system: "bg-[#dfe7ec] text-[#3c5b6e] dark:bg-[#253440] dark:text-[#b5d5e5]",
   usage: "bg-[#dceeed] text-[#286768] dark:bg-[#203836] dark:text-[#a5e3df]",
   inbox: "bg-[#f6e1e8] text-[#8f4169] dark:bg-[#3d2737] dark:text-[#f4bfdc]",
+  "incoming-call": "bg-[#dceee1] text-[#2a6a53] dark:bg-[#20372f] dark:text-[#a6e2c6]",
+  messages: "bg-[#dcece6] text-[#316759] dark:bg-[#233832] dark:text-[#afe0cf]",
+  volume: "bg-[#dce9f6] text-[#335c94] dark:bg-[#222e40] dark:text-[#b6d3fb]",
+  brightness: "bg-[#f7ebc8] text-[#805c19] dark:bg-[#3d3320] dark:text-[#f7d88b]",
+  "status-alerts": "bg-[#dfe7ec] text-[#3c5b6e] dark:bg-[#253440] dark:text-[#b5d5e5]",
 };
 
 function ToolClip(props: { src: string; name: string }) {
@@ -71,7 +76,7 @@ function ToolClip(props: { src: string; name: string }) {
       <button
         type="button"
         aria-label={`${active() ? "Stop" : "Play"} ${props.name} demo`}
-        disabled={playback() === "unavailable"}
+        hidden={playback() === "unavailable"}
         onPointerEnter={(event) => {
           if (event.pointerType === "mouse" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) play();
         }}
@@ -80,15 +85,23 @@ function ToolClip(props: { src: string; name: string }) {
         }}
         onClick={() => (active() ? stop() : play())}
         onBlur={stop}
-        class="absolute inset-0 enabled:cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-neutral-950 dark:focus-visible:outline-white"
-      />
+        class="absolute inset-0 cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white"
+      >
+        <span aria-hidden="true" class="absolute right-3 bottom-3 grid size-9 place-items-center rounded-full border border-white/30 bg-black/80 text-white">
+          <svg viewBox="0 0 16 16" fill="currentColor" class="size-4">
+            <Show when={active()} fallback={<path d="M6 3.5a.7.7 0 0 0-1 .6v7.8a.7.7 0 0 0 1 .6l6.1-3.9a.7.7 0 0 0 0-1.2Z" />}>
+              <rect x="4" y="4" width="8" height="8" rx="1" />
+            </Show>
+          </svg>
+        </span>
+      </button>
     </>
   );
 }
 
 export function ToolPreview(props: { tool: ToolItem }) {
-  const clip = () => previewAssets[`../../assets/tools/${props.tool.id}.mp4`];
-  const poster = () => previewAssets[`../../assets/tools/${props.tool.id}.webp`];
+  const clip = () => props.tool.recording ? `${import.meta.env.BASE_URL}${props.tool.recording}` : undefined;
+  const poster = () => posters[`../../assets/tools/${props.tool.id}.webp`];
 
   return (
     <div class="relative isolate aspect-[1.52] w-full overflow-hidden rounded-[22px] bg-well dark:bg-well-dark">
@@ -100,7 +113,7 @@ export function ToolPreview(props: { tool: ToolItem }) {
         </div>
       }>
         {(src) => (
-          <img src={src} alt={clip() ? "" : `${props.tool.name} in LeNotch`} loading="lazy" decoding="async" class="h-full w-full object-contain" />
+          <img src={src} alt={clip() ? "" : `${props.tool.name} in LeNotch`} loading="lazy" decoding="async" class="h-full w-full bg-black object-contain" />
         )}
       </Show>
       <Show when={clip()} keyed>

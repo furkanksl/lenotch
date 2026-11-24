@@ -137,6 +137,27 @@ export function ToolIcon(props: { id: ToolId; class?: string }) {
           <path d="M19.2 18H4.8a1.8 1.8 0 0 1-1.3-3l.6-.6c.56-.56.9-1.33.9-2.14V9.5a7 7 0 1 1 14 0v2.76c0 .81.34 1.58.9 2.14l.6.6a1.8 1.8 0 0 1-1.3 3Z" />
         </>
       )}
+      {props.id === "incoming-call" && (
+        <path d="M6 3H4a2 2 0 0 0-2 2c0 9.4 7.6 17 17 17a2 2 0 0 0 2-2v-2l-5-2-2 2a13 13 0 0 1-8-8l2-2-2-5Z" />
+      )}
+      {props.id === "messages" && (
+        <path d="M5 16a6 6 0 0 1-2-4.5C3 7.4 7 4 12 4s9 3.4 9 7.5S17 19 12 19a11 11 0 0 1-3.2-.5L4 21l1-5Z" />
+      )}
+      {props.id === "volume" && (
+        <path d="M3 9h4l5-4v14l-5-4H3Zm12 0a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12" />
+      )}
+      {props.id === "brightness" && (
+        <>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
+        </>
+      )}
+      {props.id === "status-alerts" && (
+        <>
+          <rect x="2.5" y="6.5" width="17" height="11" rx="2.5" />
+          <path d="M22 10v4m-9-5-3 3h3l-3 3" />
+        </>
+      )}
     </svg>
   );
 }
