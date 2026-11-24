@@ -52,6 +52,7 @@ export const tools: readonly ToolItem[] = [
     id: "chat",
     name: "AI Chat",
     description: "Ask Claude or ChatGPT a question without leaving your current app.",
+    recording: "ai-text-chat.mp4",
   },
   {
     id: "voice-mode",
@@ -63,6 +64,7 @@ export const tools: readonly ToolItem[] = [
     id: "timer",
     name: "Timer",
     description: "Start a countdown and see how much time is left in the notch.",
+    recording: "timer.mp4",
   },
   {
     id: "notch-video",
@@ -74,11 +76,13 @@ export const tools: readonly ToolItem[] = [
     id: "agent-sessions",
     name: "Agent Sessions",
     description: "Follow Claude and Codex coding sessions and respond to permission prompts after setting up hooks.",
+    recording: "ai-coding.mp4",
   },
   {
     id: "shelf",
     name: "Shelf",
     description: "Hold files to drag into another app.",
+    recording: "shelf.mp4",
   },
   {
     id: "launcher",
@@ -96,6 +100,7 @@ export const tools: readonly ToolItem[] = [
     id: "dictation",
     name: "Dictation",
     description: "Turn speech into text. Requires Apple silicon.",
+    recording: "dictation.mp4",
   },
   {
     id: "prompter",
@@ -125,6 +130,7 @@ export const tools: readonly ToolItem[] = [
     id: "shortcuts",
     name: "Shortcuts",
     description: "Run your macOS Shortcuts.",
+    recording: "shortcuts.mp4",
   },
   {
     id: "system",
@@ -136,11 +142,13 @@ export const tools: readonly ToolItem[] = [
     id: "usage",
     name: "Usage",
     description: "See how much of your Claude and Codex limits you've used.",
+    recording: "usage.mp4",
   },
   {
     id: "inbox",
     name: "Inbox",
     description: "Read recent macOS notifications.",
+    recording: "notifications.mp4",
   },
   {
     id: "incoming-call",
