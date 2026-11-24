@@ -1,5 +1,8 @@
 # LeNotch changelog
 
+## 1.1.4
+- Bug fixes & improvements
+
 ## 1.1.3
 - Initial release
 
