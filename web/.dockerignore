@@ -1,6 +1,5 @@
 node_modules
 dist
-assets
 .git
 .DS_Store
 npm-debug.log*
