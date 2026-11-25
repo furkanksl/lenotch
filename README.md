@@ -86,3 +86,7 @@ open dist/LeNotch.app
 ```
 
 Run `swift test` for the app or `swift tools/dev.swift` to rebuild on save. See [third-party notices](Resources/Third-Party-Notices.md) for credits.
+
+## License
+
+LeNotch is released under the [MIT License](LICENSE). Bundled third-party code, icons, and artwork keep their own licenses; see the [third-party notices](Resources/Third-Party-Notices.md).
