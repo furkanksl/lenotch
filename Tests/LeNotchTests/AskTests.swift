@@ -1,4 +1,6 @@
+import AppKit
 import IslandCore
+import SwiftUI
 import XCTest
 @testable import Lenotch
 
@@ -82,6 +84,49 @@ final class AskTests: XCTestCase {
         d.askEvent(id, .done(error: nil))
         XCTAssertEqual(d.island.agents.sessions[0].state, .ready, "its chat was showing: read")
         XCTAssertTrue(d.island.arrangement.all.contains(.agents(.ask)), "read, it keeps its ball: that's where you type")
+    }
+
+    func testChatQuestionAndAnswerCanTakeFocusForTextSelection() async throws {
+        _ = NSApplication.shared
+        let (d, _, _) = director()
+        d.openAsk(.claude)
+        d.submitAsk("How do I copy text?")
+        let session = try XCTUnwrap(d.agentShown(.ask))
+        d.askEvent(session.id, .delta("Select a **word** to copy it."))
+        d.askEvent(session.id, .done(error: nil))
+
+        let frame = FrameModel(), card = Island.agentsCard(session)
+        frame.cardHalfWidth = card.halfWidth
+        frame.cardHeight = card.height
+        frame.cardRadius = card.radius
+        frame.cardTop = 72
+        let model = NotchContentModel()
+        model.groups = d.groups
+        model.card = card
+        model.stills = true
+        let host = ContentHostingView(rootView: NotchContentView(model: model, frame: frame, director: d))
+        let panel = NotchPanel()
+        defer { panel.close() }
+        panel.setContentSize(NotchContentView.size)
+        panel.contentView = host
+        for _ in 0..<6 {
+            await Task.yield()
+            host.layoutSubtreeIfNeeded()
+        }
+
+        func copyableViews(in view: NSView) -> [NSView] {
+            let match = view.acceptsFirstResponder && view.responds(to: #selector(NSText.copy(_:)))
+            return (match ? [view] : []) + view.subviews.flatMap { copyableViews(in: $0) }
+        }
+        let messages = copyableViews(in: host)
+        XCTAssertEqual(messages.count, 2, "Both messages should have a native text selection view")
+        for message in messages {
+            let center = NSPoint(x: message.bounds.midX, y: message.bounds.midY)
+            XCTAssertTrue(host.hitTest(message.convert(center, to: nil)) === message)
+            XCTAssertTrue(message.needsPanelToBecomeKey)
+            XCTAssertTrue(panel.makeFirstResponder(message))
+            XCTAssertTrue(panel.firstResponder === message)
+        }
     }
 
     // ASK4: a follow-up goes to the same session; a read Ask session leaves 10 minutes later, a new turn keeps it.

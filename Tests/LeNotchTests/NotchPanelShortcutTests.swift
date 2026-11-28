@@ -85,6 +85,27 @@ final class NotchPanelShortcutTests: XCTestCase {
         XCTAssertEqual(draft, "Buy coffee")
     }
 
+    func testSelectAllAndCopyReachAReadOnlySelectionResponder() throws {
+        _ = NSApplication.shared
+        let panel = NotchPanel()
+        defer { panel.close() }
+        let selection = SelectionView()
+        panel.contentView = selection
+        XCTAssertTrue(panel.makeFirstResponder(selection))
+
+        XCTAssertTrue(panel.performKeyEquivalent(with: try shortcut("a", kVK_ANSI_A, in: panel)))
+        XCTAssertTrue(panel.performKeyEquivalent(with: try shortcut("c", kVK_ANSI_C, in: panel)))
+        XCTAssertFalse(panel.performKeyEquivalent(with: try shortcut("v", kVK_ANSI_V, in: panel)))
+        XCTAssertEqual(selection.actions, ["selectAll", "copy"])
+    }
+
+    private final class SelectionView: NSView {
+        var actions: [String] = []
+        override var acceptsFirstResponder: Bool { true }
+        override func selectAll(_ sender: Any?) { actions.append("selectAll") }
+        @objc func copy(_ sender: Any?) { actions.append("copy") }
+    }
+
     private func textField(in view: NSView) -> NSTextField? {
         (view as? NSTextField) ?? view.subviews.lazy.compactMap { self.textField(in: $0) }.first
     }

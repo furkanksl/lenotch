@@ -402,12 +402,14 @@ struct AgentsCardLayer: View {
         case .you(let t):
             HStack {
                 Spacer(minLength: 64)
-                Text(t).lineLimit(4).padding(.horizontal, 12).padding(.vertical, 6)
+                Text(t).lineLimit(4).textSelection(.enabled)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white.opacity(0.14)))
             }
             .fixedSize(horizontal: false, vertical: true)
         case .agent(let t):
             Text(Self.markdown(t)).foregroundStyle(.white.opacity(0.92)).lineSpacing(2)
+                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         case .tools(let summary, let list):

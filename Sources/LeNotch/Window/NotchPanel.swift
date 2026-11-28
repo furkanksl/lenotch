@@ -32,7 +32,7 @@ final class NotchPanel: NSPanel {
     // AppKit nudges windows out from under the menu bar; this one belongs there.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 
-    // Key only when a text field needs it (the Messages reply); `becomesKeyOnlyIfNeeded` keeps
+    // Key only when text input or selection needs it; `becomesKeyOnlyIfNeeded` keeps
     // every other click from taking focus, and the panel never activates the app.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -40,18 +40,19 @@ final class NotchPanel: NSPanel {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if super.performKeyEquivalent(with: event) { return true }
 
-        // The accessory app has no Edit menu to dispatch these actions. Both multiline
-        // editors and single-line field editors use NSTextView as the first responder.
+        // The accessory app has no Edit menu to dispatch these actions.
         let shortcutModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control, .function]
         let modifiers = event.modifierFlags.intersection(shortcutModifiers)
-        guard let editor = firstResponder as? NSTextView, editor.isSelectable else { return false }
 
         switch (event.charactersIgnoringModifiers?.lowercased(), modifiers) {
-        case ("a", .command): editor.selectAll(nil)
-        case ("c", .command): editor.copy(nil)
-        case ("v", .command) where editor.isEditable: editor.paste(nil)
+        case ("a", .command): return performSelectionAction(#selector(NSText.selectAll(_:)))
+        case ("c", .command): return performSelectionAction(#selector(NSText.copy(_:)))
+        case ("v", .command):
+            guard let editor = firstResponder as? NSTextView, editor.isSelectable, editor.isEditable else { return false }
+            editor.paste(nil)
         case ("z", .command), ("z", [.command, .shift]):
-            guard editor.isEditable, editor.allowsUndo, let undoManager = editor.undoManager else { return false }
+            guard let editor = firstResponder as? NSTextView, editor.isSelectable, editor.isEditable,
+                  editor.allowsUndo, let undoManager = editor.undoManager else { return false }
             let previousText = editor.string
             if modifiers.contains(.shift) { undoManager.redo() }
             else { undoManager.undo() }
@@ -60,5 +61,16 @@ final class NotchPanel: NSPanel {
         default: return false
         }
         return true
+    }
+
+    static func supportsTextSelection(_ view: NSView) -> Bool {
+        if let editor = view as? NSTextView { return editor.isSelectable }
+        // SwiftUI selectable Text uses its own AppKit responder, not an NSTextView.
+        return view.acceptsFirstResponder && view.responds(to: #selector(NSText.copy(_:)))
+    }
+
+    private func performSelectionAction(_ action: Selector) -> Bool {
+        guard let view = firstResponder as? NSView, Self.supportsTextSelection(view) else { return false }
+        return NSApp.sendAction(action, to: view, from: nil)
     }
 }

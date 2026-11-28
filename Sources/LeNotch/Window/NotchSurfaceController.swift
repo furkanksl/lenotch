@@ -689,7 +689,8 @@ final class NotchSurfaceController {
         let windowPoint = panel.convertPoint(fromScreen: screenPoint)
         var view = panel.contentView?.hitTest(windowPoint)
         while let current = view {
-            if let text = current as? NSTextView, text.isEditable || text.isSelectable { return true }
+            if NotchPanel.supportsTextSelection(current) { return true }
+            if let text = current as? NSTextView, text.isEditable { return true }
             if let field = current as? NSTextField, field.isEditable { return true }
             view = current.superview
         }
@@ -804,7 +805,7 @@ final class NotchSurfaceController {
             self?.updateMouse()
             return e
         }) { monitors.append(l) }
-        // A right-click (or Control-click) on the island opens the app's menu; editable text inputs and card
+        // A right-click (or Control-click) on the island opens the app's menu; editable or selectable text and card
         // pages with their own item context menus still receive their native/SwiftUI menus.
         if let l = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown], handler: { [weak self] e in
             guard let self else { return e }
