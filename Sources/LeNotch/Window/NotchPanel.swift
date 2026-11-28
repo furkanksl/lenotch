@@ -43,13 +43,20 @@ final class NotchPanel: NSPanel {
         // The accessory app has no Edit menu to dispatch these actions. Both multiline
         // editors and single-line field editors use NSTextView as the first responder.
         let shortcutModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control, .function]
-        guard event.modifierFlags.intersection(shortcutModifiers) == .command,
-              let editor = firstResponder as? NSTextView, editor.isSelectable else { return false }
+        let modifiers = event.modifierFlags.intersection(shortcutModifiers)
+        guard let editor = firstResponder as? NSTextView, editor.isSelectable else { return false }
 
-        switch event.charactersIgnoringModifiers?.lowercased() {
-        case "a": editor.selectAll(nil)
-        case "c": editor.copy(nil)
-        case "v" where editor.isEditable: editor.paste(nil)
+        switch (event.charactersIgnoringModifiers?.lowercased(), modifiers) {
+        case ("a", .command): editor.selectAll(nil)
+        case ("c", .command): editor.copy(nil)
+        case ("v", .command) where editor.isEditable: editor.paste(nil)
+        case ("z", .command), ("z", [.command, .shift]):
+            guard editor.isEditable, editor.allowsUndo, let undoManager = editor.undoManager else { return false }
+            let previousText = editor.string
+            if modifiers.contains(.shift) { undoManager.redo() }
+            else { undoManager.undo() }
+            // UndoManager changes the text storage without notifying SwiftUI or the Notes delegate.
+            if editor.string != previousText { editor.didChangeText() }
         default: return false
         }
         return true

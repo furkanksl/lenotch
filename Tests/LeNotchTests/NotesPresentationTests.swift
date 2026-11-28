@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import IslandCore
 import SwiftUI
 import Vision
@@ -317,8 +318,8 @@ final class NotesPresentationTests: XCTestCase {
         let events = EditorEvents()
         let host = NSHostingView(rootView: bodyEditor(store, id: id, events: events))
         host.frame = CGRect(x: 0, y: 0, width: 420, height: 220)
-        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
+        let window = NotchPanel()
+        window.setContentSize(host.frame.size)
         window.contentView = host
         var succeeded = false
         defer { if !succeeded { window.close() } }
@@ -364,6 +365,28 @@ final class NotesPresentationTests: XCTestCase {
         XCTAssertEqual(fixture.store.selected?.body, expected, "The binding receives the complete Unicode body")
         XCTAssertEqual(view.selectedRange(), NSRange(location: (expected as NSString).length, length: 0),
                        "AppKit selection uses UTF-16 offsets, including emoji and non-Latin text")
+    }
+
+    func testUndoAndRedoShortcutsUpdateTheSavedNoteBody() async throws {
+        let fixture = try await nativeEditor(initialBody: "First line.")
+        defer { fixture.window.close() }
+        XCTAssertTrue(fixture.window.makeFirstResponder(fixture.view))
+        let original = fixture.view.string
+        let insertion = NSRange(location: original.utf16.count, length: 0)
+        fixture.view.insertText("\nCafé 👋", replacementRange: insertion)
+        let edited = "First line.\nCafé 👋"
+        XCTAssertEqual(fixture.store.selected?.body, edited)
+
+        for (shift, expected) in [(false, original), (true, edited)] {
+            let character = shift ? "Z" : "z"
+            let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero,
+                modifierFlags: shift ? [.command, .shift] : [.command], timestamp: 0,
+                windowNumber: fixture.window.windowNumber, context: nil, characters: character,
+                charactersIgnoringModifiers: character, isARepeat: false, keyCode: UInt16(kVK_ANSI_Z)))
+            XCTAssertTrue(fixture.window.performKeyEquivalent(with: event))
+            XCTAssertEqual(fixture.view.string, expected)
+            XCTAssertEqual(fixture.store.selected?.body, expected)
+        }
     }
 
     func testRenderingTheSameSavedBodyDoesNotResetNativeSelectionOrReplaceTheEditor() async throws {

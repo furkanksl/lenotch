@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import SwiftUI
 import XCTest
 @testable import Lenotch
 
@@ -48,6 +49,44 @@ final class NotchPanelShortcutTests: XCTestCase {
 
         XCTAssertTrue(panel.makeFirstResponder(nil))
         XCTAssertFalse(panel.performKeyEquivalent(with: try shortcut("a", kVK_ANSI_A, in: panel)))
+    }
+
+    func testUndoAndRedoUpdateTheFocusedSwiftUITextFieldAndItsBinding() async throws {
+        _ = NSApplication.shared
+        let panel = NotchPanel()
+        defer { panel.close() }
+        var draft = "Buy"
+        let host = NSHostingView(rootView: TextField("Add to-dos", text: Binding(get: { draft }, set: { draft = $0 }))
+            .textFieldStyle(.plain))
+        panel.setContentSize(NSSize(width: 240, height: 40))
+        panel.contentView = host
+        for _ in 0..<20 {
+            host.layoutSubtreeIfNeeded()
+            if textField(in: host) != nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let field = try XCTUnwrap(textField(in: host))
+        XCTAssertTrue(panel.makeFirstResponder(field))
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        editor.setSelectedRange(NSRange(location: 3, length: 0))
+        editor.insertText(" coffee", replacementRange: editor.selectedRange())
+        XCTAssertEqual(draft, "Buy coffee")
+
+        XCTAssertFalse(panel.performKeyEquivalent(with: try shortcut("z", kVK_ANSI_Z, in: panel,
+                                                                      modifiers: [.command, .option])))
+        XCTAssertEqual(draft, "Buy coffee")
+        XCTAssertTrue(panel.performKeyEquivalent(with: try shortcut("z", kVK_ANSI_Z, in: panel)))
+        XCTAssertEqual(editor.string, "Buy")
+        XCTAssertEqual(draft, "Buy", "The draft used for submission must match the displayed text")
+
+        XCTAssertTrue(panel.performKeyEquivalent(with: try shortcut("Z", kVK_ANSI_Z, in: panel,
+                                                                     modifiers: [.command, .shift])))
+        XCTAssertEqual(editor.string, "Buy coffee")
+        XCTAssertEqual(draft, "Buy coffee")
+    }
+
+    private func textField(in view: NSView) -> NSTextField? {
+        (view as? NSTextField) ?? view.subviews.lazy.compactMap { self.textField(in: $0) }.first
     }
 
     private func shortcut(_ character: String, _ keyCode: Int, in panel: NotchPanel,
